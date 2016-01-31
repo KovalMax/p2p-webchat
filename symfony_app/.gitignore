@@ -1,4 +1,3 @@
-/app/phpunit.xml
 .idea/
-/app/cache/
-/app/logs/
+app/cache/
+app/logs/

@@ -12,7 +12,7 @@ use Sensio\Bundle\FrameworkExtraBundle\Configuration\Route;
 use Symfony\Bundle\FrameworkBundle\Controller\Controller;
 use AppBundle\Entity\Auth;
 
-class MyController extends Controller
+class AuthController extends Controller
 {
     /**
      * @Route("/")
