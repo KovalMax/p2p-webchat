@@ -1,3 +1,4 @@
 /app/phpunit.xml
-/build/
-/composer.phar
+.idea/
+/app/cache/
+/app/logs/

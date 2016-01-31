@@ -1,0 +1,67 @@
+{# views/auth.twig #}
+{% extends 'base_tmpl.twig' %}
+{% block body %}
+    <header>
+        <div class="header-container">
+            <div class="header-container-text">
+                <p class="h4">Login Page</p>
+            </div>
+        </div>
+    </header>
+    <content>
+        <div class="container">
+            <div class="content">
+                <h4>Authorization</h4>
+                {{ form_start(form, {'attr': {'class': 'form-horizontal'}}) }}
+
+                {{ form_errors(form) }}
+
+                <div class="form-group">
+                    {{
+                        form_label(
+                            form.userName,
+                            null ,
+                            {'label_attr': {'class': 'col-md-3 control-label'}}
+                        )
+                    }}
+
+                    {{ form_errors(form.userName) }}
+
+                    <div class="col-md-8">
+                        {{ form_widget(form.userName) }}
+                    </div>
+                </div>
+                <div class="form-group">
+                    {{
+                        form_label(
+                            form.password,
+                            null ,
+                            {'label_attr': {'class': 'col-md-3 control-label'}}
+                        )
+                    }}
+
+                    {{ form_errors(form.userName) }}
+
+                    <div class="col-md-8">
+                        {{ form_widget(form.password) }}
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <div class="col-md-5 login-button">
+                        {{ form_widget(form.login) }}
+                    </div>
+                </div>
+                {{ form_end(form) }}
+            </div>
+        </div>
+    </content>
+
+    <footer>
+        <div class="footer-container">
+            <div class="footer-container-text">
+                <p class="h4">Some footer here</p>
+            </div>
+        </div>
+    </footer>
+{% endblock %}

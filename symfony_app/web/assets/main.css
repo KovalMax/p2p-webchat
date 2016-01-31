@@ -1,0 +1,39 @@
+.container {
+    border: lightgray 1px solid;
+    position: relative;
+    top: 100px;
+    width: 33%;
+    height: 30%;
+}
+.content {
+    word-wrap: break-word;
+    text-align: center;
+}
+.header-container {
+    border: 1px solid transparent;
+    border-bottom-left-radius: 15px;
+    border-bottom-right-radius: 15px;
+    background-color: #2E6DF2;
+    position: fixed;
+    top: 0;
+    width: 100%;
+}
+.header-container-text {
+    text-align: center;
+}
+.footer-container {
+    border: 1px solid transparent;
+    border-top-left-radius: 15px;
+    border-top-right-radius: 15px;
+    background-color: #2E6DF2;
+    position: fixed;
+    bottom: 0;
+    width: 100%;
+}
+.footer-container-text {
+    text-align: center;
+}
+.login-button {
+    margin: 0 auto;
+    float: none;
+}

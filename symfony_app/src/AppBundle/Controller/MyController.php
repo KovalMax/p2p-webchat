@@ -7,10 +7,20 @@
  */
 namespace AppBundle\Controller;
 
+use AppBundle\Form\Type;
 use Sensio\Bundle\FrameworkExtraBundle\Configuration\Route;
-use Symfony\Component\HttpFoundation\Response;
+use Symfony\Bundle\FrameworkBundle\Controller\Controller;
+use AppBundle\Entity\Auth;
 
-class MyController
+class MyController extends Controller
 {
+    /**
+     * @Route("/")
+     */
+    public function authAction()
+    {
+        $form = $this->createForm(new Type\AuthType(), null);
 
+        return $this->render('auth.twig', ['form' => $form->createView()]);
+    }
 }
