@@ -7,28 +7,88 @@
  */
 namespace AppBundle\Entity;
 
+use Doctrine\ORM\Mapping as ORM;
+
+/**
+ * Class Auth
+ * @package AppBundle\Entity
+ * @ORM\Entity
+ * @ORM\Table(name="users")
+ *
+ */
 class Auth
 {
-    protected $login;
+    /**
+     * @ORM\Column(type="integer")
+     * @ORM\id
+     * @ORM\GeneratedValue(strategy="AUTO")
+     */
+    protected $id;
+
+    /**
+     * @ORM\Column(type="string", length=255, name="userName")
+     */
+    protected $userName;
+
+    /**
+     * @ORM\Column(type="string", length=255)
+     */
     protected $password;
 
-    public function getLogin()
+
+    /**
+     * Get id
+     *
+     * @return integer 
+     */
+    public function getId()
     {
-        return $this->login;
+        return $this->id;
     }
 
-    public function setLogin($login)
+    /**
+     * Set userName
+     *
+     * @param string $userName
+     * @return Auth
+     */
+    public function setUserName($userName)
     {
-        $this->login = $login;
+        $this->userName = $userName;
+
+        return $this;
     }
 
-    public function getPassword()
+    /**
+     * Get userName
+     *
+     * @return string 
+     */
+    public function getUserName()
     {
-        return $this->password;
+        return $this->userName;
     }
 
+    /**
+     * Set password
+     *
+     * @param string $password
+     * @return Auth
+     */
     public function setPassword($password)
     {
         $this->password = $password;
+
+        return $this;
+    }
+
+    /**
+     * Get password
+     *
+     * @return string 
+     */
+    public function getPassword()
+    {
+        return $this->password;
     }
 }
