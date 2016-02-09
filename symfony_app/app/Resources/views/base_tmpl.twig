@@ -10,7 +10,26 @@
         {% endblock %}
     </head>
     <body>
+        <header>
+            <div class="header-container">
+                <div class="header-container-text">
+                    <a href="{{ path('_login') }}" class="home-url">
+                        <span class="glyphicon glyphicon-home" aria-hidden="true">
+                        </span>
+                        Home
+                    </a>
+                    <p class="h4">{{ pageName }}</p>
+                </div>
+            </div>
+        </header>
         {% block body %}{% endblock %}
+        <footer>
+            <div class="footer-container">
+                <div class="footer-container-text">
+                    <p class="h4">Some footer here</p>
+                </div>
+            </div>
+        </footer>
         {% block javascripts %}
             <script src="{{ asset('assets/jquery-1.12.0.js') }}"></script>
             <script src="{{ asset('assets/bootstrap.js') }}"></script>

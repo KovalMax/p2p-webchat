@@ -12,6 +12,8 @@ use Symfony\Component\Form\Extension\Core\Type\PasswordType;
 use Symfony\Component\Form\FormBuilderInterface;
 use Symfony\Component\Form\Extension\Core\Type\SubmitType;
 use Symfony\Component\Form\Extension\Core\Type\TextType;
+use Symfony\Component\OptionsResolver\OptionsResolver;
+
 
 class AuthType extends AbstractType
 {
@@ -31,10 +33,10 @@ class AuthType extends AbstractType
         ;
     }
 
-   /* public function configureOptions(OptionsResolver $resolver)
+    public function configureOptions(OptionsResolver $resolver)
     {
-        $resolver->setDefaults(array(
-            'data_class' => 'AppBundle\Entity\Auth'
-        ));
-    }*/
+        $resolver->setDefaults([
+            'csrf_protection' => false
+        ]);
+    }
 }

@@ -1,13 +1,6 @@
 {# views/auth.twig #}
 {% extends 'base_tmpl.twig' %}
 {% block body %}
-    <header>
-        <div class="header-container">
-            <div class="header-container-text">
-                <p class="h4">Login Page</p>
-            </div>
-        </div>
-    </header>
     <content>
         <div class="container-head">
             <h4>Authorization</h4>
@@ -16,8 +9,34 @@
             <div class="content">
                 {{ form_start(form, {'attr': {'class': 'form-horizontal'}}) }}
 
-                {{ form_errors(form) }}
-
+                {% if error|default %}
+                    <div class="alert alert-warning alert-dismissible fade in"
+                         role="alert"
+                    >
+                        <button type="button"
+                                class="close"
+                                data-dismiss="alert"
+                                aria-label="Close"
+                        >
+                            <span aria-hidden="true">&times;</span>
+                        </button>
+                        {{ error }}
+                    </div>
+                {% endif %}
+                {% if success|default %}
+                    <div class="alert alert-success alert-dismissible fade in"
+                         role="alert"
+                    >
+                        <button type="button"
+                                class="close"
+                                data-dismiss="alert"
+                                aria-label="Close"
+                        >
+                            <span aria-hidden="true">&times;</span>
+                        </button>
+                        {{ success }}
+                    </div>
+                {% endif %}
                 <div class="form-group">
                     {{
                         form_label(
@@ -49,21 +68,16 @@
                     </div>
                 </div>
 
+                <span class="register">
+                    <a href="{{ path('_register') }}">Register</a>
+                </span>
                 <div class="form-group">
                     <div class="col-md-5 login-button">
-                        {{ form_widget(form.login) }}
+                    {{ form_widget(form.login) }}
                     </div>
                 </div>
                 {{ form_end(form) }}
             </div>
         </div>
     </content>
-
-    <footer>
-        <div class="footer-container">
-            <div class="footer-container-text">
-                <p class="h4">Some footer here</p>
-            </div>
-        </div>
-    </footer>
 {% endblock %}

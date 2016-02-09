@@ -5,15 +5,16 @@ body {
 .container {
     border: lightgray 1px solid;
     position: relative;
-    top: 12em;
+    top: 6em;
     width: 33%;
     height: 30%;
     border-bottom-left-radius: 10px;
     border-bottom-right-radius: 10px;
+    margin-bottom: 6em;
 }
 .container-head {
     position: relative;
-    top: 12em;
+    top: 6em;
     margin: 0 auto;
     width: 33%;
     background-color: #337ab7;
@@ -32,12 +33,20 @@ margin-top: 20px;
     border-bottom-left-radius: 15px;
     border-bottom-right-radius: 15px;
     background-color: #2E6DF2;
-    position: fixed;
+    position: absolute;
     top: 0;
     width: 100%;
 }
 .header-container-text {
     text-align: center;
+}
+.home-url {
+    float: left;
+    margin-left: 23px;
+    color: black;
+}
+.home-url:link {
+    text-decoration: none;
 }
 .footer-container {
     border: 1px solid transparent;
@@ -54,4 +63,19 @@ margin-top: 20px;
 .login-button {
     margin: 0 auto;
     float: none;
+}
+.error-block {
+    margin-bottom: 10px;
+    border-radius: 10px;
+    padding: 5px;
+}
+.register {
+    float: right;
+    display: inline-block;
+    margin-right: 30px;
+    margin-top: 7px;
+}
+input.checkbox-register {
+    margin: 11px 10px 0;
+    float: left;
 }
