@@ -15,6 +15,10 @@ security:
         login:
               pattern:   /login
               security: false
+        auth:
+            pattern: /auth
+            security: false
+
         main:
             anonymous: ~
             # activate different ways to authenticate

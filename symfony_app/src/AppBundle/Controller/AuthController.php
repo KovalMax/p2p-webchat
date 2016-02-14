@@ -55,7 +55,7 @@ class AuthController extends Controller
             ->getRepository('AppBundle:Auth');
 
         $checkLogin = $em->createQueryBuilder('u')
-            ->select('u.userName, u.password')
+            ->select('u.userName, u.password, u.id')
             ->where('u.userName = ?1')
             ->setParameter(1, $login)
             ->getQuery()
@@ -71,12 +71,16 @@ class AuthController extends Controller
 
         if (password_verify($password, $userPassword)) {
             $session = $request->getSession();
-            $session->set('login', md5($login));
-            dump($session);
-            return new Response(
-                '<html><body><p>Logged in as: '.$login.'</p>
-                <p>pass is: '.$password.'</p></body></html>'
-            );
+
+            $session->set('login', $login);
+
+            $session->set('isLogined', true);
+
+            $cookies = $request->cookies;
+
+            $cookies->set('userId', array_column($checkLogin, 'id')[0]);
+
+            return $this->redirectToRoute('_home');
         } else {
             return $this->redirectToRoute('_login',
                 ['error' => 'Incorrect password']);
