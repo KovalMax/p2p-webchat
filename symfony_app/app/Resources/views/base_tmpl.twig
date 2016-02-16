@@ -13,12 +13,29 @@
         <header>
             <div class="header-container">
                 <div class="header-container-text">
-                    <a href="{{ path('_login') }}" class="home-url">
-                        <span class="glyphicon glyphicon-home" aria-hidden="true">
-                        </span>
-                        Home
-                    </a>
-                    <p class="h4">{{ pageName }}</p>
+                    <div class="container">
+                        <div class="row">
+                            <div class="col-md-2 col-md-pull-1">
+                                <p class="h5">
+                                    <a href="{{ path('_home') }}" class="home-url">
+                                    <span class="glyphicon glyphicon-home" aria-hidden="true">
+                                    </span>
+                                        Home
+                                    </a>
+                                </p>
+                            </div>
+                            <div class="col-md-2 col-md-offset-3">
+                                <p class="h4">{{ pageName }}</p>
+                            </div>
+                            {% if userName|default %}
+                            <div class="col-md-2 col-md-offset-3">
+                                <p class="h5"><span class="glyphicon glyphicon-user" aria-hidden="true">
+                                </span>
+                                Logged in as: {{ userName }}</p>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
                 </div>
             </div>
         </header>

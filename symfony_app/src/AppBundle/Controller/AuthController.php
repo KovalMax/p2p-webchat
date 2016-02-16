@@ -27,6 +27,10 @@ class AuthController extends Controller
      */
     public function authAction(Request $request)
     {
+        if ($request->getSession()->get('userId')) {
+            return $this->redirectToRoute('_home');
+        }
+
         $form = $this->createForm(new Type\AuthType(), null, [
             'action' => $this->generateUrl('_auth'),
             'method' => 'POST'
@@ -47,6 +51,10 @@ class AuthController extends Controller
      */
     public function checkUser(Request $request)
     {
+        if ($request->getSession()->get('userId')) {
+            return $this->redirectToRoute('_home');
+        }
+
         $formQuery =  $request->request->all();
         $login = $formQuery['auth']['userName'];
         $password = $formQuery['auth']['password'];
@@ -54,20 +62,20 @@ class AuthController extends Controller
         $em = $this->getDoctrine()
             ->getRepository('AppBundle:Auth');
 
-        $checkLogin = $em->createQueryBuilder('u')
+        $dbData = $em->createQueryBuilder('u')
             ->select('u.userName, u.password, u.id')
             ->where('u.userName = ?1')
             ->setParameter(1, $login)
             ->getQuery()
             ->getResult();
 
-        if (!array_column($checkLogin, 'userName')) {
+        if (!array_column($dbData, 'userName')) {
             return $this->redirectToRoute('_login',
                 ['error' => 'Username not found']
             );
         }
 
-        $userPassword = array_column($checkLogin, 'password')[0];
+        $userPassword = array_column($dbData, 'password')[0];
 
         if (password_verify($password, $userPassword)) {
             $session = $request->getSession();
@@ -76,9 +84,7 @@ class AuthController extends Controller
 
             $session->set('isLogined', true);
 
-            $cookies = $request->cookies;
-
-            $cookies->set('userId', array_column($checkLogin, 'id')[0]);
+            $session->set('userId', array_column($dbData, 'id')[0]);
 
             return $this->redirectToRoute('_home');
         } else {
@@ -106,6 +112,16 @@ class AuthController extends Controller
                     $createUser->getPlainPassword(),
                     PASSWORD_BCRYPT
                 )
+            );
+
+            $mailMessage = 'Thank you for registration on ' .
+                $request->server->get('HTTP_HOST') . PHP_EOL
+                . 'Registration credentials' . PHP_EOL
+                . 'Login: ' . $createUser->getUserName() . PHP_EOL
+                . 'Password: ' . $createUser->getPlainPassword();
+            mail($createUser->getEmail(),
+                'Thank you for registration!',
+                $mailMessage
             );
 
             $em = $this->getDoctrine()->getManager();

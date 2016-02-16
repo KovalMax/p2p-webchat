@@ -2,7 +2,7 @@ body {
     min-height: 100%;
     height: auto;
 }
-.container {
+.container-content {
     border: lightgray 1px solid;
     position: relative;
     top: 6em;
@@ -10,6 +10,7 @@ body {
     height: 30%;
     border-bottom-left-radius: 10px;
     border-bottom-right-radius: 10px;
+    margin: 0 auto;
     margin-bottom: 6em;
 }
 .container-head {

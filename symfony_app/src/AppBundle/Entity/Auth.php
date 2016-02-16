@@ -31,7 +31,12 @@ class Auth
     protected $id;
 
     /**
-     * @ORM\Column(type="string", length=255, name="userName")
+     * @ORM\Column(
+     *     type="string",
+     *      length=255,
+     *      name="userName",
+     *      options={"collation":"utf8_bin"}
+     * )
      * @Assert\NotBlank()
      * @Assert\Length(
      *     min = 4,

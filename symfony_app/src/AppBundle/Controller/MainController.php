@@ -22,12 +22,15 @@ Class MainController extends Controller
     public function homeAction(Request $request)
     {
         $session = $request->getSession();
+        $userId = $session->get('userId');
+        $login = $session->get('login');
 
-        $cookies = $request->cookies;
-
-        if ($session->get('isLogined') && $cookies->get('userId')) {
+        if ($session->get('isLogined') && $userId) {
             return $this->render('base_tmpl.twig',
-                ['pageName' => 'Home Page']
+                [
+                    'pageName' => 'Home Page',
+                    'userName' => $login
+                ]
             );
         } else {
             return $this->redirectToRoute('_login');
