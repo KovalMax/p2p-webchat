@@ -137,4 +137,18 @@ class AuthController extends Controller
             'pageName' => 'Registration Page'
         ]);
     }
+
+    /**
+     * @Route("/logout", name="_logout")
+     * @param Request $request
+     * @return RedirectResponse
+     */
+    public function logoutAction(Request $request)
+    {
+        $session = $request->getSession();
+        $session->clear();
+        $session->invalidate();
+
+        return $this->redirectToRoute('_login');
+    }
 }

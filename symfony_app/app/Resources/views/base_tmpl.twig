@@ -28,10 +28,17 @@
                                 <p class="h4">{{ pageName }}</p>
                             </div>
                             {% if userName|default %}
-                            <div class="col-md-2 col-md-offset-3">
-                                <p class="h5"><span class="glyphicon glyphicon-user" aria-hidden="true">
-                                </span>
-                                Logged in as: {{ userName }}</p>
+                            <div class="col-md-3 col-md-offset-2">
+                                <p class="h5 user-left">
+                                    <span class="glyphicon glyphicon-user" aria-hidden="true"></span>
+                                    Logged in as: {{ userName }}</p>
+                                <p class="h5">
+                                    <a href="{{ path('_logout') }}" class="user-line">
+                                    <span class="glyphicon glyphicon-log-out" aria-hidden="true">
+                                    </span>
+                                        Logout
+                                    </a>
+                                </p>
                             </div>
                             {% endif %}
                         </div>

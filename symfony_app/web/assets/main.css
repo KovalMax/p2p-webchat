@@ -12,6 +12,7 @@ body {
     border-bottom-right-radius: 10px;
     margin: 0 auto;
     margin-bottom: 6em;
+    padding: 15px;
 }
 .container-head {
     position: relative;
@@ -33,7 +34,7 @@ margin-top: 20px;
     border: 1px solid transparent;
     border-bottom-left-radius: 15px;
     border-bottom-right-radius: 15px;
-    background-color: #2E6DF2;
+    background-color: #337ab7;
     position: absolute;
     top: 0;
     width: 100%;
@@ -46,14 +47,14 @@ margin-top: 20px;
     margin-left: 23px;
     color: black;
 }
-.home-url:link {
+.home-url:link, .user-line:link {
     text-decoration: none;
 }
 .footer-container {
     border: 1px solid transparent;
     border-top-left-radius: 15px;
     border-top-right-radius: 15px;
-    background-color: #2E6DF2;
+    background-color: #337ab7;
     position: fixed;
     bottom: 0;
     width: 100%;
@@ -78,5 +79,14 @@ margin-top: 20px;
 }
 input.checkbox-register {
     margin: 11px 10px 0;
+    float: left;
+}
+.log-in-span {
+    margin-top: 11px;
+}
+.user-line {
+    color: black;
+}
+.user-left {
     float: left;
 }
