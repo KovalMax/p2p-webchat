@@ -82,7 +82,7 @@ class AuthController extends Controller
 
             $session->set('login', $login);
 
-            $session->set('isLogined', true);
+            $session->set('isLogged', true);
 
             $session->set('userId', array_column($dbData, 'id')[0]);
 

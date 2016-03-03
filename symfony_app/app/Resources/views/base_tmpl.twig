@@ -57,7 +57,12 @@
         {% block javascripts %}
             <script src="{{ asset('assets/jquery-1.12.0.js') }}"></script>
             <script src="{{ asset('assets/bootstrap.js') }}"></script>
-            <script src="{{ asset('assets/main.js') }}"></script>
+            {% if userName|default %}
+                <script src="{{ asset('assets/node_modules/socket.io-client/socket.io.js') }}"></script>
+                <script src="{{ asset('assets/node_modules/moment/moment.js') }}"></script>
+                <script src="{{ asset('assets/main.js') }}"></script>
+                <script src="{{ asset('assets/xss.min.js') }}"></script>
+            {% endif %}
         {% endblock %}
     </body>
 </html>

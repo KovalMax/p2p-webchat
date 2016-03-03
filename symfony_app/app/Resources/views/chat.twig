@@ -1,0 +1,36 @@
+{# views/chat.twig #}
+{% extends 'base_tmpl.twig' %}
+{% block body %}
+    <section class="chat-holder">
+        <ul class="chat-screen">
+            {% if messages|default %}
+                {% for message in messages %}
+                    <li>
+                        <strong>{{ message.fromUser }}</strong> :
+                        <span class="time-right">
+                            {{ message.msgTime|date('Y-m-d H:i:s') }}
+                        </span>
+                        <br>
+                        {{ message.message }}
+                    </li>
+                {% endfor %}
+            {% endif %}
+        </ul>
+    </section>
+    <section class="chat-form">
+        <form class="form-inline" id="messageForm">
+            <input id="nameInput" type="hidden" data-user="{{ userName }}"/>
+            <div class="form-group">
+            <textarea
+                    id="messageInput"
+                    class="message-input"
+                    placeHolder="Message..." ></textarea>
+            </div>
+            <div class="form-group">
+                <button type="submit" class="btn btn-lg btn-default">
+                    Send
+                </button>
+            </div>
+        </form>
+    </section>
+{% endblock %}
