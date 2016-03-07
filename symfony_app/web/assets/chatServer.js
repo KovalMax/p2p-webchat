@@ -13,7 +13,7 @@ server.listen(port , function() {
 
 io.on('connection', function(socket) {
     console.log(
-        moment().format('YY-MM-DD HH:mm:ss')
+        moment().format('YYYY-MM-DD HH:mm:ss')
         + ' - New client connected'
     );
 

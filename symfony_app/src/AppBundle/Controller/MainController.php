@@ -31,7 +31,7 @@ Class MainController extends Controller
                 ->getRepository('AppBundle:Chat');
 
             $lastMessages = $em->createQueryBuilder('c')
-                ->select('c.fromUser, c.msgTime, c.message')
+                ->select('c.fromUser, c.msgTime, c.message, c.color')
                 ->orderBy('c.id', 'DESC')
                 ->setMaxResults(20)
                 ->getQuery()
@@ -64,6 +64,7 @@ Class MainController extends Controller
         $saveMsg->setFromUser($postData['name']);
         $saveMsg->setMsgTime(new \DateTime($postData['time']));
         $saveMsg->setMessage($postData['message']);
+        $saveMsg->setColor($postData['color']);
 
         $em = $this->getDoctrine()->getManager();
         $em->persist($saveMsg);

@@ -101,4 +101,24 @@ class Chat
     {
         $this->message = $message;
     }
+    /**
+     * @ORM\Column(type="string")
+     */
+    protected $color;
+
+    /**
+     * @return mixed
+     */
+    public function getColor()
+    {
+        return $this->color;
+    }
+
+    /**
+     * @param mixed $color
+     */
+    public function setColor($color)
+    {
+        $this->color = $color;
+    }
 }

@@ -5,7 +5,7 @@
         <ul class="chat-screen">
             {% if messages|default %}
                 {% for message in messages %}
-                    <li>
+                    <li style="color: {{ message.color }}">
                         <strong>{{ message.fromUser }}</strong> :
                         <span class="time-right">
                             {{ message.msgTime|date('Y-m-d H:i:s') }}
@@ -24,7 +24,7 @@
             <textarea
                     id="messageInput"
                     class="message-input"
-                    placeHolder="Message..." ></textarea>
+                    placeHolder=" Message..." ></textarea>
             </div>
             <div class="form-group">
                 <button type="submit" class="btn btn-lg btn-default">
