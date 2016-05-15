@@ -102,7 +102,7 @@ $(function() {
         return true;
     });
 
-    $messageInput.on('keyup', function() {
+    $messageInput.on('keyup focus', function() {
         updateTyping();
     });
 
