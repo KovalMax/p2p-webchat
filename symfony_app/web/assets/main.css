@@ -101,6 +101,7 @@ input.checkbox-register {
     height: 72px;
     resize: none;
     border-radius: 10px;
+    padding: 5px;
 }
 .message-input:focus {
     outline: none!important;
@@ -128,6 +129,31 @@ input.checkbox-register {
     margin-bottom: 10px;
     padding-top: 2px;
 }
+
+.users-holder {
+    position: absolute;
+    top: 7%;
+    left: 69%;
+    width: 160px;
+    height: 73%;
+    border: gray solid 1px;
+    border-radius: 10px;
+    overflow-y: auto;
+    padding: 10px 15px 10px 15px;
+}
+.chat-users {
+    word-wrap: break-word;
+    list-style: none;
+    padding-left: 15px;
+}
+.chat-users > li {
+    margin-bottom: 10px;
+    padding-top: 2px;
+    border-bottom: 1px aliceblue solid;
+    border-top: 1px aliceblue solid;
+    text-align: center;
+}
+
 .time-right {
     float: right;
     padding-right: 15px;
@@ -151,4 +177,23 @@ input.checkbox-register {
 }
 ::-webkit-scrollbar-thumb:window-inactive {
     background: #337ab7;
+}
+.typing {
+    display: none;
+}
+
+.typing::after {
+    content: url(../img/typing.gif);
+}
+.count-users {
+    width: auto;
+    height: auto;
+    float: right;
+    background-color: chartreuse;
+    border-radius: 30%;
+    text-align: center;
+    font-weight: 600;
+}
+.form-group.submit {
+    margin-left: 9px;
 }
