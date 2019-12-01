@@ -1,0 +1,29 @@
+version: '3.7'
+
+services:
+  app-fpm:
+    build:
+      context: php
+      args:
+        UID: ${UID}
+        GID: ${GID}
+    env_file:
+      - .env
+    volumes:
+      - ../web-app:/var/www
+    networks:
+      - app-network
+
+  web-server:
+    build:
+      context: nginx
+      args:
+        SERVER_NAME: ${SERVER_NAME}
+    depends_on:
+      - app-fpm
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
