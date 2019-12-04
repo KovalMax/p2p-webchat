@@ -1,2 +1,2 @@
-# homeproject
-simple site authorization(php+symfony2) and chat implemented on node.js+socket.io 
+## Home Project studio )
+* Simple authorization and chat implemented on socket.io. Enjoy ) 
