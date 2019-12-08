@@ -19,10 +19,31 @@ services:
       context: nginx
       args:
         SERVER_NAME: ${SERVER_NAME}
+    volumes:
+      - ../web-app/assets:/var/www/assets
     depends_on:
       - app-fpm
     networks:
       - app-network
+
+  app_db:
+    image: mysql:${APP_DB_VERSION}
+    environment:
+      MYSQL_ROOT_PASSWORD: ${APP_DB_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${APP_DB_NAME}
+      MYSQL_USER: ${APP_DB_USER}
+      MYSQL_PASSWORD: ${APP_DB_PASSWORD}
+    volumes:
+      - app_db_volume:/var/lib/mysql
+    depends_on:
+      - app-fpm
+    networks:
+      - app-network
+    ports:
+      - 3333:3306
+
+volumes:
+  app_db_volume:
 
 networks:
   app-network:

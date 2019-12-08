@@ -1,3 +1,16 @@
-#index:
-#    path: /
-#    controller: App\Controller\DefaultController::index
+root:
+  path: /
+  controller: Symfony\Bundle\FrameworkBundle\Controller\RedirectController
+  defaults:
+    route: 'messenger'
+
+login:
+  path: /login
+  controller: App\Controller\SecurityController::login
+logout:
+  path: /logout
+  methods: GET
+messenger:
+  path: /messenger
+  controller: App\Controller\MessengerController::index
+  methods: [GET, POST]
