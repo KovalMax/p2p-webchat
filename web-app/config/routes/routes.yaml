@@ -7,9 +7,11 @@ root:
 login:
   path: /login
   controller: App\Controller\SecurityController::login
+
 logout:
   path: /logout
   methods: GET
+
 messenger:
   path: /messenger
   controller: App\Controller\MessengerController::index
