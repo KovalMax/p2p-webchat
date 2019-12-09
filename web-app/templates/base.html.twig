@@ -1,23 +1,42 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+
     <title>{% block title %}Welcome!{% endblock %}</title>
     {% block stylesheets %}
         <link href="{{ asset('css/bootstrap.min.css') }}" rel="stylesheet"/>
         <link href="{{ asset('css/bootstrap-grid.min.css') }}" rel="stylesheet"/>
         <link href="{{ asset('css/bootstrap-reboot.min.css') }}" rel="stylesheet"/>
-
     {% endblock %}
 </head>
 
 <body>
+<div class="container">
+    <nav class="navbar navbar-light" style="background-color: #e3f2fd;">
+        <div class="row">
+            <div class="col-auto">
+                <a href="{{ path('messenger') }}" class="navbar-brand">
+                    <img src="{{ asset('icons/house.svg') }}" width="30" height="30" title="House">
+                </a>
+            </div>
+            {% if app.user %}
+                <div class="col-auto">
+                    <p class="">Logged in as: {{ app.user.username }}
+                        <a href="{{ path('logout') }}" class="">Logout</a>
+                    </p>
+                </div>
+            {% endif %}
+        </div>
+    </nav>
+</div>
 
 {% block body %}{% endblock %}
 {% block javascripts %}
+    <script src="{{ asset('js/jquery-3.4.1.min.js') }}"></script>
     <script src="{{ asset('js/bootstrap.bundle.min.js') }}"></script>
     <script src="{{ asset('js/bootstrap.min.js') }}"></script>
-    <script src="{{ asset('js/jquery-3.4.1.min.js') }}"></script>
 {% endblock %}
 </body>
 </html>

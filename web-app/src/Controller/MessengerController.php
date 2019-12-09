@@ -1,13 +1,11 @@
 <?php
-
-
 namespace App\Controller;
 
-
+use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Security\Core\Security;
 
-class MessengerController
+class MessengerController extends AbstractController
 {
     private Security $security;
 
@@ -18,8 +16,6 @@ class MessengerController
 
     public function index(): Response
     {
-        $name = $this->security->getUser()->getUsername();
-
-        return new Response("Hello {$name}!");
+        return $this->render('messenger/messenger.html.twig', []);
     }
 }

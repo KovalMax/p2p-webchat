@@ -3,46 +3,61 @@
 {% block title %}Log in{% endblock %}
 
 {% block body %}
-    <main class="container">
-        <form method="post">
-            <input type="hidden" name="_csrf_token" value="{{ csrf_token('authenticate') }}"/>
-            {% if error %}
-                <div class="alert alert-danger">{{ error.messageKey|trans(error.messageData, 'security') }}</div>
-            {% endif %}
+    <div class="container">
+        <div>
+            <form method="post">
+                <input type="hidden" name="_csrf_token" value="{{ csrf_token('authenticate') }}"/>
+                {% if error %}
+                    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                        {{ error.messageKey|trans(error.messageData, 'security') }}
+                        <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                            <span aria-hidden="true">&times;</span>
+                        </button>
+                    </div>
+                {% endif %}
 
-            {% if app.user %}
-                <div class="mb-3">
-                    You are logged in as {{ app.user.username }}, <a href="{{ path('logout') }}">Logout</a>
+                <div class="row justify-content-md-center">
+                    <div class="col-2">
+                        <h1 class="h4 mb-3 font-weight-normal">Please log-in</h1>
+                    </div>
                 </div>
-            {% endif %}
+                <div class="form-group row justify-content-md-center">
+                    <div class="input-group mb-2 col-4">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text" id="inputGroup-email">Email:</span>
+                        </div>
+                        <input value="{{ last_username }}"
+                               type="email"
+                               name="email"
+                               class="form-control"
+                               aria-label="Email input"
+                               aria-describedby="inputGroup-email"
+                               required
+                               autofocus
+                        />
+                    </div>
+                </div>
+                <div class="form-group row justify-content-md-center">
+                    <div class="input-group mb-2 col-4">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text" id="inputGroup-password">Password:</span>
+                        </div>
+                        <input type="password"
+                               name="password"
+                               class="form-control"
+                               aria-label="Password input"
+                               aria-describedby="inputGroup-password"
+                               required
+                        />
+                    </div>
+                </div>
 
-            <h1 class="h3 mb-3 font-weight-normal">Please log-in</h1>
-            <div class="form-group row">
-                <label for="inputEmail" class="col-sm-2 col-form-label">Email</label>
-                <div class="col-sm-6">
-                    <input type="email"
-                           value="{{ last_username }}"
-                           name="email"
-                           id="inputEmail"
-                           class="form-control"
-                           required
-                           autofocus
-                    />
+                <div class="form-group row justify-content-md-center">
+                    <div class="col-4">
+                        <button class="btn btn-primary btn-block" type="submit">Sign in</button>
+                    </div>
                 </div>
-            </div>
-
-            <div class="form-group row">
-                <label for="inputPassword" class="col-sm-2 col-form-label">Password</label>
-                <div class="col-sm-6">
-                    <input type="password" name="password" id="inputPassword" class="form-control" required/>
-                </div>
-            </div>
-
-            <div class="form-group row">
-                <div class="col-sm-6">
-                    <button class="btn btn-primary" type="submit">Sign in</button>
-                </div>
-            </div>
-        </form>
-    </main>
+            </form>
+        </div>
+    </div>
 {% endblock %}

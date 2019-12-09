@@ -34,14 +34,14 @@ services:
       MYSQL_USER: ${APP_DB_USER}
       MYSQL_PASSWORD: ${APP_DB_PASSWORD}
     volumes:
-      - app_db_volume:/var/lib/mysql
+      - app-db-volume:/var/lib/mysql
     depends_on:
       - app-fpm
     networks:
       - app-network
 
 volumes:
-  app_db_volume:
+  app-db-volume:
 
 networks:
   app-network:
