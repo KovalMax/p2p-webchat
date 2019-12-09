@@ -3,6 +3,7 @@
 namespace App\Entity;
 
 use App\Entity\Traits\CreatedAtTrait;
+use Ramsey\Uuid\Uuid;
 use Ramsey\Uuid\UuidInterface;
 use Symfony\Component\Security\Core\User\UserInterface;
 
@@ -16,20 +17,15 @@ class User implements UserInterface
 
     private string $password;
 
-    private array $roles = [];
+    private array $roles;
 
-    public function __construct(
-        UuidInterface $id,
-        string $email,
-        string $password,
-        array $roles = [],
-        \DateTimeInterface $createdAt = null
-    ) {
-        $this->id = $id;
-        $this->email = $email;
-        $this->password = $password;
-        $this->roles = $roles;
-        $this->createdAt = $createdAt;
+    /**
+     * @throws \Exception
+     */
+    public function __construct()
+    {
+        $this->id = Uuid::uuid4();
+        $this->roles = ['ROLE_USER'];
     }
 
     public function getId(): UuidInterface
@@ -59,16 +55,12 @@ class User implements UserInterface
      */
     public function getRoles(): array
     {
-        $roles = $this->roles;
-        // guarantee every user at least has ROLE_USER
-        $roles[] = 'ROLE_USER';
-
-        return array_unique($roles);
+        return $this->roles;
     }
 
     public function setRoles(array $roles): self
     {
-        $this->roles = $roles;
+        $this->roles = array_unique($roles);
 
         return $this;
     }

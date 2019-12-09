@@ -1,0 +1,10 @@
+version: '3.7'
+
+services:
+  app-web-server:
+    ports:
+      - 8099:8081
+
+  app-db:
+    ports:
+      - 3379:3306

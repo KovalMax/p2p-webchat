@@ -3,9 +3,9 @@ namespace App\Entity\Traits;
 
 trait CreatedAtTrait
 {
-    protected ?\DateTimeInterface $createdAt;
+    protected \DateTimeInterface $createdAt;
 
-    public function getCreatedAt(): ?\DateTimeInterface
+    public function getCreatedAt(): \DateTimeInterface
     {
         return $this->createdAt;
     }
@@ -22,8 +22,6 @@ trait CreatedAtTrait
      */
     public function setupCreatedAt(): void
     {
-        if ($this->createdAt === null) {
-            $this->setCreatedAt(new \DateTimeImmutable());
-        }
+        $this->setCreatedAt(new \DateTimeImmutable());
     }
 }

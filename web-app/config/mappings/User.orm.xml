@@ -15,9 +15,10 @@
 
         <id name="id" column="id_user" type="uuid"/>
 
-        <field name="email" length="180" unique="true" />
+        <field name="email" length="180" unique="true"/>
+        <field name="password" length="128"/>
+
         <field name="roles" type="json"/>
-        <field name="password" length="255"/>
 
         <field name="createdAt" column="created_at" type="datetime_immutable"/>
     </entity>

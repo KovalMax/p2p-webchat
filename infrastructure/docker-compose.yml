@@ -14,7 +14,7 @@ services:
     networks:
       - app-network
 
-  web-server:
+  app-web-server:
     build:
       context: nginx
       args:
@@ -26,7 +26,7 @@ services:
     networks:
       - app-network
 
-  app_db:
+  app-db:
     image: mysql:${APP_DB_VERSION}
     environment:
       MYSQL_ROOT_PASSWORD: ${APP_DB_ROOT_PASSWORD}
@@ -39,8 +39,6 @@ services:
       - app-fpm
     networks:
       - app-network
-    ports:
-      - 3333:3306
 
 volumes:
   app_db_volume:
