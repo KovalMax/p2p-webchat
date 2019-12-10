@@ -13,8 +13,8 @@
 </head>
 
 <body>
-<div class="container">
-    <nav class="navbar navbar-light" style="background-color: #e3f2fd;">
+<footer class="container-fluid">
+    <nav class="navbar navbar-light rounded-bottom" style="background-color: #e3f2fd;">
         <div class="row">
             <div class="col-auto">
                 <a href="{{ path('messenger') }}" class="navbar-brand">
@@ -23,16 +23,20 @@
             </div>
             {% if app.user %}
                 <div class="col-auto">
-                    <p class="">Logged in as: {{ app.user.username }}
+                    <p class="text-body">Logged in as: {{ app.user.username }}
                         <a href="{{ path('logout') }}" class="">Logout</a>
                     </p>
                 </div>
             {% endif %}
         </div>
     </nav>
-</div>
+</footer>
 
-{% block body %}{% endblock %}
+<main role="main" class="container w-50">
+    <div class="row rounded shadow-sm mt-5 p-2 bg-light border">
+        {% block body %}{% endblock %}
+    </div>
+</main>
 {% block javascripts %}
     <script src="{{ asset('js/jquery-3.4.1.min.js') }}"></script>
     <script src="{{ asset('js/bootstrap.bundle.min.js') }}"></script>
