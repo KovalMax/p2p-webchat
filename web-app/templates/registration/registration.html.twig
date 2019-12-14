@@ -1,0 +1,14 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}{{ 'Registration'|trans }}{% endblock %}
+
+{% block body %}
+    <h4 class="mx-auto align-self-center mb-4">{{'Registration'|trans}}</h4>
+    <div class="container">
+        <div class="col-6 mx-auto">
+            {{ form_start(form) }}
+            {{ form_widget(form) }}
+            {{ form_end(form) }}
+        </div>
+    </div>
+{% endblock %}

@@ -5,15 +5,32 @@ namespace App\DataFixtures;
 use App\Entity\User;
 use Doctrine\Bundle\FixturesBundle\Fixture;
 use Doctrine\Common\Persistence\ObjectManager;
-use Ramsey\Uuid\Uuid;
+use Symfony\Component\Security\Core\Encoder\UserPasswordEncoderInterface;
 
 class UserFixtures extends Fixture
 {
+    /**
+     * @var UserPasswordEncoderInterface
+     */
+    private UserPasswordEncoderInterface $encoder;
+
+    public function __construct(UserPasswordEncoderInterface $encoder)
+    {
+        $this->encoder = $encoder;
+    }
+
+    /**
+     * @param ObjectManager $manager
+     * @throws \Exception
+     */
     public function load(ObjectManager $manager): void
     {
         $user = (new User())
             ->setEmail('max@gmail.com')
-            ->setPassword('$argon2id$v=19$m=65536,t=4,p=1$xMOo8oH9gw0TM65uvoLRLw$VBIUehqWXhZaMf6nlh7BhkulbG3a+TVfkOYr50p78uE');
+            ->setFirstName('Max')
+            ->setLastName('Doe');
+
+        $user->setPassword($this->encoder->encodePassword($user, 'password'));
 
         $manager->persist($user);
         $manager->flush();

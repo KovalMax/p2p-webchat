@@ -12,25 +12,40 @@
     {% endblock %}
 </head>
 
-<body>
-<footer class="container-fluid">
-    <nav class="navbar navbar-light rounded-bottom" style="background-color: #e3f2fd;">
-        <div class="row">
-            <div class="col-auto">
-                <a href="{{ path('messenger') }}" class="navbar-brand">
-                    <img src="{{ asset('icons/house.svg') }}" width="30" height="30" title="House">
-                </a>
-            </div>
-            {% if app.user %}
-                <div class="col-auto">
-                    <p class="text-body">Logged in as: {{ app.user.username }}
-                        <a href="{{ path('logout') }}" class="">Logout</a>
-                    </p>
-                </div>
+<body class="bg-light">
+<nav class="navbar navbar-light navbar-expand" style="background-color: #e3f2fd;">
+    <div class="w-100 order-1 order-md-0">
+        <a href="{{ path('messenger') }}" class="navbar-brand mr-0">Messenger</a>
+    </div>
+
+    <div class="collapse navbar-collapse order-12 order-md-0" id="navbarSupportedContent">
+        <ul class="navbar-nav px-3 mr-auto">
+            {% if is_granted('ROLE_USER') %}
+                <li class="nav-item text-nowrap active">
+                    <a class="nav-link" href="javascript:void(0)">{{ 'Hello'|trans }}, {{ app.user.firstName }}</a>
+                </li>
+                <li class="nav-item text-nowrap active">
+                    <a class="nav-link" href="{{ logout_path() }}">{{ 'Sign out'|trans }}</a>
+                </li>
+            {% else %}
+                <li class="nav-item text-nowrap active">
+                    <a class="nav-link" href="{{ path('login') }}">{{ 'Sign in'|trans }}</a>
+                </li>
             {% endif %}
+        </ul>
+    </div>
+</nav>
+
+{% for label, messages in app.flashes(['success', 'notice']) %}
+    {% for message in messages %}
+        <div class="alert alert-{{ label }} alert-dismissible fade show" role="alert">
+            {{ message|trans }}
+            <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                <span aria-hidden="true">&times;</span>
+            </button>
         </div>
-    </nav>
-</footer>
+    {% endfor %}
+{% endfor %}
 
 <main role="main" class="container w-50">
     <div class="row rounded shadow-sm mt-5 p-2 bg-light border">

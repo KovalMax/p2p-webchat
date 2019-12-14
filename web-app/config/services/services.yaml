@@ -6,7 +6,7 @@ services:
 
   App\:
     resource: '%kernel.project_dir%/src/*'
-    exclude: '%kernel.project_dir%/src/{Entity,Migrations,Tests, DataFixtures}'
+    exclude: '%kernel.project_dir%/src/{Entity,Migrations,Tests,DataFixtures}'
 
   App\Controller\:
     resource: '%kernel.project_dir%/src/Controller/'

@@ -16,3 +16,8 @@ messenger:
   path: /messenger
   controller: App\Controller\MessengerController::index
   methods: [GET, POST]
+
+registration:
+  path: /registration
+  controller: App\Controller\RegistrationController::register
+  methods: [GET, POST]

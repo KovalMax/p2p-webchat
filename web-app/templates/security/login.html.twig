@@ -1,12 +1,14 @@
 {% extends 'base.html.twig' %}
 
-{% block title %}Log in{% endblock %}
+{% block title %}{{ 'Sign in'|trans }}{% endblock %}
 
 {% block body %}
     <div class="container">
         <div>
             <form method="post">
                 <input type="hidden" name="_csrf_token" value="{{ csrf_token('authenticate') }}"/>
+                <input type="hidden" name="_target_path" value="{{ app.request.get('redirect_to') }}">
+
                 {% if error %}
                     <div class="alert alert-danger alert-dismissible fade show" role="alert">
                         {{ error.messageKey|trans(error.messageData, 'security') }}
@@ -18,20 +20,16 @@
 
                 <div class="row justify-content-center row-cols-1 mx-auto">
                     <div class="col-auto">
-                        <h4 class="text-muted font-weight-normal">Please login:</h4>
+                        <h4 class="text-muted font-weight-normal">{{ 'Please login'|trans }}:</h4>
                     </div>
                 </div>
                 <div class="form-group">
                     <div class="input-group mb-1 col-7 mx-auto">
-                        <div class="input-group-prepend">
-                            <span class="input-group-text" id="inputGroup-email">Email:</span>
-                        </div>
                         <input value="{{ last_username }}"
                                type="email"
                                name="email"
-                               class="form-control"
-                               aria-label="Email input"
-                               aria-describedby="inputGroup-email"
+                               class="form-control rounded-pill"
+                               placeholder="{{ 'Email'|trans }}"
                                required
                                autofocus
                         />
@@ -39,14 +37,10 @@
                 </div>
                 <div class="form-group justify-content-center">
                     <div class="input-group mb-1 col-7 mx-auto">
-                        <div class="input-group-prepend">
-                            <span class="input-group-text" id="inputGroup-password">Password:</span>
-                        </div>
                         <input type="password"
                                name="password"
-                               class="form-control"
-                               aria-label="Password input"
-                               aria-describedby="inputGroup-password"
+                               class="form-control rounded-pill"
+                               placeholder="{{ 'Password'|trans }}"
                                required
                         />
                     </div>
@@ -54,7 +48,7 @@
 
                 <div class="form-group">
                     <div class="col-5 mx-auto">
-                        <button class="btn btn-primary btn-block" type="submit">Sign in</button>
+                        <button class="btn btn-primary btn-block" type="submit">{{ 'Sign in'|trans }}</button>
                     </div>
                 </div>
             </form>
