@@ -23,6 +23,8 @@ trait CreatedAtTrait
      */
     public function setupCreatedAt(): void
     {
-        $this->setCreatedAt(new \DateTimeImmutable());
+        if (!isset($this->createdAt)) {
+            $this->createdAt = new \DateTimeImmutable();
+        }
     }
 }

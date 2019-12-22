@@ -61,6 +61,7 @@ class UserFixtures extends Fixture
             $user->setMessageSettings(new MessageSettings());
 
             $manager->persist($user);
+            $this->addReference($data['email'], $user);
         }
 
         $manager->flush();
