@@ -3,17 +3,20 @@
 namespace App\Entity;
 
 use App\Entity\Traits\CreatedAtTrait;
-use Ramsey\Uuid\Uuid;
-use Ramsey\Uuid\UuidInterface;
+use App\Entity\Traits\IdentityTrait;
+use Doctrine\Common\Collections\ArrayCollection;
+use Doctrine\Common\Collections\Collection;
 use Symfony\Component\Security\Core\User\UserInterface;
 
 class User implements UserInterface, \Serializable
 {
-    use CreatedAtTrait;
+    use CreatedAtTrait, IdentityTrait;
 
     public const ROLE_USER = 'ROLE_USER';
 
-    private UuidInterface $id;
+    private Collection $messages;
+
+    private MessageSettings $messageSettings;
 
     private string $email;
 
@@ -30,13 +33,29 @@ class User implements UserInterface, \Serializable
      */
     public function __construct()
     {
-        $this->id = Uuid::uuid4();
+        $this->generateRandomId();
         $this->roles = [self::ROLE_USER];
+        $this->messages = new ArrayCollection();
     }
 
-    public function getId(): UuidInterface
+    /**
+     * @return MessageSettings
+     */
+    public function getMessageSettings(): MessageSettings
     {
-        return $this->id;
+        return $this->messageSettings;
+    }
+
+    /**
+     * @param MessageSettings $messageSettings
+     *
+     * @return User
+     */
+    public function setMessageSettings(MessageSettings $messageSettings): self
+    {
+        $this->messageSettings = $messageSettings;
+
+        return $this;
     }
 
     public function getEmail(): string
@@ -102,6 +121,7 @@ class User implements UserInterface, \Serializable
     public function setFirstName(string $firstName): User
     {
         $this->firstName = $firstName;
+
         return $this;
     }
 
@@ -121,6 +141,7 @@ class User implements UserInterface, \Serializable
     public function setLastName(string $lastName): User
     {
         $this->lastName = $lastName;
+
         return $this;
     }
 
@@ -157,7 +178,7 @@ class User implements UserInterface, \Serializable
 
     public function unserialize($serialized): void
     {
-        list(
+        [
             $this->id,
             $this->email,
             $this->password,
@@ -165,6 +186,6 @@ class User implements UserInterface, \Serializable
             $this->firstName,
             $this->lastName,
             $this->roles
-            ) = unserialize($serialized);
+        ] = unserialize($serialized);
     }
 }

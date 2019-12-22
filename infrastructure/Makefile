@@ -21,6 +21,7 @@ $(foreach v,$(firstword $(MAKECMDGOALS)),$(eval $(LOOPBODY)))
 ## Commands:
 start: ## - Starting all docker containers
 	cp -n .env.dist .env || true
+	cp -n docker-compose.override.dist.yml docker-compose.override.yml || true
 	@bash scripts/start.sh $(APP_NAME)
 
 stop: ## - Stop all docker containers

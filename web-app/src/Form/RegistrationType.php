@@ -19,25 +19,26 @@ class RegistrationType extends AbstractType
 {
     public function buildForm(FormBuilderInterface $builder, array $options): void
     {
-        $builder->add('email', EmailType::class)
+        $builder->add('email', EmailType::class, ['attr' => ['class' => 'rounded-pill']])
             ->add(
                 'password',
                 RepeatedType::class,
                 [
                     'type' => PasswordType::class,
-                    'first_options' => ['label' => 'Password'],
-                    'second_options' => ['label' => 'Repeat password']
+                    'first_options' => ['label' => 'Password', 'attr' => ['class' => 'rounded-pill']],
+                    'second_options' => ['label' => 'Repeat password', 'attr' => ['class' => 'rounded-pill']],
                 ]
             )
-            ->add('firstName', TextType::class)
-            ->add('lastName', TextType::class)
+            ->add('firstName', TextType::class, ['attr' => ['class' => 'rounded-pill']])
+            ->add('lastName', TextType::class, ['attr' => ['class' => 'rounded-pill']])
             ->add(
                 'termsAgreed',
                 CheckboxType::class,
                 [
+                    'attr' => ['class' => 'rounded-pill'],
                     'mapped' => false,
                     'constraints' => new IsTrue(),
-                    'label' => 'I agree to the terms of service'
+                    'label' => 'I agree to the terms of service',
                 ]
             )
             ->add('SignUp', SubmitType::class);

@@ -21,7 +21,7 @@
     <div class="collapse navbar-collapse order-12 order-md-0" id="navbarSupportedContent">
         <ul class="navbar-nav px-3 mr-auto">
             {% if is_granted('ROLE_USER') %}
-                <li class="nav-item text-nowrap active">
+                <li class="nav-item text-nowrap active border-right">
                     <a class="nav-link" href="javascript:void(0)">{{ 'Hello'|trans }}, {{ app.user.firstName }}</a>
                 </li>
                 <li class="nav-item text-nowrap active">
