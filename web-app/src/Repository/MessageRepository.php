@@ -4,6 +4,7 @@ namespace App\Repository;
 
 use App\Entity\Message;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
+use Doctrine\Common\Collections\Criteria;
 use Doctrine\Common\Persistence\ManagerRegistry;
 
 /**
@@ -14,8 +15,29 @@ use Doctrine\Common\Persistence\ManagerRegistry;
  */
 class MessageRepository extends ServiceEntityRepository
 {
+    protected const DEFAULT_ORDER = ['createdAt' => Criteria::DESC];
+    protected const DEFAULT_LIMIT = 25;
+
     public function __construct(ManagerRegistry $registry)
     {
         parent::__construct($registry, Message::class);
+    }
+
+    /**
+     * @param null|int   $limit
+     * @param null|array $orderBy
+     *
+     * @return Message[]
+     */
+    public function getLastMessages(?int $limit = null, ?array $orderBy = null): iterable
+    {
+        if (null === $limit) {
+            $limit = self::DEFAULT_LIMIT;
+        }
+        if (null === $orderBy) {
+            $orderBy = self::DEFAULT_ORDER;
+        }
+
+        return $this->findBy([], $orderBy, $limit);
     }
 }

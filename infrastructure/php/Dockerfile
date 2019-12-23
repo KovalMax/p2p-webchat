@@ -8,7 +8,8 @@ ARG XDEBUG=1
 
 WORKDIR /var/www
 
-COPY ./config/xdebug.ini /etc/php7/conf.d/xdebug.ini
+COPY ./config/xdebug.ini $PHP_INI_DIR/conf.d
+COPY ./config/opcache_preload.ini $PHP_INI_DIR/conf.d
 
 RUN set -eux \
     && apk update \
