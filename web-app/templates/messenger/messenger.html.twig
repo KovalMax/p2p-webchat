@@ -4,12 +4,12 @@
 
 {% block body %}
     <div class="col">
-        <ul class="list-group">
+        <ul class="list-group h-75 chat-container">
             {% if messages|default %}
-                {# @var message \App\Entity\Message #}
                 {% for message in messages %}
                     <li class="list-group-item">
-                        <p>{{ message.user.firstName }}</p><p>{{ message.message }}</p>
+                        <p>@{{ message.user.firstName }}</p>
+                        <p>{{ message.message }}</p>
                     </li>
                 {% endfor %}
             {% endif %}

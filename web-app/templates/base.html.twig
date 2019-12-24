@@ -6,9 +6,10 @@
 
     <title>{% block title %}Welcome!{% endblock %}</title>
     {% block stylesheets %}
-        <link href="{{ asset('css/bootstrap.min.css') }}" rel="stylesheet"/>
-        <link href="{{ asset('css/bootstrap-grid.min.css') }}" rel="stylesheet"/>
-        <link href="{{ asset('css/bootstrap-reboot.min.css') }}" rel="stylesheet"/>
+        <link rel="stylesheet" href="{{ asset('css/bootstrap.min.css') }}"/>
+        <link rel="stylesheet" href="{{ asset('css/bootstrap-grid.min.css') }}"/>
+        <link rel="stylesheet" href="{{ asset('css/bootstrap-reboot.min.css') }}"/>
+        <link rel="stylesheet" href="{{ asset('css/main.css') }}"/>
     {% endblock %}
 </head>
 
@@ -48,7 +49,7 @@
 {% endfor %}
 
 <main role="main" class="container w-50">
-    <div class="row rounded shadow-sm mt-5 p-2 bg-light border">
+    <div class="row rounded shadow-sm mt-2 p-2 bg-light border">
         {% block body %}{% endblock %}
     </div>
 </main>
