@@ -1,6 +1,18 @@
 version: '3.7'
 
 services:
+  app-node:
+    build:
+      context: ..
+      dockerfile: infrastructure/node/Dockerfile
+    environment:
+      SOCKET_PORT: ${SOCKET_PORT}
+    volumes:
+      - ../socket-app:/var/www
+      - /var/www/node_modules
+    networks:
+      - app-network
+
   app-fpm:
     build:
       context: php

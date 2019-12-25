@@ -1,0 +1,19 @@
+{
+  "name": "messenger-socket-app",
+  "description": "home project, chat that uses socket io",
+  "license": "MIT",
+  "author": "kovalmax5@gmail.com",
+  "main": "app.js",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/KovalMax/homeproject"
+  },
+  "version": "1.0.0",
+  "dependencies": {
+    "socket.io": "^2.3",
+    "express": "^4.17"
+  },
+  "scripts": {
+    "start": "node app.js"
+  }
+}
