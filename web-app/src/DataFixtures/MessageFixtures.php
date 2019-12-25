@@ -16,12 +16,13 @@ class MessageFixtures extends Fixture implements DependentFixtureInterface
      */
     public function load(ObjectManager $manager): void
     {
+        $t = 'Hello there!';
         for ($i = 0; $i < 10; $i++) {
             /** @var User $user */
             $user = $this->getReference(constant(sprintf('%s::USER_%d', UserFixtures::class, mt_rand(1, 3))));
             $user->getMessageSettings();
             $m = new Message();
-            $m->setMessage(substr(str_shuffle(MD5(microtime())), 0, 10));
+            $m->setMessage(str_pad($t, mt_rand(strlen($t), strlen($t) * 2), ' Some here'));
             $m->setUser($user);
             $m->setCreatedAt(new \DateTimeImmutable(sprintf('-%d hour', mt_rand(1, 36))));
 

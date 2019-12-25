@@ -14,5 +14,12 @@
 }
 
 .chat-container {
-    overflow-y: scroll;
+    margin: 0;
+    padding: 0;
+    overflow-y: auto;
+    max-height: 600px;
+}
+
+.message-input {
+    width: 350px;
 }

@@ -2,19 +2,36 @@
 
 {% block title %}{{ 'Messenger'|trans }}{% endblock %}
 
-{% block body %}
-    <div class="col">
-        <ul class="list-group h-75 chat-container">
-            {% if messages|default %}
-                {% for message in messages %}
-                    <li class="list-group-item">
-                        <p>@{{ message.user.firstName }}</p>
-                        <p>{{ message.message }}</p>
-                    </li>
-                {% endfor %}
-            {% endif %}
-        </ul>
-    </div>
+{% block container %}
+    <main role="main" class="container-fluid w-75 rounded bg-light border shadow-sm mt-3 p-3">
+        <div class="row">
+            <div class="col">
+                <ul class="list-group chat-container border list-group-flush rounded">
+                    {% if messages|default %}
+                        {% for message in messages %}
+                            <li class="list-group-item">
+                                <p>@{{ message.user.firstName }}</p>
+                                <p>{{ message.message }}</p>
+                            </li>
+                        {% endfor %}
+                    {% endif %}
+                </ul>
+            </div>
+        </div>
+        <div class="row mt-1">
+            <div class="col">
+                <form class="form-inline" id="messageForm">
+                    <input id="userInput" type="hidden" data-user="{{ app.user.firstName }}" data-uid="{{ app.user.id }}"/>
+                    <div class="form-group">
+                        <textarea id="messageInput" class="form-control" placeHolder="Type your Message here..."></textarea>
+                    </div>
+                    <div class="form-group">
+                        <button type="submit" class="btn btn-lg btn-block btn-light">Send</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </main>
 {% endblock %}
 
 {% block javascripts %}

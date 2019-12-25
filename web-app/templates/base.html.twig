@@ -7,7 +7,6 @@
     <title>{% block title %}Welcome!{% endblock %}</title>
     {% block stylesheets %}
         <link rel="stylesheet" href="{{ asset('css/bootstrap.min.css') }}"/>
-        <link rel="stylesheet" href="{{ asset('css/bootstrap-grid.min.css') }}"/>
         <link rel="stylesheet" href="{{ asset('css/bootstrap-reboot.min.css') }}"/>
         <link rel="stylesheet" href="{{ asset('css/main.css') }}"/>
     {% endblock %}
@@ -48,11 +47,13 @@
     {% endfor %}
 {% endfor %}
 
-<main role="main" class="container w-50">
-    <div class="row rounded shadow-sm mt-2 p-2 bg-light border">
-        {% block body %}{% endblock %}
-    </div>
-</main>
+{% block container %}
+    <main role="main" class="container w-50 rounded shadow-sm mt-3 p-3 bg-light border">
+        <div class="row">
+            {% block body %}{% endblock %}
+        </div>
+    </main>
+{% endblock %}
 {% block javascripts %}
     <script src="{{ asset('js/jquery-3.4.1.min.js') }}"></script>
     <script src="{{ asset('js/bootstrap.bundle.min.js') }}"></script>

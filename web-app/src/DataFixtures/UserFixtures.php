@@ -25,13 +25,13 @@ class UserFixtures extends Fixture
         ],
         self::USER_2 => [
             'email' => self::USER_2,
-            'fName' => 'Max',
+            'fName' => 'John',
             'lName' => 'Doe',
             'password' => 'password',
         ],
         self::USER_3 => [
             'email' => self::USER_3,
-            'fName' => 'Max',
+            'fName' => 'Samuel',
             'lName' => 'Doe',
             'password' => 'password',
         ],
