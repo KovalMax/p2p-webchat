@@ -4,6 +4,7 @@ ENV PHP_DEPS build-base autoconf curl-dev gmp-dev libpng-dev libxml2-dev libmcry
 
 ARG UID=1000
 ARG GID=1000
+ARG FPM_USER_NAME=www-data
 ARG XDEBUG=1
 
 WORKDIR /var/www
@@ -30,10 +31,9 @@ RUN set -eux \
     && php composer-setup.php --filename=composer --install-dir=/usr/bin \
     && php -r "unlink('composer-setup.php');"
 
-RUN usermod -u $UID www-data \
-    && groupmod -g $GID www-data
+RUN usermod -u $UID $FPM_USER_NAME && groupmod -g $GID $FPM_USER_NAME
 
-USER www-data
+USER $FPM_USER_NAME
 
 EXPOSE 9000
 

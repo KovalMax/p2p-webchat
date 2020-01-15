@@ -4,12 +4,17 @@ services:
   app-node:
     build:
       context: ..
+      args:
+        UID: ${UID}
+        GID: ${GID}
+        NODE_USER_NAME: ${NODE_USER_NAME}
       dockerfile: infrastructure/node/Dockerfile
     environment:
       SOCKET_PORT: ${SOCKET_PORT}
+      NODE_ENV: ${NODE_ENV}
     volumes:
-      - ../socket-app:/var/www
-      - /var/www/node_modules
+      - ../socket-app:/var/www:delegated
+      - app-node-modules:/var/www/node_modules
     networks:
       - app-network
 
@@ -19,10 +24,12 @@ services:
       args:
         UID: ${UID}
         GID: ${GID}
+        FPM_USER_NAME: ${FPM_USER_NAME}
+        XDEBUG: ${XDEBUG}
     env_file:
       - .env
     volumes:
-      - ../web-app:/var/www
+      - ../web-app:/var/www:delegated
     networks:
       - app-network
 
@@ -32,7 +39,7 @@ services:
       args:
         SERVER_NAME: ${SERVER_NAME}
     volumes:
-      - ../web-app/assets:/var/www/assets
+      - ../web-app/assets:/var/www/assets:delegated
     depends_on:
       - app-fpm
     networks:
@@ -54,6 +61,7 @@ services:
 
 volumes:
   app-db-volume:
+  app-node-modules:
 
 networks:
   app-network:
