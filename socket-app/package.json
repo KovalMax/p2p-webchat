@@ -3,7 +3,7 @@
   "description": "home project, chat that uses socket io",
   "license": "MIT",
   "author": "kovalmax5@gmail.com",
-  "main": "app.js",
+  "main": "socket-server.js",
   "repository": {
     "type": "git",
     "url": "https://github.com/KovalMax/homeproject"
@@ -14,8 +14,8 @@
     "express": "^4.17"
   },
   "scripts": {
-    "start:production": "node app.js",
-    "start:development": "nodemon --inspect=0.0.0.0 app.js"
+    "start:production": "node socket-server.js",
+    "start:development": "nodemon --inspect=0.0.0.0 socket-server.js"
   },
   "devDependencies": {
     "nodemon": "^2.0.2"

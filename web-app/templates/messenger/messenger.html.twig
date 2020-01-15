@@ -23,7 +23,7 @@
                 <form class="form-inline" id="messageForm">
                     <input id="userInput" type="hidden" data-user="{{ app.user.firstName }}" data-uid="{{ app.user.id }}"/>
                     <div class="form-group">
-                        <textarea id="messageInput" class="form-control" placeHolder="Type your Message here..."></textarea>
+                        <input id="messageInput" class="form-control" placeHolder="Type your Message here..." autocomplete="off"/>
                     </div>
                     <div class="form-group">
                         <button type="submit" class="btn btn-lg btn-block btn-light">Send</button>
@@ -36,4 +36,6 @@
 
 {% block javascripts %}
     {{ parent() }}
+    <script src="{{ asset('js/socket.io.js') }}"></script>
+    <script src="{{ asset('js/chat.js') }}"></script>
 {% endblock %}

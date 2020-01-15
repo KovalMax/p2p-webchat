@@ -8,3 +8,7 @@ const port = process.env.SOCKET_PORT;
 http.listen(port, () => {
     console.log('Server listening at port %d', port);
 });
+
+io.on('connection', (connection) => {
+    console.log('io connected');
+});
