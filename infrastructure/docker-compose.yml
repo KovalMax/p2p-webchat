@@ -14,7 +14,7 @@ services:
       NODE_ENV: ${NODE_ENV}
     volumes:
       - ../socket-app:/var/www
-      - app-node-modules:/var/www/node_modules
+      - /var/www/node_modules
     networks:
       - app-network
 
