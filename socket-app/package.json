@@ -3,7 +3,7 @@
   "description": "home project, chat that uses socket io",
   "license": "MIT",
   "author": "kovalmax5@gmail.com",
-  "main": "socket-server.js",
+  "main": "server.js",
   "repository": {
     "type": "git",
     "url": "https://github.com/KovalMax/homeproject"
@@ -14,10 +14,13 @@
     "express": "^4.17"
   },
   "scripts": {
-    "start:production": "node socket-server.js",
-    "start:development": "nodemon --inspect=0.0.0.0 socket-server.js"
+    "build": "rollup -c",
+    "start:production": "node dist/bundle.js",
+    "start:development": "rollup -c -w"
   },
   "devDependencies": {
-    "nodemon": "^2.0.2"
+    "@rollup/plugin-run": "^1.2.0",
+    "rollup": "^1.31.0",
+    "rollup-plugin-terser": "^5.2.0"
   }
 }

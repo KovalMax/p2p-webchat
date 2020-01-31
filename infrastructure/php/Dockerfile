@@ -1,4 +1,4 @@
-FROM php:7.4.0-fpm-alpine3.10
+FROM php:7.4.2-fpm-alpine3.11
 
 ENV PHP_DEPS build-base autoconf curl-dev gmp-dev libpng-dev libxml2-dev libmcrypt-dev imagemagick-dev icu-dev libzip-dev
 
