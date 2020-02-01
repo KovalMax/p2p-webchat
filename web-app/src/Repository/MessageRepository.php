@@ -13,9 +13,9 @@ use Doctrine\Common\Persistence\ManagerRegistry;
  * @method Message[]    findAll()
  * @method Message[]    findBy(array $criteria, array $orderBy = null, $limit = null, $offset = null)
  */
-class MessageRepository extends ServiceEntityRepository
+final class MessageRepository extends ServiceEntityRepository
 {
-    protected const DEFAULT_ORDER = ['createdAt' => Criteria::DESC];
+    protected const DEFAULT_ORDER = ['createdAt' => Criteria::ASC];
     protected const DEFAULT_LIMIT = 25;
 
     public function __construct(ManagerRegistry $registry)
@@ -39,5 +39,18 @@ class MessageRepository extends ServiceEntityRepository
         }
 
         return $this->findBy([], $orderBy, $limit);
+    }
+
+    /**
+     * @param Message $message
+     *
+     * @return void
+     * @throws \Exception
+     */
+    public function saveMessage(Message $message): void
+    {
+        $em = $this->getEntityManager();
+        $em->persist($message);
+        $em->flush($message);
     }
 }

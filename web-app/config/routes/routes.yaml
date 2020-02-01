@@ -12,6 +12,11 @@ logout:
   path: /logout
   methods: GET
 
+save_message:
+  path: api/v1/messages
+  methods: POST
+  controller: App\Controller\MessengerController::saveMessage
+
 messenger:
   path: /messenger
   controller: App\Controller\MessengerController::index

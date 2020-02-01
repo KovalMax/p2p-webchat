@@ -10,7 +10,7 @@
                     {% if messages|default %}
                         {% for message in messages %}
                             <li class="list-group-item">
-                                <p>@{{ message.user.firstName }}</p>
+                                <p>@{{ message.user.firstName }} at {{ message.createdAt|date('d/m/Y H:i:s') }}</p>
                                 <p>{{ message.message }}</p>
                             </li>
                         {% endfor %}
@@ -40,7 +40,7 @@
     <script src="{{ asset('js/xss.min.js') }}"></script>
     <script>
         window.messenger = {
-            dsn: '{{ socketDsn }}',
+            socketDsn: '{{ socketDsn }}',
             user: {
                 id: '{{ app.user.id }}',
                 name: '{{ app.user.firstName }}'
@@ -50,6 +50,9 @@
                 userLeave: 'user-leave',
                 userJoined: 'user-joined',
                 message: 'message',
+            },
+            routes: {
+                saveMessage: '{{ path('save_message') }}',
             }
         };
     </script>

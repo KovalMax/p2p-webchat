@@ -2,7 +2,7 @@
 (($) => {
     $(() => {
         const messenger = window.messenger;
-        const socket = io.connect(messenger.dsn);
+        const socket = io.connect(messenger.socketDsn);
         const windowDom = $(window);
         const messagesContainer = $('#messages-container');
         const messageInput = $('#messageInput');
@@ -20,8 +20,8 @@
             }
         });
 
-        messengerForm.on('submit', (e) => {
-            e.preventDefault();
+        messengerForm.on('submit', (event) => {
+            event.preventDefault();
             sendMessage(messagesContainer, messageInput, messenger, socket);
         });
 
@@ -42,9 +42,10 @@
 
         message = filterXSS(message).trim();
         if (message) {
-            message = {username: messenger.user.name, message: message};
+            message = {username: messenger.user.name, message: message, datetime: new Date().toISOString()};
             socket.emit(messenger.events.message, message);
             appendMessage(container, message);
+            saveMessage(message);
         }
     }
 
@@ -53,10 +54,28 @@
      * @param message Object
      */
     function appendMessage(container, message) {
-        let msg = $('<li class="list-group-item"><p>@' + message.username + '</p><p>' + message.message + '</p></li>');
+        let msg = $('<li class="list-group-item"><p>@' + message.username + '</p><p>' + message.datetime + '</p>><p>' + message.message + '</p></li>');
 
         container.append(msg.hide().fadeIn(600));
         container[0].scrollTop = container[0].scrollHeight;
+    }
+
+    function saveMessage(data) {
+        $.ajax({
+            url: messenger.routes.saveMessage,
+            type: 'POST',
+            data: {
+                message: data.message,
+                datetime: data.datetime,
+            },
+            success: (res) => {
+                if (parseInt(res.status, 10) > 200) {
+                    console.error('Error saving data with code %s: %s', res.status, res.details);
+                } else {
+                    console.log('Data saved successfully ', res.status);
+                }
+            }
+        });
     }
 })(jQuery);
 

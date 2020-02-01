@@ -4,12 +4,12 @@
 namespace App\Service;
 
 
-use App\DTO\Response\UserRegistration;
+use App\DTO\Request\UserRegistration;
 use App\Entity\User;
 use App\Repository\UserRepository;
 use Symfony\Component\Security\Core\Encoder\UserPasswordEncoderInterface;
 
-class UserRegistrationService
+final class UserRegistrationService
 {
     /**
      * @var UserPasswordEncoderInterface

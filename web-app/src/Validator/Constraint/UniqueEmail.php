@@ -7,7 +7,7 @@ namespace App\Validator\Constraint;
 use App\Validator\UniqueEmailValidator;
 use Symfony\Component\Validator\Constraint;
 
-class UniqueEmail extends Constraint
+final class UniqueEmail extends Constraint
 {
     public string $message = 'Email {{ email }} is already taken';
 

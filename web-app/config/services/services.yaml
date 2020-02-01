@@ -4,10 +4,16 @@ services:
     autoconfigure: true
     public: false
 
-  App\:
-    resource: '%kernel.project_dir%/src/*'
-    exclude: '%kernel.project_dir%/src/{Entity,Migrations,Tests,DataFixtures}'
+  Symfony\Component\Serializer\Serializer: ~
+
+  App\Component\Serializer:
+    decorates: Symfony\Component\Serializer\Serializer
+    arguments: ['@serializer.inner']
 
   App\Controller\:
     resource: '%kernel.project_dir%/src/Controller/'
     tags: ['controller.service_arguments']
+
+  App\:
+    resource: '%kernel.project_dir%/src/*'
+    exclude: '%kernel.project_dir%/src/{Entity,Migrations,Tests,DataFixtures,DTO,Exception}'

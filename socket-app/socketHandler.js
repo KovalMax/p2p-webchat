@@ -2,26 +2,21 @@
 import SocketEvents from "./socketEvents";
 
 export default class Socket {
-    /**
-     * @param io SocketIO
-     */
-    constructor(io) {
-        this.io = io;
+    constructor() {
         this.userInitialized = false;
         this.totalUsers = 0;
         this.users = {};
     }
 
-    handle() {
-        this.io.on(SocketEvents.connection, (socket) => {
-            console.log('Socket connection established');
-            this.socketHandler(socket);
-        });
+    ioHandler(io, socket) {
+        console.info('Socket connection established');
+        this.socketHandler(socket, io);
     }
 
-    socketHandler(socket) {
+    socketHandler(socket, io) {
         socket.on(SocketEvents.message, (req) => {
-            console.log('message received', req);
+            console.info('Message received', req);
+
             socket.broadcast.emit(SocketEvents.message, req);
         });
 
@@ -31,22 +26,26 @@ export default class Socket {
             }
 
             if (!this.users[req.id]) {
-                console.log('User %s(%s) connected to chat', req.username, req.id);
+                console.info('User %s(%s) connected to chat', req.username, req.id);
+
                 this.users[req.id] = req.username;
                 socket.userId = req.id;
+
                 ++this.totalUsers;
                 this.userInitialized = true;
-                this.io.emit(SocketEvents.userJoined);
+
+                io.emit(SocketEvents.userJoined, {total: this.totalUsers, joined: socket.userId});
             }
         });
 
         socket.on(SocketEvents.disconnect, () => {
             if (this.userInitialized) {
                 this.userInitialized = false;
-                --this.totalUsers;
-                delete this.users[socket['userId']];
 
-                this.io.emit(SocketEvents.userLeave, {total: this.totalUsers, left: socket['userId']});
+                --this.totalUsers;
+                delete this.users[socket.userId];
+
+                io.emit(SocketEvents.userLeave, {total: this.totalUsers, left: socket.userId});
             }
         });
     }

@@ -1,7 +1,11 @@
 "use strict";
 import Socket from "./socketHandler";
 import SocketIO from "socket.io";
+import SocketEvents from "./socketEvents";
 
 const io = new SocketIO(process.env.SOCKET_PORT);
-let handler = new Socket(io);
-handler.handle();
+
+io.on(SocketEvents.connection, (socket) => {
+    let handler = new Socket();
+    handler.ioHandler(io, socket);
+});

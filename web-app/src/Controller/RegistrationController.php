@@ -4,7 +4,7 @@
 namespace App\Controller;
 
 
-use App\DTO\Response\UserRegistration;
+use App\DTO\Request\UserRegistration;
 use App\Form\RegistrationType;
 use App\Service\UserRegistrationService;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;

@@ -1,6 +1,6 @@
 <?php
 
-namespace App\DTO\Response;
+namespace App\DTO\Request;
 
 final class UserRegistration
 {

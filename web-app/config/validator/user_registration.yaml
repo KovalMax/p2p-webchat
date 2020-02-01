@@ -1,4 +1,4 @@
-App\DTO\Response\UserRegistration:
+App\DTO\Request\UserRegistration:
   properties:
     email:
       - NotBlank: ~

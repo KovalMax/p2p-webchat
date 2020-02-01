@@ -4,12 +4,13 @@ namespace App\Entity;
 
 use App\Entity\Traits\CreatedAtTrait;
 use App\Entity\Traits\IdentityTrait;
+use Symfony\Component\Security\Core\User\UserInterface;
 
 class Message
 {
     use CreatedAtTrait, IdentityTrait;
 
-    private User $user;
+    private UserInterface $user;
 
     private string $message;
 
@@ -22,19 +23,19 @@ class Message
     }
 
     /**
-     * @return User
+     * @return UserInterface
      */
-    public function getUser(): User
+    public function getUser(): UserInterface
     {
         return $this->user;
     }
 
     /**
-     * @param User $user
+     * @param UserInterface $user
      *
      * @return Message
      */
-    public function setUser(User $user): self
+    public function setUser(UserInterface $user): self
     {
         $this->user = $user;
 
