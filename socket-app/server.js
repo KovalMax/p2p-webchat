@@ -1,11 +1,12 @@
 "use strict";
-import Socket from "./socketHandler";
 import SocketIO from "socket.io";
+import SocketHandler from "./socketHandler";
 import SocketEvents from "./socketEvents";
+import UserMap from "./userMap";
 
 const io = new SocketIO(process.env.SOCKET_PORT);
+const socketHandler = new SocketHandler(new UserMap());
 
 io.on(SocketEvents.connection, (socket) => {
-    let handler = new Socket();
-    handler.ioHandler(io, socket);
+    socketHandler.handle(io, socket);
 });

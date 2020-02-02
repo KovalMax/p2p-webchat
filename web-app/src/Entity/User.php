@@ -16,8 +16,6 @@ class User implements UserInterface, \Serializable
 
     private Collection $messages;
 
-    private MessageSettings $messageSettings;
-
     private string $email;
 
     private string $password;
@@ -25,6 +23,8 @@ class User implements UserInterface, \Serializable
     private string $firstName;
 
     private string $lastName;
+
+    private string $timezone;
 
     private array $roles;
 
@@ -36,26 +36,6 @@ class User implements UserInterface, \Serializable
         $this->generateRandomId();
         $this->roles = [self::ROLE_USER];
         $this->messages = new ArrayCollection();
-    }
-
-    /**
-     * @return MessageSettings
-     */
-    public function getMessageSettings(): MessageSettings
-    {
-        return $this->messageSettings;
-    }
-
-    /**
-     * @param MessageSettings $messageSettings
-     *
-     * @return User
-     */
-    public function setMessageSettings(MessageSettings $messageSettings): self
-    {
-        $this->messageSettings = $messageSettings;
-
-        return $this;
     }
 
     public function getEmail(): string
@@ -146,6 +126,26 @@ class User implements UserInterface, \Serializable
     }
 
     /**
+     * @return string
+     */
+    public function getTimezone(): string
+    {
+        return $this->timezone;
+    }
+
+    /**
+     * @param string $timezone
+     *
+     * @return User
+     */
+    public function setTimezone(string $timezone): self
+    {
+        $this->timezone = $timezone;
+
+        return $this;
+    }
+
+    /**
      * @see UserInterface
      */
     public function getSalt(): void
@@ -185,7 +185,7 @@ class User implements UserInterface, \Serializable
             $this->createdAt,
             $this->firstName,
             $this->lastName,
-            $this->roles
+            $this->roles,
         ] = unserialize($serialized);
     }
 }

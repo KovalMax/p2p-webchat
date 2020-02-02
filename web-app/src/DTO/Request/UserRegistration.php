@@ -8,4 +8,5 @@ final class UserRegistration
     public string $password = '';
     public string $firstName = '';
     public string $lastName = '';
+    public string $timezone = '';
 }

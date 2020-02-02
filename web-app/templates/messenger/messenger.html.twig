@@ -10,7 +10,7 @@
                     {% if messages|default %}
                         {% for message in messages %}
                             <li class="list-group-item">
-                                <p>@{{ message.user.firstName }} at {{ message.createdAt|date('d/m/Y H:i:s') }}</p>
+                                <p>@{{ message.user.firstName }} at {{ message.createdAt|date('d/m/Y H:i:s', message.user.timezone) }}</p>
                                 <p>{{ message.message }}</p>
                             </li>
                         {% endfor %}
@@ -39,7 +39,9 @@
     <script src="{{ asset('js/xss.min.js') }}"></script>
     <script>
         window.messenger = {
-            socketDsn: '{{ socketDsn }}',
+            socket: {
+                dsn: '{{ socketDsn }}',
+            },
             user: {
                 id: '{{ app.user.id }}',
                 name: '{{ app.user.firstName }}'

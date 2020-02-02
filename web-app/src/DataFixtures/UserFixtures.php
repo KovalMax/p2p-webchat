@@ -2,10 +2,9 @@
 
 namespace App\DataFixtures;
 
-use App\Entity\MessageSettings;
 use App\Entity\User;
 use Doctrine\Bundle\FixturesBundle\Fixture;
-use Doctrine\Common\Persistence\ObjectManager;
+use Doctrine\Persistence\ObjectManager;
 use Symfony\Component\Security\Core\Encoder\UserPasswordEncoderInterface;
 
 class UserFixtures extends Fixture
@@ -21,18 +20,21 @@ class UserFixtures extends Fixture
             'email' => self::USER_1,
             'fName' => 'Max',
             'lName' => 'Doe',
+            'tz' => 'Europe/Kiev',
             'password' => 'password',
         ],
         self::USER_2 => [
             'email' => self::USER_2,
             'fName' => 'John',
             'lName' => 'Doe',
+            'tz' => 'Europe/Kiev',
             'password' => 'password',
         ],
         self::USER_3 => [
             'email' => self::USER_3,
             'fName' => 'Samuel',
             'lName' => 'Doe',
+            'tz' => 'Europe/Kiev',
             'password' => 'password',
         ],
 
@@ -56,9 +58,12 @@ class UserFixtures extends Fixture
     public function load(ObjectManager $manager): void
     {
         foreach (self::USERS as $data) {
-            $user = (new User())->setEmail($data['email'])->setFirstName($data['fName'])->setLastName($data['lName']);
+            $user = (new User())
+                ->setEmail($data['email'])
+                ->setFirstName($data['fName'])
+                ->setLastName($data['lName'])
+                ->setTimezone($data['tz']);
             $user->setPassword($this->encoder->encodePassword($user, $data['password']));
-            $user->setMessageSettings(new MessageSettings());
 
             $manager->persist($user);
             $this->addReference($data['email'], $user);

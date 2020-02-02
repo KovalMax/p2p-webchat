@@ -15,6 +15,7 @@ final class UserRegistrationService
      * @var UserPasswordEncoderInterface
      */
     private UserPasswordEncoderInterface $encoder;
+
     /**
      * @var UserRepository
      */
@@ -33,10 +34,12 @@ final class UserRegistrationService
      */
     public function createNewUser(UserRegistration $userRegistration): void
     {
-        $user = new User();
-        $user->setEmail($userRegistration->email);
-        $user->setFirstName($userRegistration->firstName);
-        $user->setLastName($userRegistration->lastName);
+        $user = (new User())
+            ->setEmail($userRegistration->email)
+            ->setFirstName($userRegistration->firstName)
+            ->setLastName($userRegistration->lastName)
+            ->setTimezone($userRegistration->timezone);
+
         $user->setPassword($this->encoder->encodePassword($user, $userRegistration->password));
 
         $this->repository->save($user);

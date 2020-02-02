@@ -1,19 +1,19 @@
 "use strict";
 import SocketEvents from "./socketEvents";
 
-export default class Socket {
-    constructor() {
-        this.userInitialized = false;
-        this.totalUsers = 0;
-        this.users = {};
+export default class SocketHandler {
+    /**
+     * @param userMap UserMap
+     */
+    constructor(userMap) {
+        this.userMap = userMap;
     }
 
-    ioHandler(io, socket) {
-        console.info('Socket connection established');
-        this.socketHandler(socket, io);
+    handle(io, socket) {
+        this._socketHandler(socket, io);
     }
 
-    socketHandler(socket, io) {
+    _socketHandler(socket, io) {
         socket.on(SocketEvents.message, (req) => {
             console.info('Message received', req);
 
@@ -21,32 +21,27 @@ export default class Socket {
         });
 
         socket.on(SocketEvents.userConnected, (req) => {
-            if (this.userInitialized) {
+            if (req.id in this.userMap.users) {
                 return;
             }
 
-            if (!this.users[req.id]) {
-                console.info('User %s(%s) connected to chat', req.username, req.id);
+            this.userMap.add(req.id, req.username);
+            socket.userId = req.id;
+            io.emit(SocketEvents.userJoined, {total: this.userMap.totalCount, joined: socket.userId});
 
-                this.users[req.id] = req.username;
-                socket.userId = req.id;
-
-                ++this.totalUsers;
-                this.userInitialized = true;
-
-                io.emit(SocketEvents.userJoined, {total: this.totalUsers, joined: socket.userId});
-            }
+            console.info('User map on user-connect', this.userMap.users);
         });
 
         socket.on(SocketEvents.disconnect, () => {
-            if (this.userInitialized) {
-                this.userInitialized = false;
-
-                --this.totalUsers;
-                delete this.users[socket.userId];
-
-                io.emit(SocketEvents.userLeave, {total: this.totalUsers, left: socket.userId});
+            if (!socket.userId in this.userMap.users) {
+                return;
             }
+
+            this.userMap.remove(socket.userId);
+            io.emit(SocketEvents.userLeave, {total: this.userMap.totalCount, left: socket.userId});
+            delete socket.userId;
+
+            console.info('User map on user-disconnect', this.userMap.users);
         });
     }
 }

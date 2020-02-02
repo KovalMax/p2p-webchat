@@ -9,7 +9,7 @@ final class SaveMessage
     private \DateTimeInterface $datetime;
 
     /**
-     * @param string $message
+     * @param string             $message
      * @param \DateTimeInterface $datetime
      */
     public function __construct(string $message, \DateTimeInterface $datetime)

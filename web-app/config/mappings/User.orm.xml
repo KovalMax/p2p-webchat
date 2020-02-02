@@ -19,13 +19,6 @@
             </cascade>
         </one-to-many>
 
-        <one-to-one field="messageSettings" target-entity="App\Entity\MessageSettings">
-            <cascade>
-                <cascade-persist/>
-            </cascade>
-            <join-column name="id_message_settings" referenced-column-name="id_message_settings" nullable="false"/>
-        </one-to-one>
-
         <id name="id" column="id_user" type="uuid"/>
 
         <field name="email" length="180" unique="true"/>
@@ -33,7 +26,7 @@
 
         <field name="firstName" length="60"/>
         <field name="lastName" length="60"/>
-
+        <field name="timezone" length="30"/>
         <field name="roles" type="json"/>
 
         <field name="createdAt" type="datetime_immutable"/>
