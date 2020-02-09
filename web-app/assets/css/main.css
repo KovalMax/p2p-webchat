@@ -13,13 +13,31 @@
     outline: 1px solid slategrey;
 }
 
+body {
+    overflow-y: hidden;
+}
+
+.scroll-container {
+    overflow-y: auto;
+}
+
 .messages-container {
     margin: 0;
     padding: 0;
-    overflow-y: auto;
-    max-height: 600px;
 }
 
-.message-input {
-    width: 350px;
+.message {
+    word-wrap: break-word;
+}
+
+@media only screen and (min-width: 1023px) and (max-width: 1365px) {
+    .messages-container {
+        max-height: 475px;
+    }
+}
+
+@media only screen and (min-width: 1680px) {
+    .messages-container {
+        max-height: 700px;
+    }
 }

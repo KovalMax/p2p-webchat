@@ -53,7 +53,7 @@
      * @param message Object
      */
     function appendMessage(container, message) {
-        let msg = $('<li>', {class: 'list-group-item'});
+        let msg = $('<li>', {class: 'list-group-item message mb-1 rounded-lg border'});
         msg.append($('<p>', {text: '@'.concat(message.username, ' at ', formatDateTime(message.datetime))}));
         msg.append($('<p>', {text: message.message}));
 

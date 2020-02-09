@@ -1,4 +1,4 @@
-FROM node:13.7.0-alpine3.11
+FROM node:13.8-alpine3.11
 
 ARG UID=1000
 ARG GID=1000
@@ -14,13 +14,11 @@ RUN chown -R $UID:$GID /var/www
 
 USER $NODE_USER_NAME
 
-RUN mkdir node_modules
-
-COPY socket-app/package*.json ./
+COPY package*.json ./
 
 RUN npm i --quiet \
     && npm cache clean --force
 
-COPY socket-app/ ./
+COPY . .
 
 CMD npm run start:$NODE_ENV

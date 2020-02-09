@@ -2,22 +2,25 @@ version: '3.7'
 
 services:
   app-node:
+    container_name: messenger_node
     build:
-      context: ..
+      context: ../socket-app
       args:
         UID: ${UID}
         GID: ${GID}
         NODE_USER_NAME: ${NODE_USER_NAME}
-      dockerfile: infrastructure/node/Dockerfile
+      dockerfile: ../infrastructure/node/Dockerfile
     environment:
       SOCKET_PORT: ${SOCKET_PORT}
       NODE_ENV: ${NODE_ENV}
     volumes:
+      - /var/www/node_modules
       - ../socket-app:/var/www
     networks:
       - app-network
 
   app-fpm:
+    container_name: messenger_fpm
     build:
       context: php
       args:
