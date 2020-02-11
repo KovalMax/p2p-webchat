@@ -6,6 +6,7 @@
 
     <title>{% block title %}Welcome!{% endblock %}</title>
     {% block stylesheets %}
+        <link rel="icon" href="{{ asset('favicon.ico') }}" type="image/x-icon"/>
         <link rel="stylesheet" href="{{ asset('css/bootstrap.min.css') }}"/>
         <link rel="stylesheet" href="{{ asset('css/bootstrap-reboot.min.css') }}"/>
         <link rel="stylesheet" href="{{ asset('css/main.css') }}"/>
@@ -15,7 +16,7 @@
 <body class="bg-light">
 <nav class="navbar navbar-light navbar-expand" style="background-color: #e3f2fd;">
     <div class="w-100 order-1 order-md-0">
-        <a href="{{ path('messenger') }}" class="navbar-brand mr-0">{{'messenger'|trans}}</a>
+        <a href="{{ path('messenger') }}" class="navbar-brand mr-0">{{ 'messenger'|trans }}</a>
     </div>
 
     <div class="collapse navbar-collapse order-12 order-md-0" id="navbarSupportedContent">

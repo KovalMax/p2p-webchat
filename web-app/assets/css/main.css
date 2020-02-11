@@ -41,3 +41,9 @@ body {
         max-height: 780px;
     }
 }
+
+@media only screen and (min-width: 1919px) {
+    .messages-container {
+        max-height: 850px;
+    }
+}
