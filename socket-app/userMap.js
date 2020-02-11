@@ -24,7 +24,7 @@ export default class UserMap {
     }
 
     remove(id) {
-        if (!id in this._users) {
+        if (!(id in this._users)) {
             return;
         }
 

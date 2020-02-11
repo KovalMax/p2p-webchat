@@ -3,15 +3,17 @@
     $(() => {
         const settings = window.messenger;
         const dom = $(window);
-        const messagesContainer = $('#messages-container');
         const messageInput = $('#messageInput');
+        const messagesContainer = $('#messages-container');
+        const scrollContainer = $('#scroller');
+        messagesContainer.on('scrollToLast', () => scrollToLastMessage(scrollContainer));
 
         const socket = io.connect(settings.socket.dsn);
         socket.emit(settings.events.userConnected, {id: settings.user.id, username: settings.user.name});
 
         const messengerForm = $('#messageForm');
         if ($('#messages-container > li').length > 7) {
-            scrollBottom(messagesContainer);
+            scrollToLastMessage(scrollContainer);
         }
 
         socket.on(settings.events.userJoined, (data) => console.log('Users stat', data));
@@ -58,7 +60,7 @@
         msg.append($('<p>', {text: message.message}));
 
         container.append(msg.hide().fadeIn(400));
-        scrollBottom(container);
+        container.trigger('scrollToLast');
     }
 
     function saveMessage(data) {
@@ -83,7 +85,7 @@
         });
     }
 
-    function scrollBottom(element) {
+    function scrollToLastMessage(element) {
         element[0].scrollTop = element[0].scrollHeight;
     }
 

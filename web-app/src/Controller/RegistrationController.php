@@ -37,7 +37,7 @@ class RegistrationController extends AbstractController
 
         if ($form->isSubmitted() && $form->isValid()) {
             $this->registrationService->createNewUser($user);
-            $this->addFlash('success', 'User successfully created, now you can login');
+            $this->addFlash('success', 'userCreated');
 
             return $this->redirectToRoute('messenger');
         }

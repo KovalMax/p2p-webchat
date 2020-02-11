@@ -29,11 +29,11 @@ export default class SocketHandler {
             socket.userId = req.id;
             io.emit(SocketEvents.userJoined, {total: this.userMap.totalCount, joined: socket.userId});
 
-            console.info('User map on user-connect', this.userMap.users);
+            console.info('User map on user-connect', this.userMap);
         });
 
         socket.on(SocketEvents.disconnect, () => {
-            if (!socket.userId in this.userMap.users) {
+            if (!(socket.userId in this.userMap.users)) {
                 return;
             }
 
@@ -41,7 +41,7 @@ export default class SocketHandler {
             io.emit(SocketEvents.userLeave, {total: this.userMap.totalCount, left: socket.userId});
             delete socket.userId;
 
-            console.info('User map on user-disconnect', this.userMap.users);
+            console.info('User map on user-disconnect', this.userMap);
         });
     }
 }

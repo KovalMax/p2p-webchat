@@ -1,6 +1,6 @@
 {% extends 'base.html.twig' %}
 
-{% block title %}{{ 'Sign in'|trans }}{% endblock %}
+{% block title %}{{ 'signIn'|trans }}{% endblock %}
 
 {% block body %}
     <div class="container">
@@ -20,7 +20,7 @@
 
                 <div class="row justify-content-center row-cols-1 mx-auto">
                     <div class="col-auto">
-                        <h4 class="text-muted font-weight-normal">{{ 'Please login'|trans }}:</h4>
+                        <h4 class="text-muted font-weight-normal">{{ 'login'|trans }}:</h4>
                     </div>
                 </div>
                 <div class="form-group">
@@ -29,7 +29,7 @@
                                type="email"
                                name="email"
                                class="form-control rounded-pill"
-                               placeholder="{{ 'Email'|trans }}"
+                               placeholder="{{ 'email'|trans }}"
                                required
                                autofocus
                         />
@@ -40,7 +40,7 @@
                         <input type="password"
                                name="password"
                                class="form-control rounded-pill"
-                               placeholder="{{ 'Password'|trans }}"
+                               placeholder="{{ 'password'|trans }}"
                                required
                         />
                     </div>
@@ -48,9 +48,9 @@
 
                 <div class="form-group">
                     <div class="col-5 mx-auto">
-                        <button class="btn btn-primary btn-block" type="submit">{{ 'Sign in'|trans }}</button>
+                        <button class="btn btn-primary btn-block" type="submit">{{ 'signIn'|trans }}</button>
 
-                        <a class="mx-5" href="{{ path('registration') }}">{{ 'Register'|trans }}</a>
+                        <a class="mx-5" href="{{ path('registration') }}">{{ 'register'|trans }}</a>
                     </div>
                 </div>
             </form>

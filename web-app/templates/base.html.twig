@@ -15,21 +15,21 @@
 <body class="bg-light">
 <nav class="navbar navbar-light navbar-expand" style="background-color: #e3f2fd;">
     <div class="w-100 order-1 order-md-0">
-        <a href="{{ path('messenger') }}" class="navbar-brand mr-0">Messenger</a>
+        <a href="{{ path('messenger') }}" class="navbar-brand mr-0">{{'messenger'|trans}}</a>
     </div>
 
     <div class="collapse navbar-collapse order-12 order-md-0" id="navbarSupportedContent">
         <ul class="navbar-nav px-3 mr-auto">
             {% if is_granted('ROLE_USER') %}
                 <li class="nav-item text-nowrap active border-right">
-                    <a class="nav-link" href="javascript:void(0)">{{ 'Hello'|trans }}, {{ app.user.firstName }}</a>
+                    <a class="nav-link" href="javascript:void(0)">{{ 'hello'|trans }}, {{ app.user.firstName }}</a>
                 </li>
                 <li class="nav-item text-nowrap active">
-                    <a class="nav-link" href="{{ logout_path() }}">{{ 'Sign out'|trans }}</a>
+                    <a class="nav-link" href="{{ logout_path() }}">{{ 'signOut'|trans }}</a>
                 </li>
             {% else %}
                 <li class="nav-item text-nowrap active">
-                    <a class="nav-link" href="{{ path('login') }}">{{ 'Sign in'|trans }}</a>
+                    <a class="nav-link" href="{{ path('login') }}">{{ 'signIn'|trans }}</a>
                 </li>
             {% endif %}
         </ul>

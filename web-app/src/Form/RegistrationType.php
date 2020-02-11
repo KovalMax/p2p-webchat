@@ -19,19 +19,19 @@ final class RegistrationType extends AbstractType
 {
     public function buildForm(FormBuilderInterface $builder, array $options): void
     {
-        $builder->add('email', EmailType::class, ['attr' => ['class' => 'rounded-pill']])
+        $builder->add('email', EmailType::class, ['attr' => ['class' => 'rounded-pill'], 'label' => 'email'])
             ->add(
                 'password',
                 RepeatedType::class,
                 [
                     'type' => PasswordType::class,
-                    'first_options' => ['label' => 'Password', 'attr' => ['class' => 'rounded-pill']],
-                    'second_options' => ['label' => 'Repeat password', 'attr' => ['class' => 'rounded-pill']],
+                    'first_options' => ['label' => 'password', 'attr' => ['class' => 'rounded-pill']],
+                    'second_options' => ['label' => 'repeatPassword', 'attr' => ['class' => 'rounded-pill']],
                 ]
             )
-            ->add('firstName', TextType::class, ['attr' => ['class' => 'rounded-pill']])
-            ->add('lastName', TextType::class, ['attr' => ['class' => 'rounded-pill']])
-            ->add('timezone', TimezoneType::class, ['attr' => ['class' => 'rounded-pill']])
+            ->add('firstName', TextType::class, ['attr' => ['class' => 'rounded-pill'], 'label' => 'firstName'])
+            ->add('lastName', TextType::class, ['attr' => ['class' => 'rounded-pill'], 'label' => 'lastName'])
+            ->add('timezone', TimezoneType::class, ['attr' => ['class' => 'rounded-pill'], 'label' => 'timezone',])
             ->add(
                 'termsAgreed',
                 CheckboxType::class,
@@ -39,10 +39,10 @@ final class RegistrationType extends AbstractType
                     'attr' => ['class' => 'rounded-pill'],
                     'mapped' => false,
                     'constraints' => new IsTrue(),
-                    'label' => 'I agree to the terms of service',
+                    'label' => 'termsService',
                 ]
             )
-            ->add('SignUp', SubmitType::class);
+            ->add('SignUp', SubmitType::class, ['label' => 'signUp']);
     }
 
     public function configureOptions(OptionsResolver $resolver): void
