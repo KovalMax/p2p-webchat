@@ -6,7 +6,7 @@
     <main role="main" class="container-fluid w-75 rounded bg-light border shadow-sm mt-3 p-3">
         <div class="row scroll-container" id="scroller">
             <div class="col">
-                <ul class="list-group messages-container" id="messages-container">
+                <ul class="list-group messages-container" id="messageContainer">
                     {% if messages|default %}
                         {% for message in messages %}
                             <li class="list-group-item message mb-1 rounded-lg border">
@@ -27,7 +27,7 @@
                                placeHolder="{{ 'messageInput'|trans }}..."
                                autocomplete="off"
                         />
-                        <button type="submit" class="btn btn-lg btn-light">{{ 'send'|trans }}</button>
+                        <button id="messageSubmit" type="submit" class="btn btn-lg btn-light">{{ 'send'|trans }}</button>
                     </div>
 
                 </form>
