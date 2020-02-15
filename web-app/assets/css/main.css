@@ -30,7 +30,7 @@ body {
     word-wrap: break-word;
 }
 
-@media only screen and (min-width: 1023px) and (max-width: 1365px) {
+@media only screen and (min-width: 950px) and (max-width: 1365px) {
     .messages-container {
         max-height: 475px;
     }
@@ -44,6 +44,6 @@ body {
 
 @media only screen and (min-width: 1921px) {
     .messages-container {
-        max-height: 850px;
+        max-height: 1150px;
     }
 }

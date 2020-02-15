@@ -15,12 +15,17 @@
         const messengerForm = $('#messageForm');
         const messageInput = $('#messageInput');
         const messageSubmit = $('#messageSubmit');
+        const usersContainer = $('#users-online');
+        const usersCounter = $('#users-counter');
 
         return {
             registerEvents() {
+
                 messagesContainer.on('scrollToLast', () => this.scrollToLastMessage());
 
-                socket.on(settings.events.userJoined, (data) => console.log('Users stat', data));
+                socket.on(settings.events.userJoined, (data) => this.appendUser(data));
+
+                socket.on(settings.events.userLeave, (data) => this.removeUser(data));
 
                 socket.on(settings.events.message, (message) => this.appendMessage(message));
 
@@ -54,6 +59,29 @@
                     this.saveMessage(message);
                 }
             },
+            appendUser(data) {
+                usersCounter.text((data.total - 1));
+                for (let key in data.map) {
+                    if (!data.map.hasOwnProperty(key)) {
+                        continue;
+                    }
+
+                    if (key === settings.user.id) {
+                        continue;
+                    }
+
+                    if (usersContainer.find('#'.concat(key)).length) {
+                        continue;
+                    }
+
+                    let user = $('<li>', {id: key, class: 'list-group-item', text: data.map[key]});
+                    usersContainer.append(user);
+                }
+            },
+            removeUser(data) {
+                usersCounter.text((data.total - 1));
+                usersContainer.find('#'.concat(data.id)).remove();
+            },
             appendMessage(message) {
                 let msg = $('<li>', {class: 'list-group-item message mb-1 rounded-lg border'});
                 msg.append($('<p>', {text: '@'.concat(message.username, ' at ', this.formatDateTime(message.datetime))}));
@@ -69,11 +97,11 @@
                     dataType: 'json',
                     beforeSend: () => {
                         messageSubmit.html('<span class="spinner-grow spinner-grow" role="status" aria-hidden="true" />Loading...');
-                        messageSubmit.attr('disabled', 'disabled');
+                        messageSubmit.prop('disabled', true);
                     },
                     complete: () => {
                         messageSubmit.html('Send');
-                        messageSubmit.removeAttr('disabled');
+                        messageSubmit.prop('disabled', false);
                     },
                     data: {message: data.message, datetime: data.datetime.toISOString()},
                     success: (res) => {
@@ -83,9 +111,7 @@
                             console.log('Data saved successfully ', res.status);
                         }
                     },
-                    error: (err) => {
-                        console.error('Server error. ', err);
-                    }
+                    error: (err) => console.error('Server error. ', err)
                 });
             },
             emitEvent(eventName, event) {
@@ -113,7 +139,7 @@
                 }
 
                 return number;
-            },
+            }
         };
     }
 })(window.jQuery, window.io, window);

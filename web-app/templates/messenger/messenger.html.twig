@@ -4,8 +4,8 @@
 
 {% block container %}
     <main role="main" class="container-fluid w-75 rounded bg-light border shadow-sm mt-3 p-3">
-        <div class="row scroll-container" id="scroller">
-            <div class="col">
+        <div class="row">
+            <div class="col-10 scroll-container order-0" id="scroller">
                 <ul class="list-group messages-container" id="messageContainer">
                     {% if messages|default %}
                         {% for message in messages %}
@@ -17,22 +17,23 @@
                     {% endif %}
                 </ul>
             </div>
-        </div>
-        <div class="row mt-1">
-            <div class="col">
-                <form class="form-inline" id="messageForm">
-                    <div class="form-group w-100 mt-2">
-                        <input id="messageInput"
-                               class="form-control w-75 mr-2"
-                               placeHolder="{{ 'messageInput'|trans }}..."
-                               autocomplete="off"
-                        />
-                        <button id="messageSubmit" type="submit" class="btn btn-lg btn-light">{{ 'send'|trans }}</button>
-                    </div>
-
-                </form>
+            <div class="col-2 order-12">
+                <h5>{{ 'online'|trans }} <span class="badge badge-info badge-pill" id="users-counter">0</span></h5>
+                <ul class="list-group list-group-flush" id="users-online"></ul>
             </div>
         </div>
+
+        <form id="messageForm">
+            <div class="row mt-2">
+                <div class="col-8">
+                    <label for="messageInput" class="sr-only">{{ 'messageInput'|trans }}</label>
+                    <input id="messageInput" class="form-control" placeHolder="{{ 'messageInput'|trans }}..." autocomplete="off"/>
+                </div>
+                <div class="col-2">
+                    <button id="messageSubmit" type="submit" class="btn btn-block btn-light">{{ 'send'|trans }}</button>
+                </div>
+            </div>
+        </form>
     </main>
 {% endblock %}
 

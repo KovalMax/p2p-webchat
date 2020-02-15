@@ -16,7 +16,6 @@ export default class SocketHandler {
     _socketHandler(socket, io) {
         socket.on(SocketEvents.message, (req) => {
             console.info('Message received', req);
-
             socket.broadcast.emit(SocketEvents.message, req);
         });
 
@@ -27,7 +26,8 @@ export default class SocketHandler {
 
             this.userMap.add(req.id, req.username);
             socket.userId = req.id;
-            io.emit(SocketEvents.userJoined, {total: this.userMap.totalCount, joined: socket.userId});
+
+            io.emit(SocketEvents.userJoined, {total: this.userMap.totalCount, map: this.userMap.users});
 
             console.info('User map on user-connect', this.userMap);
         });
@@ -38,7 +38,9 @@ export default class SocketHandler {
             }
 
             this.userMap.remove(socket.userId);
-            io.emit(SocketEvents.userLeave, {total: this.userMap.totalCount, left: socket.userId});
+
+            io.emit(SocketEvents.userLeave, {total: this.userMap.totalCount, id: socket.userId});
+
             delete socket.userId;
 
             console.info('User map on user-disconnect', this.userMap);
