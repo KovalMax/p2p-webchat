@@ -79,6 +79,7 @@
             "@app:db:setup"
         ],
         "app:db:setup": [
+            "sh wait.sh",
             "php bin/console doctrine:database:create --connection=default --if-not-exists --no-interaction",
             "php bin/console doctrine:migrations:migrate --all-or-nothing --db=default --allow-no-migration --no-interaction"
         ]

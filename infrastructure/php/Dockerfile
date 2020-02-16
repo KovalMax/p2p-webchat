@@ -12,14 +12,12 @@ WORKDIR /var/www
 COPY ./config/xdebug.ini $PHP_INI_DIR/conf.d
 COPY ./config/opcache_preload.ini $PHP_INI_DIR/conf.d
 
-RUN set -eux \
-    && apk update \
+RUN apk update \
     && apk upgrade --update-cache --available \
     && apk add --update --no-cache ca-certificates libzip curl tar xz openssl git mysql-client openssh-client pcre gmp imagemagick icu libmcrypt
 
 
-RUN set -eux \
-    && apk --no-cache add shadow \
+RUN apk --no-cache add shadow \
     && apk add --no-cache $PHP_DEPS \
     && docker-php-ext-install -j$(nproc) bcmath zip gmp pdo_mysql opcache pcntl intl \
     && pecl channel-update pecl.php.net \

@@ -32,6 +32,8 @@ services:
       - .env
     volumes:
       - ../web-app:/var/www
+    depends_on:
+      - app-db
     networks:
       - app-network
 
@@ -56,8 +58,6 @@ services:
       MYSQL_PASSWORD: ${APP_DB_PASSWORD}
     volumes:
       - app-db-volume:/var/lib/mysql
-    depends_on:
-      - app-fpm
     networks:
       - app-network
 

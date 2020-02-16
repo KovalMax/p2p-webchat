@@ -10,15 +10,13 @@ RUN deluser --remove-home $NODE_USER_NAME \
     && addgroup -S $NODE_USER_NAME -g $GID \
     && adduser -S -G $NODE_USER_NAME -u $UID $NODE_USER_NAME
 
-RUN chown -R $UID:$GID /var/www
-
-USER $NODE_USER_NAME
-
 COPY package*.json ./
 
 RUN npm i --quiet \
     && npm cache clean --force
 
 COPY . .
+
+USER $NODE_USER_NAME
 
 CMD npm run start:$NODE_ENV
