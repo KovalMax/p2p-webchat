@@ -12,15 +12,14 @@ export const socketApp = create(isProd);
  * @return SocketIO.Server
  */
 function create(secured) {
-    let socket = SocketIO(process.env.SOCKET_PORT);
+    let serverListener = process.env.SOCKET_PORT;
     if (secured) {
-        secured = createServer({
+        serverListener = createServer({
             key: readFileSync(process.env.SSL_KEY),
             cert: readFileSync(process.env.SSL_CERT)
         });
-        socket = SocketIO(secured);
-        secured.listen(process.env.SOCKET_PORT);
+        serverListener.listen(process.env.SOCKET_PORT);
     }
 
-    return socket;
+    return SocketIO(serverListener);
 }
