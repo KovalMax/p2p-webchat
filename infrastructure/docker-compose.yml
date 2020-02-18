@@ -13,6 +13,8 @@ services:
     environment:
       SOCKET_PORT: ${SOCKET_PORT}
       NODE_ENV: ${NODE_ENV}
+      SSL_KEY: ${SSL_KEY}
+      SSL_CERT: ${SSL_CERT}
     volumes:
       - /var/www/node_modules
       - ../socket-app:/var/www
