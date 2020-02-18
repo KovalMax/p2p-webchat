@@ -11,17 +11,14 @@ doctrine:
     default_connection: 'default'
     connections:
       default:
-        driver: 'pdo_mysql'
+        driver: 'pdo_pgsql'
         host: '%app.db.host%'
         port: '%app.db.port%'
         dbname: '%app.db.name%'
         user: '%app.db.user%'
         password: '%app.db.password%'
         server_version: '%app.db.version%'
-        charset: 'utf8mb4'
-        default_table_options:
-          charset: 'utf8mb4'
-          collate: 'utf8mb4_unicode_ci'
+        charset: 'utf8'
     types:
       uuid: Ramsey\Uuid\Doctrine\UuidType
   orm:

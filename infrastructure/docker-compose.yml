@@ -50,14 +50,13 @@ services:
       - app-network
 
   app-db:
-    image: mysql:${APP_DB_VERSION}
+    image: postgres:${APP_DB_VERSION}-alpine
     environment:
-      MYSQL_ROOT_PASSWORD: ${APP_DB_ROOT_PASSWORD}
-      MYSQL_DATABASE: ${APP_DB_NAME}
-      MYSQL_USER: ${APP_DB_USER}
-      MYSQL_PASSWORD: ${APP_DB_PASSWORD}
+      POSTGRES_DB: ${APP_DB_NAME}
+      POSTGRES_USER: ${APP_DB_USER}
+      POSTGRES_PASSWORD: ${APP_DB_PASSWORD}
     volumes:
-      - app-db-volume:/var/lib/mysql
+      - app-db-volume:/var/lib/postgresql/data
     networks:
       - app-network
 

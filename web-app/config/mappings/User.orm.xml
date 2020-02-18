@@ -29,6 +29,6 @@
         <field name="timezone" length="30"/>
         <field name="roles" type="json"/>
 
-        <field name="createdAt" type="datetime_immutable"/>
+        <field name="createdAt" type="datetimetz_immutable"/>
     </entity>
 </doctrine-mapping>

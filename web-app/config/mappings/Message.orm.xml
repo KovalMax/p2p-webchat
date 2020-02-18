@@ -19,7 +19,7 @@
 
         <field name="message"/>
 
-        <field name="createdAt" type="datetime_immutable"/>
+        <field name="createdAt" type="datetimetz_immutable"/>
     </entity>
 
 </doctrine-mapping>
