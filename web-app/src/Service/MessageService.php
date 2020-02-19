@@ -37,9 +37,9 @@ final class MessageService
      *
      * @return Message[]
      */
-    public function getMessages(int $limit = null): iterable
+    public function getLastMessages(int $limit = null): iterable
     {
-        return $this->repository->getLastMessages($limit);
+        return array_reverse($this->repository->getLastMessages($limit));
     }
 
     /**

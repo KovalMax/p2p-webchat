@@ -39,7 +39,7 @@ class MessengerController extends AbstractController
      */
     public function index(): Response
     {
-        return $this->render('messenger/messenger.html.twig', ['messages' => $this->messageService->getMessages()]);
+        return $this->render('messenger/messenger.html.twig', ['messages' => $this->messageService->getLastMessages()]);
     }
 
     /**
