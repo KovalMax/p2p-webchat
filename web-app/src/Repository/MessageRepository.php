@@ -15,7 +15,7 @@ use Doctrine\Common\Persistence\ManagerRegistry;
  */
 final class MessageRepository extends ServiceEntityRepository
 {
-    protected const DEFAULT_ORDER = ['createdAt' => Criteria::ASC];
+    protected const DEFAULT_ORDER = ['createdAt' => Criteria::DESC];
     protected const DEFAULT_LIMIT = 25;
 
     public function __construct(ManagerRegistry $registry)
