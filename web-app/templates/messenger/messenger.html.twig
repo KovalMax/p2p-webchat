@@ -10,7 +10,7 @@
                     {% if messages|default %}
                         {% for message in messages %}
                             <li class="list-group-item message mb-1 rounded-lg border">
-                                <p>@{{ message.user.firstName }} at {{ message.createdAt|date('d/m/Y H:i:s', app.user.timezone) }}</p>
+                                <p>@{{ message.displayName }} at {{ message.createdAt|date('d/m/Y H:i:s', app.user.timezone) }}</p>
                                 <p>{{ message.message }}</p>
                             </li>
                         {% endfor %}
@@ -48,7 +48,7 @@
             },
             user: {
                 id: '{{ app.user.id }}',
-                name: '{{ app.user.firstName }}'
+                name: '{{ app.user.firstName }} {{ app.user.lastName }}'
             },
             events: {
                 userConnected: 'user-connected',

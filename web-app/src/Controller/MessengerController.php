@@ -58,7 +58,7 @@ class MessengerController extends AbstractController
         } catch (ConstraintValidationException $exception) {
             $response = $this->json(['status' => Response::HTTP_BAD_REQUEST, 'details' => $exception->getErrors()]);
         } catch (\Exception $exception) {
-            $response = $this->json(['status' => Response::HTTP_INTERNAL_SERVER_ERROR, 'details' => 'Internal error, please contact support!']);
+            $response = $this->json(['status' => Response::HTTP_INTERNAL_SERVER_ERROR, 'details' => 'Internal error, please contact support']);
         }
 
         return $response;

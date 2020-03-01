@@ -2,8 +2,8 @@
 
 namespace App\Entity;
 
-use App\Entity\Traits\CreatedAtTrait;
-use App\Entity\Traits\IdentityTrait;
+use App\Traits\CreatedAtTrait;
+use App\Traits\IdentityTrait;
 use Doctrine\Common\Collections\ArrayCollection;
 use Doctrine\Common\Collections\Collection;
 use Symfony\Component\Security\Core\User\UserInterface;

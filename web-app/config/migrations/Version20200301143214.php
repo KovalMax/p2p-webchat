@@ -10,7 +10,7 @@ use Doctrine\Migrations\AbstractMigration;
 /**
  * Auto-generated Migration: Please modify to your needs!
  */
-final class Version20200218104205 extends AbstractMigration
+final class Version20200301143214 extends AbstractMigration
 {
     public function getDescription() : string
     {
@@ -27,7 +27,7 @@ final class Version20200218104205 extends AbstractMigration
         $this->addSql('CREATE INDEX email_idx ON users (email)');
         $this->addSql('COMMENT ON COLUMN users.id_user IS \'(DC2Type:uuid)\'');
         $this->addSql('COMMENT ON COLUMN users.created_at IS \'(DC2Type:datetimetz_immutable)\'');
-        $this->addSql('CREATE TABLE messages (id_message UUID NOT NULL, id_user UUID NOT NULL, message VARCHAR(255) NOT NULL, created_at TIMESTAMP(0) WITH TIME ZONE NOT NULL, PRIMARY KEY(id_message))');
+        $this->addSql('CREATE TABLE messages (id_message UUID NOT NULL, id_user UUID NOT NULL, message TEXT NOT NULL, created_at TIMESTAMP(0) WITH TIME ZONE NOT NULL, PRIMARY KEY(id_message))');
         $this->addSql('CREATE INDEX IDX_DB021E966B3CA4B ON messages (id_user)');
         $this->addSql('COMMENT ON COLUMN messages.id_message IS \'(DC2Type:uuid)\'');
         $this->addSql('COMMENT ON COLUMN messages.id_user IS \'(DC2Type:uuid)\'');

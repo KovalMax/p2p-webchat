@@ -17,7 +17,7 @@
 
         <id name="id" column="id_message" type="uuid"/>
 
-        <field name="message"/>
+        <field name="message" type="text"/>
 
         <field name="createdAt" type="datetimetz_immutable"/>
     </entity>

@@ -3,11 +3,13 @@
 namespace App\Service;
 
 use App\DTO\Request\SaveMessage;
+use App\DTO\Response\MessageResponse;
 use App\Entity\Message;
 use App\Exception\ConstraintValidationException;
 use App\Repository\MessageRepository;
+use App\Security\Decoder\MessageDecoderInterface;
+use App\Security\Encoder\MessageEncoderInterface;
 use Symfony\Component\Security\Core\User\UserInterface;
-use Symfony\Component\Validator\ConstraintViolationListInterface;
 use Symfony\Component\Validator\Validator\ValidatorInterface;
 
 final class MessageService
@@ -23,23 +25,50 @@ final class MessageService
     private ValidatorInterface $validator;
 
     /**
-     * @param MessageRepository  $repository
-     * @param ValidatorInterface $validator
+     * @var MessageEncoderInterface
      */
-    public function __construct(MessageRepository $repository, ValidatorInterface $validator)
-    {
+    private MessageEncoderInterface $messageEncoder;
+
+    /**
+     * @var MessageDecoderInterface
+     */
+    private MessageDecoderInterface $messageDecoder;
+
+    /**
+     * @param MessageRepository       $repository
+     * @param ValidatorInterface      $validator
+     * @param MessageEncoderInterface $messageEncoder
+     * @param MessageDecoderInterface $messageDecoder
+     */
+    public function __construct(
+        MessageRepository $repository,
+        ValidatorInterface $validator,
+        MessageEncoderInterface $messageEncoder,
+        MessageDecoderInterface $messageDecoder
+    ) {
         $this->repository = $repository;
         $this->validator = $validator;
+        $this->messageEncoder = $messageEncoder;
+        $this->messageDecoder = $messageDecoder;
     }
 
     /**
      * @param int|null $limit
      *
-     * @return Message[]
+     * @return MessageResponse[]
      */
     public function getLastMessages(int $limit = null): iterable
     {
-        return array_reverse($this->repository->getLastMessages($limit));
+        $lastMessages = array_reverse($this->repository->getLastMessages($limit));
+
+        return array_map(
+            fn(Message $message) => new MessageResponse(
+                sprintf('%s %s', $message->getUser()->getFirstName(), $message->getUser()->getLastName()),
+                $this->messageDecoder->decodeMessage($message->getMessage()),
+                $message->getCreatedAt()
+            ),
+            $lastMessages
+        );
     }
 
     /**
@@ -59,7 +88,7 @@ final class MessageService
 
         $msg = (new Message())
             ->setUser($user)
-            ->setMessage($request->getMessage())
+            ->setMessage($this->messageEncoder->encodeMessage($request->getMessage()))
             ->setCreatedAt($request->getDatetime());
 
         $this->repository->saveMessage($msg);

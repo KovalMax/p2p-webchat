@@ -2,8 +2,8 @@
 
 namespace App\Entity;
 
-use App\Entity\Traits\CreatedAtTrait;
-use App\Entity\Traits\IdentityTrait;
+use App\Traits\CreatedAtTrait;
+use App\Traits\IdentityTrait;
 use Symfony\Component\Security\Core\User\UserInterface;
 
 class Message
@@ -23,7 +23,7 @@ class Message
     }
 
     /**
-     * @return UserInterface
+     * @return UserInterface|User
      */
     public function getUser(): UserInterface
     {

@@ -20,23 +20,24 @@
         "symfony/mailer": "^5.0",
         "symfony/monolog-bundle": "^3.1",
         "symfony/notifier": "^5.0",
-        "symfony/orm-pack": "*",
+        "symfony/orm-pack": "1.*",
         "symfony/process": "^5.0",
         "symfony/security-bundle": "^5.0",
-        "symfony/serializer-pack": "*",
+        "symfony/serializer-pack": "1.*",
         "symfony/string": "^5.0",
         "symfony/translation": "^5.0",
-        "symfony/twig-pack": "*",
+        "symfony/twig-pack": "1.*",
         "symfony/validator": "^5.0",
         "symfony/web-link": "^5.0",
-        "symfony/yaml": "^5.0"
+        "symfony/yaml": "^5.0",
+        "ext-sodium": "*"
     },
     "require-dev": {
-        "doctrine/doctrine-fixtures-bundle": "^3",
-        "symfony/debug-pack": "*",
-        "symfony/maker-bundle": "^1",
-        "symfony/profiler-pack": "*",
-        "symfony/test-pack": "*"
+        "doctrine/doctrine-fixtures-bundle": "3.*",
+        "symfony/debug-pack": "1.*",
+        "symfony/maker-bundle": "1.*",
+        "symfony/profiler-pack": "1.*",
+        "symfony/test-pack": "1.*"
     },
     "config": {
         "preferred-install": {
@@ -74,9 +75,15 @@
         "post-update-cmd": [
             "@auto-scripts"
         ],
+        "service:update": [
+            "composer update -a -o -n --no-scripts --prefer-dist"
+        ],
         "service:install": [
-            "composer install -a -o -n --prefer-dist",
+            "composer install -a -o -n --no-scripts --prefer-dist",
             "@app:db:setup"
+        ],
+        "service:fixtures": [
+            "php bin/console doctrine:fixtures:load -n"
         ],
         "app:db:setup": [
             "sh wait.sh",
