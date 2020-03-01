@@ -59,14 +59,10 @@
                     this.saveMessage(message);
                 }
             },
-            appendUser(data) {
-                usersCounter.text((data.total - 1));
-                for (let key in data.map) {
-                    if (!data.map.hasOwnProperty(key)) {
-                        continue;
-                    }
-
-                    if (key === settings.user.id) {
+            appendUser(users) {
+                usersCounter.text(users.total);
+                for (let key in users.map) {
+                    if (!users.map.hasOwnProperty(key)) {
                         continue;
                     }
 
@@ -74,12 +70,17 @@
                         continue;
                     }
 
-                    let user = $('<li>', {id: key, class: 'list-group-item', text: data.map[key]});
+                    let displayName = users.map[key];
+                    if (key === settings.user.id) {
+                        displayName += ' (you)'
+                    }
+
+                    let user = $('<li>', {id: key, class: 'list-group-item', text: displayName});
                     usersContainer.append(user);
                 }
             },
             removeUser(data) {
-                usersCounter.text((data.total - 1));
+                usersCounter.text(data.total);
                 usersContainer.find('#'.concat(data.id)).remove();
             },
             appendMessage(message) {
