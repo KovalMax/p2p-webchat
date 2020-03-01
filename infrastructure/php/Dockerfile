@@ -1,7 +1,7 @@
 FROM php:7.4-fpm-alpine3.11
 
 ENV PHP_DEPS build-base autoconf curl-dev gmp-dev libpng-dev libxml2-dev libmcrypt-dev imagemagick-dev icu-dev libzip-dev
-ENV APP_DEPS ca-certificates libzip curl tar xz openssl git openssh-client pcre gmp imagemagick icu libmcrypt libsodium postgresql-dev
+ENV APP_DEPS ca-certificates libzip curl tar xz openssl git openssh-client pcre gmp imagemagick icu libmcrypt libsodium-dev postgresql-dev
 
 ARG UID=1000
 ARG GID=1000
@@ -23,7 +23,7 @@ RUN apk --no-cache add shadow \
     && docker-php-ext-install -j$(nproc) bcmath zip gmp pdo pdo_pgsql opcache pcntl intl \
     && pecl channel-update pecl.php.net \
     && printf "\n" | pecl install imagick mcrypt apcu xdebug libsodium \
-    && docker-php-ext-enable imagick mcrypt apcu xdebug libsodium \
+    && docker-php-ext-enable imagick mcrypt apcu \
     && apk del --purge $PHP_DEPS \
     && rm -vrf /var/cache/apk/* \
     && php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');" \
