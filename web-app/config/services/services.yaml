@@ -8,6 +8,8 @@ services:
     autoconfigure: true
     public: false
     bind:
+      $tokenLifetime: '%jwt_token_lifetime%'
+      $tokenType: '%jwt_token_type%'
       $cryptoNonce: '%app.crypto.nonce%'
       $cryptoKey: '%app.crypto.key%'
 

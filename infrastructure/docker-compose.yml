@@ -30,6 +30,8 @@ services:
         GID: ${GID}
         FPM_USER_NAME: ${FPM_USER_NAME}
         XDEBUG: ${XDEBUG}
+        JWT_KEY_PASS: ${JWT_KEY_PASS}
+        JWT_KEY_PATH: ${JWT_KEY_PATH}
     env_file:
       - .env
     volumes:

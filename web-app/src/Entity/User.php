@@ -52,7 +52,7 @@ class User implements UserInterface, \Serializable
 
     public function getUsername(): string
     {
-        return (string) $this->email;
+        return (string) $this->id;
     }
 
     /**

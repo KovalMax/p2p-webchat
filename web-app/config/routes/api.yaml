@@ -1,0 +1,7 @@
+api_login:
+  path: 'login'
+
+api_messages:
+  controller: App\Controller\MessageController::getMessages
+  path: 'messages'
+  methods: GET

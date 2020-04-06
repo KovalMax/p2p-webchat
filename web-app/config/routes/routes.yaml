@@ -1,3 +1,7 @@
+api:
+  prefix: '/api/v1/'
+  resource: 'api.yaml'
+
 root:
   path: /
   controller: Symfony\Bundle\FrameworkBundle\Controller\RedirectController

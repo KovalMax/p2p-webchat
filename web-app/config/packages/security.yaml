@@ -2,27 +2,30 @@ security:
   encoders:
     App\Entity\User:
       algorithm: auto
+
   providers:
-    users:
+    database:
       entity:
         class: App\Entity\User
+        property: id
+
   firewalls:
     dev:
       pattern: ^/(_(profiler|wdt)|css|images|js)/
       security: false
-    main:
-      anonymous: ~
-      form_login:
-        login_path: login
-        check_path: login
-        csrf_token_generator: security.csrf.token_manager
-        default_target_path: messenger
+
+    api:
+      pattern: ^/api/v1/
+      stateless: true
+      anonymous: true
+      json_login:
+        check_path: /api/v1/login
+        success_handler: lexik_jwt_authentication.handler.authentication_success
+        failure_handler: lexik_jwt_authentication.handler.authentication_failure
       guard:
         authenticators:
-          - App\Security\LoginFormAuthenticator
-      logout:
-        path: logout
+          - lexik_jwt_authentication.jwt_token_authenticator
+
   access_control:
-    - { path: ^/login$, roles: IS_AUTHENTICATED_ANONYMOUSLY }
-    - { path: ^/messenger$, roles: IS_AUTHENTICATED_FULLY}
-    - { path: ^api/v1/*, roles: IS_AUTHENTICATED_FULLY}
+    - { path: ^/api/v1/login$, roles: IS_AUTHENTICATED_ANONYMOUSLY }
+    - { path: ^/api/v1/, roles: IS_AUTHENTICATED_FULLY}

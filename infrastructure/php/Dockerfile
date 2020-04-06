@@ -7,6 +7,10 @@ ARG UID=1000
 ARG GID=1000
 ARG FPM_USER_NAME=www-data
 ARG XDEBUG=1
+ARG JWT_KEY_PATH
+ARG JWT_KEY_PASS
+
+RUN mkdir -p $JWT_KEY_PATH
 
 WORKDIR /var/www
 
@@ -29,6 +33,10 @@ RUN apk --no-cache add shadow \
     && php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');" \
     && php composer-setup.php --filename=composer --install-dir=/usr/bin \
     && php -r "unlink('composer-setup.php');"
+
+RUN openssl genrsa -passout pass:$JWT_KEY_PASS -out $JWT_KEY_PATH/private.pem -aes256 512 \
+    && openssl rsa -pubout -in $JWT_KEY_PATH/private.pem -passin pass:$JWT_KEY_PASS -out $JWT_KEY_PATH/public.pem \
+    && chmod -R a+r $JWT_KEY_PATH
 
 RUN usermod -u $UID $FPM_USER_NAME && groupmod -g $GID $FPM_USER_NAME
 
