@@ -4,8 +4,14 @@ namespace App\DTO\Request;
 
 final class SaveMessage
 {
+    /**
+     * @var string
+     */
     private string $message;
 
+    /**
+     * @var \DateTimeInterface
+     */
     private \DateTimeInterface $datetime;
 
     /**

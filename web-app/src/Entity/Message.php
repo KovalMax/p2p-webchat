@@ -19,7 +19,7 @@ class Message
      */
     public function __construct()
     {
-        $this->generateRandomId();
+        $this->generateId();
     }
 
     /**

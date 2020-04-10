@@ -3,13 +3,14 @@
 
 namespace App\Controller;
 
-
 use App\DTO\Request\UserRegistration;
-use App\Form\RegistrationType;
 use App\Service\UserRegistrationService;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\Serializer\Encoder\JsonEncoder;
+use Symfony\Component\Serializer\SerializerInterface;
 
 class RegistrationController extends AbstractController
 {
@@ -18,30 +19,45 @@ class RegistrationController extends AbstractController
      */
     private UserRegistrationService $registrationService;
 
-    public function __construct(UserRegistrationService $registrationService)
+    /**
+     * @var SerializerInterface
+     */
+    private SerializerInterface $serializer;
+
+    /**
+     * @param UserRegistrationService $registrationService
+     * @param SerializerInterface     $serializer
+     */
+    public function __construct(UserRegistrationService $registrationService, SerializerInterface $serializer)
     {
         $this->registrationService = $registrationService;
+        $this->serializer = $serializer;
     }
 
     /**
      * @param Request $request
      *
-     * @return Response
-     * @throws \Exception
+     * @return JsonResponse
      */
-    public function register(Request $request): Response
+    public function registration(Request $request): JsonResponse
     {
-        $user = new UserRegistration();
-        $form = $this->createForm(RegistrationType::class, $user);
-        $form->handleRequest($request);
+        /** @var UserRegistration $user */
+        $user = $this->serializer->deserialize(
+            $request->getContent(),
+            UserRegistration::class,
+            JsonEncoder::FORMAT
+        );
+        $response = $this->json(['status' => Response::HTTP_OK]);
 
-        if ($form->isSubmitted() && $form->isValid()) {
+        try {
             $this->registrationService->createNewUser($user);
-            $this->addFlash('success', 'userCreated');
-
-            return $this->redirectToRoute('messenger');
+        } catch (\Throwable $exception) {
+            $response = $this->json(
+                ['status' => Response::HTTP_INTERNAL_SERVER_ERROR, 'details' => 'Internal error, please contact support'],
+                Response::HTTP_INTERNAL_SERVER_ERROR
+            );
         }
 
-        return $this->render('registration/registration.html.twig', ['form' => $form->createView()]);
+        return $response;
     }
 }

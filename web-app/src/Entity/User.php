@@ -33,7 +33,7 @@ class User implements UserInterface, \Serializable
      */
     public function __construct()
     {
-        $this->generateRandomId();
+        $this->generateId();
         $this->roles = [self::ROLE_USER];
         $this->messages = new ArrayCollection();
     }
@@ -52,7 +52,7 @@ class User implements UserInterface, \Serializable
 
     public function getUsername(): string
     {
-        return (string) $this->id;
+        return $this->email;
     }
 
     /**

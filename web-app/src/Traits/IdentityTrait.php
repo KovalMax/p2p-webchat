@@ -20,7 +20,7 @@ trait IdentityTrait
     /**
      * @throws \Exception
      */
-    protected function generateRandomId(): void
+    protected function generateId(): void
     {
         $this->id = Uuid::uuid4();
     }

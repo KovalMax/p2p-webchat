@@ -21,6 +21,10 @@ final class UserRegistrationService
      */
     private UserRepository $repository;
 
+    /**
+     * @param UserPasswordEncoderInterface $encoder
+     * @param UserRepository               $repository
+     */
     public function __construct(UserPasswordEncoderInterface $encoder, UserRepository $repository)
     {
         $this->encoder = $encoder;
@@ -35,12 +39,12 @@ final class UserRegistrationService
     public function createNewUser(UserRegistration $userRegistration): void
     {
         $user = (new User())
-            ->setEmail($userRegistration->email)
-            ->setFirstName($userRegistration->firstName)
-            ->setLastName($userRegistration->lastName)
-            ->setTimezone($userRegistration->timezone);
+            ->setEmail($userRegistration->getEmail())
+            ->setFirstName($userRegistration->getFirstName())
+            ->setLastName($userRegistration->getLastName())
+            ->setTimezone($userRegistration->getTimezone());
 
-        $user->setPassword($this->encoder->encodePassword($user, $userRegistration->password));
+        $user->setPassword($this->encoder->encodePassword($user, $userRegistration->getPassword()));
 
         $this->repository->save($user);
     }
