@@ -8,7 +8,7 @@ use Symfony\Component\Validator\ConstraintViolationListInterface;
 
 class ConstraintValidationException extends \Exception
 {
-    private const DEFAULT_MESSAGE = 'Validation error';
+    private const DEFAULT_MESSAGE = 'Your request parameters did not validate.';
 
     /**
      * @var Violation[]

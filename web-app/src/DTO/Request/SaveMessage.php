@@ -2,7 +2,7 @@
 
 namespace App\DTO\Request;
 
-final class SaveMessage
+final class SaveMessage implements \JsonSerializable
 {
     /**
      * @var string
@@ -38,5 +38,16 @@ final class SaveMessage
     public function getDatetime(): \DateTimeInterface
     {
         return $this->datetime;
+    }
+
+    /**
+     * @inheritDoc
+     */
+    public function jsonSerialize(): array
+    {
+        return [
+            'message' => $this->message,
+            'datetime' => $this->datetime,
+        ];
     }
 }

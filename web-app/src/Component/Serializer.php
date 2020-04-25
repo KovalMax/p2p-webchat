@@ -13,7 +13,12 @@ use Symfony\Component\Serializer\SerializerInterface;
 /**
  * Class Serializer
  */
-final class Serializer implements SerializerInterface, ContextAwareNormalizerInterface, ContextAwareDenormalizerInterface, ContextAwareEncoderInterface, ContextAwareDecoderInterface
+final class Serializer implements
+    SerializerInterface,
+    ContextAwareNormalizerInterface,
+    ContextAwareDenormalizerInterface,
+    ContextAwareEncoderInterface,
+    ContextAwareDecoderInterface
 {
     /**
      * @var BaseSerializer

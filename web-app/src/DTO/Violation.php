@@ -2,37 +2,48 @@
 
 namespace App\DTO;
 
-final class Violation
+final class Violation implements \JsonSerializable
 {
     /**
      * @var string
      */
-    private string $fieldName;
+    private string $name;
 
     /**
      * @var string
      */
-    private string $errorMessage;
+    private string $reason;
 
-    public function __construct(string $fieldName, string $errorMessage)
+    public function __construct(string $name, string $reason)
     {
-        $this->fieldName = $fieldName;
-        $this->errorMessage = $errorMessage;
+        $this->name = $name;
+        $this->reason = $reason;
     }
 
     /**
      * @return string
      */
-    public function getFieldName(): string
+    public function getName(): string
     {
-        return $this->fieldName;
+        return $this->name;
     }
 
     /**
      * @return string
      */
-    public function getErrorMessage(): string
+    public function getReason(): string
     {
-        return $this->errorMessage;
+        return $this->reason;
+    }
+
+    /**
+     * @return array
+     */
+    public function jsonSerialize(): array
+    {
+        return [
+            'name' => $this->name,
+            'reason' => $this->reason,
+        ];
     }
 }

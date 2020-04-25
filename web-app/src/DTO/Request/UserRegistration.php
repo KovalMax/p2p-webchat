@@ -2,7 +2,7 @@
 
 namespace App\DTO\Request;
 
-final class UserRegistration
+final class UserRegistration implements \JsonSerializable
 {
     private string $email;
 
@@ -61,5 +61,18 @@ final class UserRegistration
     public function getTimezone(): string
     {
         return $this->timezone;
+    }
+
+    /**
+     * @inheritDoc
+     */
+    public function jsonSerialize()
+    {
+        return [
+            'email' => $this->email,
+            'firstName' => $this->firstName,
+            'lastName' => $this->lastName,
+            'timezone' => $this->timezone,
+        ];
     }
 }

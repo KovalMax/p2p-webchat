@@ -5,12 +5,10 @@ namespace App\Service;
 use App\DTO\Request\SaveMessage;
 use App\DTO\Response\MessageResponse;
 use App\Entity\Message;
-use App\Exception\ConstraintValidationException;
 use App\Repository\MessageRepository;
 use App\Security\Decoder\MessageDecoderInterface;
 use App\Security\Encoder\MessageEncoderInterface;
 use Symfony\Component\Security\Core\User\UserInterface;
-use Symfony\Component\Validator\Validator\ValidatorInterface;
 
 final class MessageService
 {
@@ -18,11 +16,6 @@ final class MessageService
      * @var MessageRepository
      */
     private MessageRepository $repository;
-
-    /**
-     * @var ValidatorInterface
-     */
-    private ValidatorInterface $validator;
 
     /**
      * @var MessageEncoderInterface
@@ -36,18 +29,15 @@ final class MessageService
 
     /**
      * @param MessageRepository       $repository
-     * @param ValidatorInterface      $validator
      * @param MessageEncoderInterface $messageEncoder
      * @param MessageDecoderInterface $messageDecoder
      */
     public function __construct(
         MessageRepository $repository,
-        ValidatorInterface $validator,
         MessageEncoderInterface $messageEncoder,
         MessageDecoderInterface $messageDecoder
     ) {
         $this->repository = $repository;
-        $this->validator = $validator;
         $this->messageEncoder = $messageEncoder;
         $this->messageDecoder = $messageDecoder;
     }
@@ -72,24 +62,18 @@ final class MessageService
     }
 
     /**
-     * @param SaveMessage   $request
+     * @param SaveMessage   $dto
      * @param UserInterface $user
      *
      * @return void
-     * @throws ConstraintValidationException
      * @throws \Exception
      */
-    public function saveMessage(SaveMessage $request, UserInterface $user): void
+    public function saveMessage(SaveMessage $dto, UserInterface $user): void
     {
-        $errors = $this->validator->validate($request);
-        if (count($errors) > 0) {
-            throw ConstraintValidationException::createFromViolationList($errors);
-        }
-
         $msg = (new Message())
             ->setUser($user)
-            ->setMessage($this->messageEncoder->encodeMessage($request->getMessage()))
-            ->setCreatedAt($request->getDatetime());
+            ->setMessage($this->messageEncoder->encodeMessage($dto->getMessage()))
+            ->setCreatedAt($dto->getDatetime());
 
         $this->repository->saveMessage($msg);
     }

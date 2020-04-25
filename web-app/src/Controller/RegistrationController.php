@@ -3,61 +3,58 @@
 
 namespace App\Controller;
 
+use App\Component\HttpErrorConfigProvider;
+use App\Component\RequestMapper;
 use App\DTO\Request\UserRegistration;
 use App\Service\UserRegistrationService;
+use App\Traits\PsrLoggerTrait;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
-use Symfony\Component\Serializer\Encoder\JsonEncoder;
-use Symfony\Component\Serializer\SerializerInterface;
 
 class RegistrationController extends AbstractController
 {
+    use PsrLoggerTrait;
+
     /**
      * @var UserRegistrationService
      */
     private UserRegistrationService $registrationService;
 
     /**
-     * @var SerializerInterface
+     * @var RequestMapper
      */
-    private SerializerInterface $serializer;
+    private RequestMapper $requestMapper;
+
+    /**
+     * @var HttpErrorConfigProvider
+     */
+    private HttpErrorConfigProvider $config;
 
     /**
      * @param UserRegistrationService $registrationService
-     * @param SerializerInterface     $serializer
+     * @param RequestMapper           $requestMapper
      */
-    public function __construct(UserRegistrationService $registrationService, SerializerInterface $serializer)
+    public function __construct(UserRegistrationService $registrationService, RequestMapper $requestMapper, HttpErrorConfigProvider $config)
     {
         $this->registrationService = $registrationService;
-        $this->serializer = $serializer;
+        $this->requestMapper = $requestMapper;
+        $this->config = $config;
     }
 
     /**
      * @param Request $request
      *
      * @return JsonResponse
+     * @throws \Exception
      */
     public function registration(Request $request): JsonResponse
     {
         /** @var UserRegistration $user */
-        $user = $this->serializer->deserialize(
-            $request->getContent(),
-            UserRegistration::class,
-            JsonEncoder::FORMAT
-        );
-        $response = $this->json(['status' => Response::HTTP_OK]);
+        $user = $this->requestMapper->toDto(UserRegistration::class, $request->getContent());
+        $this->registrationService->createNewUser($user);
 
-        try {
-            $this->registrationService->createNewUser($user);
-        } catch (\Throwable $exception) {
-            $response = $this->json(
-                ['status' => Response::HTTP_INTERNAL_SERVER_ERROR, 'details' => 'Internal error, please contact support'],
-                Response::HTTP_INTERNAL_SERVER_ERROR
-            );
-        }
-
-        return $response;
+        return $this->json(['status' => Response::HTTP_OK]);
     }
 }

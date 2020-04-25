@@ -3,7 +3,6 @@
 
 namespace App\Service;
 
-
 use App\DTO\Request\UserRegistration;
 use App\Entity\User;
 use App\Repository\UserRepository;
@@ -32,19 +31,21 @@ final class UserRegistrationService
     }
 
     /**
-     * @param UserRegistration $userRegistration
+     * @param UserRegistration $dto
      *
      * @throws \Exception
      */
-    public function createNewUser(UserRegistration $userRegistration): void
+    public function createNewUser(UserRegistration $dto): void
     {
         $user = (new User())
-            ->setEmail($userRegistration->getEmail())
-            ->setFirstName($userRegistration->getFirstName())
-            ->setLastName($userRegistration->getLastName())
-            ->setTimezone($userRegistration->getTimezone());
+            ->setEmail($dto->getEmail())
+            ->setFirstName($dto->getFirstName())
+            ->setLastName($dto->getLastName())
+            ->setTimezone($dto->getTimezone());
 
-        $user->setPassword($this->encoder->encodePassword($user, $userRegistration->getPassword()));
+        $user->setPassword(
+            $this->encoder->encodePassword($user, $dto->getPassword())
+        );
 
         $this->repository->save($user);
     }
