@@ -3,7 +3,6 @@
 
 namespace App\Controller;
 
-use App\Component\HttpErrorConfigProvider;
 use App\Component\RequestMapper;
 use App\DTO\Request\UserRegistration;
 use App\Service\UserRegistrationService;
@@ -28,19 +27,13 @@ class RegistrationController extends AbstractController
     private RequestMapper $requestMapper;
 
     /**
-     * @var HttpErrorConfigProvider
-     */
-    private HttpErrorConfigProvider $config;
-
-    /**
      * @param UserRegistrationService $registrationService
      * @param RequestMapper           $requestMapper
      */
-    public function __construct(UserRegistrationService $registrationService, RequestMapper $requestMapper, HttpErrorConfigProvider $config)
+    public function __construct(UserRegistrationService $registrationService, RequestMapper $requestMapper)
     {
         $this->registrationService = $registrationService;
         $this->requestMapper = $requestMapper;
-        $this->config = $config;
     }
 
     /**

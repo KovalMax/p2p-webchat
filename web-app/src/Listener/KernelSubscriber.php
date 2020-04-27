@@ -2,7 +2,7 @@
 
 namespace App\Listener;
 
-use App\Component\HttpErrorFormatter;
+use App\Component\Http\HttpErrorFormatter;
 use App\Exception\ConstraintValidationException;
 use App\Traits\PsrLoggerTrait;
 use Symfony\Component\EventDispatcher\EventSubscriberInterface;

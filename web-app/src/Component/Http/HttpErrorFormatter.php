@@ -25,8 +25,14 @@ final class HttpErrorFormatter
         self::TYPE,
         self::TITLE,
         self::DETAIL,
-        self::INVALID_PARAMS,
         self::STATUS,
+        self::INVALID_PARAMS,
+    ];
+
+    private const DEFAULT_ERROR = [
+        self::TYPE => self::DEFAULT_TYPE,
+        self::TITLE => self::DEFAULT_TITLE,
+        self::STATUS => self::DEFAULT_STATUS,
     ];
 
     /**
@@ -53,7 +59,7 @@ final class HttpErrorFormatter
     public function formatError(\Throwable $exception): HttpErrorResponse
     {
         $responseCode = self::DEFAULT_STATUS;
-        $error = [self::TYPE => self::DEFAULT_TYPE, self::TITLE => self::DEFAULT_TITLE, self::STATUS => self::DEFAULT_STATUS];
+        $error = self::DEFAULT_ERROR;
         $formatInstructions = $this->configProvider->getConfigForException((string) \get_class($exception));
         if (null !== $formatInstructions) {
             $responseCode = $formatInstructions->getResponseCode();
@@ -81,14 +87,19 @@ final class HttpErrorFormatter
     {
         $exploded = explode('-', $attribute);
         if ($exploded && count($exploded) > 1) {
-            $exploded[1] = ucfirst($exploded[1]);
+            foreach ($exploded as $index => &$word) {
+                if ($index == 0) {
+                    continue;
+                }
+                $word = ucfirst($word);
+            }
             $attribute = implode('', $exploded);
         }
 
         $staticParameter = $this->propertyAccessor->getValue($formatInstruction->getStaticParams(), $attribute);
-        $classParameter = $this->propertyAccessor->getValue($formatInstruction->getClassParams(), $attribute);
-        if (null !== $classParameter) {
-            $classParameter = $this->propertyAccessor->getValue($exception, $classParameter);
+        $classGetterName = $this->propertyAccessor->getValue($formatInstruction->getClassParams(), $attribute);
+        if (null !== $classGetterName) {
+            $classParameter = $this->propertyAccessor->getValue($exception, $classGetterName);
         }
 
         return $classParameter ?? $staticParameter;
