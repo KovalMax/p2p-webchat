@@ -41,6 +41,13 @@ services:
     networks:
       - app-network
 
+  app-websocket:
+    build:
+      context: ../websocket-app
+      dockerfile: ../infrastructure/golang/Dockerfile
+    networks:
+      - app-network
+
   app-web-server:
     build:
       context: nginx
