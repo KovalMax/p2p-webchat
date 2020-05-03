@@ -9,16 +9,12 @@ import (
 
 func main() {
     errChan := make(chan error)
-    go func() {
-        err := <-errChan
-        log.Printf("Error from errChan listener. %q. Type %T", err.Error(), err)
-    }()
-
     app := application.NewApplication(errChan)
-    go app.Run()
+    go app.Start()
+    go app.Logger()
 
     http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
-        application.NewClientConnection(app, w, r)
+        application.HandleNewConnection(app, w, r)
     })
 
     log.Fatalln(http.ListenAndServe(":8080", nil))

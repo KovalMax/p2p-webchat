@@ -1,5 +1,7 @@
 package application
 
+import "log"
+
 type Application struct {
     errorChannel chan error
     broadcast    chan *MessageEvent
@@ -23,7 +25,7 @@ func NewApplication(ech chan error) *Application {
     }
 }
 
-func (a *Application) Run() {
+func (a *Application) Start() {
     for {
         select {
         case newClient := <-a.register:
@@ -37,4 +39,9 @@ func (a *Application) Run() {
             }
         }
     }
+}
+
+func (a Application) Logger()  {
+    err := <-a.errorChannel
+    log.Printf("Error from errChan listener. %q. Type %T", err.Error(), err)
 }
