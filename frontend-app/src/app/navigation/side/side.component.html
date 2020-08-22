@@ -1,0 +1,14 @@
+<mat-nav-list>
+    <a (click)="onClose()" mat-list-item routerLink="/sign-up" *ngIf="!isAuthenticated">
+        <mat-icon>assignment</mat-icon>
+        <span class="nav-caption">Sign Up</span>
+    </a>
+    <a (click)="onClose()" mat-list-item routerLink="/login" *ngIf="!isAuthenticated">
+        <mat-icon>input</mat-icon>
+        <span class="nav-caption">Sign In</span>
+    </a>
+    <a (click)="onLogout()" mat-list-item *ngIf="isAuthenticated">
+        <mat-icon>eject</mat-icon>
+        <span class="nav-caption">Sign Out</span>
+    </a>
+</mat-nav-list>

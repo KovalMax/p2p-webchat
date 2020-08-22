@@ -1,22 +1,26 @@
-FROM node:13.8-alpine3.11
+FROM node:12.16
 
 ARG UID=1000
 ARG GID=1000
 ARG NODE_USER_NAME=node
 
-WORKDIR /var/www
+RUN mkdir -p /home/app/node_modules && chown -R $UID:$GID /home/app
 
-RUN deluser --remove-home $NODE_USER_NAME \
-    && addgroup -S $NODE_USER_NAME -g $GID \
-    && adduser -S -G $NODE_USER_NAME -u $UID $NODE_USER_NAME
+WORKDIR /home/app
+
+RUN groupmod -g $GID $NODE_USER_NAME \
+  && usermod -u $UID -g $GID $NODE_USER_NAME
 
 COPY package*.json ./
 
-RUN npm i --quiet \
-    && npm cache clean --force
+RUN npm i -g @angular/cli@~9.1.5
 
-COPY . .
+RUN npm i --quiet
+
+COPY --chown=$UID:$GID . .
 
 USER $NODE_USER_NAME
 
-CMD npm run start:$NODE_ENV
+EXPOSE 4200
+
+CMD npm run start

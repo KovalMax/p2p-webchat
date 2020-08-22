@@ -41,7 +41,7 @@ func (a *Application) Start() {
     }
 }
 
-func (a Application) Logger()  {
+func (a *Application) Logger()  {
     err := <-a.errorChannel
     log.Printf("Error from errChan listener. %q. Type %T", err.Error(), err)
 }
