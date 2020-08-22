@@ -1,4 +1,4 @@
-FROM node:12.16
+FROM node:12.18
 
 ARG UID=1000
 ARG GID=1000
@@ -12,8 +12,6 @@ RUN groupmod -g $GID $NODE_USER_NAME \
   && usermod -u $UID -g $GID $NODE_USER_NAME
 
 COPY package*.json ./
-
-RUN npm i -g @angular/cli@~9.1.5
 
 RUN npm i --quiet
 
