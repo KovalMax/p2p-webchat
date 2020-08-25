@@ -3,10 +3,10 @@
 // The list of file replacements can be found in `angular.json`.
 
 export const environment = {
-  production: false,
-  backends: {
-    login: 'http://127.0.0.1:8099/api/v1/login',
-  },
+    production: false,
+    backends: {
+        login: 'http://127.0.0.1:8099/api/v1/login',
+    },
 };
 
 /*

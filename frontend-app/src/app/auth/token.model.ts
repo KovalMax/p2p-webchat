@@ -16,11 +16,7 @@ export class Token implements TokenModel {
         return this._token_type;
     }
 
-    get access_token(): string | null {
-        if (new Date() > this._expires_in) {
-            return null;
-        }
-
+    get access_token(): string {
         return this._access_token;
     }
 

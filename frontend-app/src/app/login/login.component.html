@@ -3,8 +3,8 @@
         <app-loading-spinner></app-loading-spinner>
     </div>
     <form
-        *ngIf="!isLoading"
         (ngSubmit)="onSubmit()"
+        *ngIf="!isLoading"
         [formGroup]="loginForm"
         fxLayout="column"
         fxLayoutAlign="center center"
@@ -17,9 +17,9 @@
                 placeholder="Your email"
                 type="email"
             >
-            <mat-hint *ngIf="loginForm.get('email').untouched">Please enter a valid email.</mat-hint>
-            <mat-error *ngIf="loginForm.get('email').getError('required')">Field is required!</mat-error>
-            <mat-error *ngIf="loginForm.get('email').getError('email')">Invalid email.</mat-error>
+            <mat-hint *ngIf="loginForm.get('email')?.untouched">Please enter a valid email.</mat-hint>
+            <mat-error *ngIf="loginForm.get('email')?.getError('required')">Field is required!</mat-error>
+            <mat-error *ngIf="loginForm.get('email')?.getError('email')">Invalid email.</mat-error>
         </mat-form-field>
         <mat-form-field>
             <input
@@ -28,8 +28,8 @@
                 placeholder="Your password"
                 type="password"
             >
-            <mat-hint *ngIf="loginForm.get('password').untouched">Please enter your password.</mat-hint>
-            <mat-error *ngIf="loginForm.get('password').getError('required')">Field is required!</mat-error>
+            <mat-hint *ngIf="loginForm.get('password')?.untouched">Please enter your password.</mat-hint>
+            <mat-error *ngIf="loginForm.get('password')?.getError('required')">Field is required!</mat-error>
         </mat-form-field>
         <button [disabled]="loginForm.invalid" color="primary" mat-raised-button type="submit">Sign In</button>
     </form>

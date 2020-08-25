@@ -8,7 +8,8 @@ import {map, take} from "rxjs/operators";
 export class AuthResolver implements Resolve<boolean> {
     constructor(
         private router: Router,
-        private authService: AuthService) {
+        private authService: AuthService
+    ) {
     }
 
     resolve(route: ActivatedRouteSnapshot, state: RouterStateSnapshot): Observable<any> {

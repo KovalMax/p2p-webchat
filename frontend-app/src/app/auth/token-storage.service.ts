@@ -18,7 +18,7 @@ export class TokenStorageService {
             return null;
         }
 
-        return JSON.parse(localStorage.getItem(this.tokenKey));
+        return JSON.parse(localStorage.getItem(this.tokenKey) ?? '');
     }
 
     public removeToken(): void {

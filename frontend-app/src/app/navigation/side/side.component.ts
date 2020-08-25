@@ -11,7 +11,7 @@ import {Subscription} from "rxjs";
 export class SideComponent implements OnInit, OnDestroy {
     @Output() closeSidenav = new EventEmitter<void>();
     public isAuthenticated: boolean = false;
-    private tokenSubscription: Subscription;
+    private tokenSubscription!: Subscription;
 
     constructor(private authService: AuthService, private router: Router) {
     }

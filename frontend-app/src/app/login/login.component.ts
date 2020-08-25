@@ -11,11 +11,15 @@ import {MatSnackBar} from "@angular/material/snack-bar";
 })
 
 export class LoginComponent implements OnInit {
-    public loginForm: FormGroup;
-    public loginError: string = null;
+    public loginError: string | null = null;
     public isLoading: boolean = false;
+    public loginForm!: FormGroup;
 
-    constructor(private client: AuthService, private router: Router, private snackBar: MatSnackBar) {
+    constructor(
+        private client: AuthService,
+        private router: Router,
+        private snackBar: MatSnackBar
+    ) {
     }
 
     public ngOnInit(): void {
@@ -35,24 +39,24 @@ export class LoginComponent implements OnInit {
         }
         this.isLoading = true;
         this.client.login(this.loginForm.getRawValue())
-        .subscribe(
-            () => {
-                this.isLoading = false;
-                this.snackBar.dismiss();
-                this.router.navigate(['home']);
-            },
-            error => {
-                this.isLoading = false;
-                this.snackBar.open(
-                    error,
-                    'Close',
-                    {
-                        duration: 60 * 1000,
-                        horizontalPosition: "center",
-                        verticalPosition: "top",
-                    }
-                );
-            }
-        );
+            .subscribe(
+                () => {
+                    this.isLoading = false;
+                    this.snackBar.dismiss();
+                    this.router.navigate(['home']);
+                },
+                error => {
+                    this.isLoading = false;
+                    this.snackBar.open(
+                        error,
+                        'Close',
+                        {
+                            duration: 60 * 1000,
+                            horizontalPosition: "center",
+                            verticalPosition: "top",
+                        }
+                    );
+                }
+            );
     }
 }

@@ -9,27 +9,27 @@ import {catchError, tap} from "rxjs/operators";
 
 @Injectable({providedIn: 'root'})
 export class AuthService {
-    private _token: BehaviorSubject<Token> = new BehaviorSubject<Token>(null);
-
     constructor(private http: HttpClient, private storage: TokenStorageService) {
     }
 
-    get token(): BehaviorSubject<Token> {
+    private _token: BehaviorSubject<Token | null> = new BehaviorSubject<Token | null>(null);
+
+    get token(): BehaviorSubject<Token | null> {
         return this._token;
     }
 
     public login(login: LoginModel): Observable<TokenModel> {
         return this.http.post<TokenModel>(environment.backends.login, login)
-        .pipe(
-            catchError((res: HttpErrorResponse) => {
-                console.log(res);
-                return throwError(res.error && res.error.message ? res.error.message : 'Unexpected error.');
-            }),
-            tap(token => {
-                this.handleToken(token);
-                this.storage.setToken(token);
-            })
-        );
+            .pipe(
+                catchError((res: HttpErrorResponse) => {
+                    console.log(res);
+                    return throwError(res.error && res.error.message ? res.error.message : 'Unexpected error.');
+                }),
+                tap(token => {
+                    this.handleToken(token);
+                    this.storage.setToken(token);
+                })
+            );
     }
 
     public autoLogin(): void {
@@ -45,7 +45,11 @@ export class AuthService {
         this.storage.removeToken();
     }
 
-    private handleToken(token: TokenModel): void {
+    private handleToken(token: TokenModel | null): void {
+        if (!token) {
+            return;
+        }
+
         let expirationDate = new Date(new Date().getTime() + (+token.expires_in * 1000));
         let tokenModel = new Token(token.token_type, token.access_token, expirationDate);
         this._token.next(tokenModel);
