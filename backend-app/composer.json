@@ -7,14 +7,14 @@
         "ext-iconv": "*",
         "ext-json": "*",
         "ext-sodium": "*",
-        "lexik/jwt-authentication-bundle": "^2.6",
+        "lexik/jwt-authentication-bundle": "^2.8",
         "ramsey/uuid-doctrine": "^1.6",
         "sensio/framework-extra-bundle": "5.*",
         "symfony/asset": "5.*",
         "symfony/console": "5.*",
         "symfony/dotenv": "5.*",
         "symfony/expression-language": "5.*",
-        "symfony/flex": "^1.6",
+        "symfony/flex": "^1.9",
         "symfony/form": "5.*",
         "symfony/framework-bundle": "5.*",
         "symfony/http-client": "5.*",
@@ -22,7 +22,7 @@
         "symfony/mailer": "5.*",
         "symfony/monolog-bundle": "^3.5",
         "symfony/notifier": "5.*",
-        "symfony/orm-pack": "1.*",
+        "symfony/orm-pack": "^2.0",
         "symfony/process": "5.*",
         "symfony/security-bundle": "5.*",
         "symfony/serializer-pack": "1.*",
@@ -83,13 +83,13 @@
             "composer install -a -o -n --no-scripts --prefer-dist",
             "@app:db:setup"
         ],
-        "service:fixtures": [
+        "service:fixtures:load": [
             "php bin/console doctrine:fixtures:load -n"
         ],
         "app:db:setup": [
             "sh wait.sh",
             "php bin/console doctrine:database:create --connection=default --if-not-exists --no-interaction",
-            "php bin/console doctrine:migrations:migrate --all-or-nothing --db=default --allow-no-migration --no-interaction"
+            "php bin/console doctrine:migrations:migrate --all-or-nothing --allow-no-migration --no-interaction"
         ]
     },
     "conflict": {

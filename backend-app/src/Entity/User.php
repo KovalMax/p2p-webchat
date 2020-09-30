@@ -24,6 +24,8 @@ class User implements UserInterface, \Serializable
 
     private string $lastName;
 
+    private string $nickName;
+
     private string $timezone;
 
     private array $roles;
@@ -75,7 +77,7 @@ class User implements UserInterface, \Serializable
      */
     public function getPassword(): string
     {
-        return (string) $this->password;
+        return (string)$this->password;
     }
 
     public function setPassword(string $password): self
@@ -121,6 +123,26 @@ class User implements UserInterface, \Serializable
     public function setLastName(string $lastName): User
     {
         $this->lastName = $lastName;
+
+        return $this;
+    }
+
+    /**
+     * @return string
+     */
+    public function getNickName(): string
+    {
+        return $this->nickName;
+    }
+
+    /**
+     * @param string $nickName
+     *
+     * @return User
+     */
+    public function setNickName(string $nickName): self
+    {
+        $this->nickName = $nickName;
 
         return $this;
     }

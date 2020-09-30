@@ -1,8 +1,9 @@
-import {Component, OnInit} from "@angular/core";
-import {FormControl, FormGroup, Validators} from "@angular/forms";
+import {Component} from "@angular/core";
+import {FormBuilder, FormGroup, Validators} from "@angular/forms";
 import {AuthService} from "../auth/auth.service";
 import {Router} from "@angular/router";
 import {MatSnackBar} from "@angular/material/snack-bar";
+import {finalize} from "rxjs/operators";
 
 @Component({
     selector: 'app-login',
@@ -10,43 +11,42 @@ import {MatSnackBar} from "@angular/material/snack-bar";
     styleUrls: ['./login.component.css']
 })
 
-export class LoginComponent implements OnInit {
-    public loginError: string | null = null;
+export class LoginComponent {
     public isLoading: boolean = false;
-    public loginForm!: FormGroup;
+    public form!: FormGroup;
 
     constructor(
         private client: AuthService,
         private router: Router,
-        private snackBar: MatSnackBar
+        private snackBar: MatSnackBar,
+        private builder: FormBuilder
     ) {
-    }
-
-    public ngOnInit(): void {
-        this.loginForm = new FormGroup({
-            email: new FormControl('', {
-                validators: [Validators.required, Validators.email]
-            }),
-            password: new FormControl('', {
-                validators: [Validators.required]
-            })
+        this.form = builder.group({
+            email: builder.control(
+                '',
+                {validators: [Validators.required, Validators.email]}
+            ),
+            password: builder.control(
+                '',
+                {validators: [Validators.required]}
+            )
         });
     }
 
     public onSubmit(): void {
-        if (this.loginForm.invalid) {
+        if (this.form.invalid) {
             return;
         }
-        this.isLoading = true;
-        this.client.login(this.loginForm.getRawValue())
+
+        this.toggleFormLoading();
+        this.client.login(this.form.getRawValue())
+            .pipe(finalize(() => this.toggleFormLoading()))
             .subscribe(
                 () => {
-                    this.isLoading = false;
                     this.snackBar.dismiss();
                     this.router.navigate(['home']);
                 },
                 error => {
-                    this.isLoading = false;
                     this.snackBar.open(
                         error,
                         'Close',
@@ -58,5 +58,9 @@ export class LoginComponent implements OnInit {
                     );
                 }
             );
+    }
+
+    private toggleFormLoading(): void {
+        this.isLoading = !this.isLoading;
     }
 }

@@ -12,6 +12,11 @@ api_save_message:
   methods: POST
 
 api_user_registration:
-  controller: App\Controller\RegistrationController::registration
+  controller: App\Controller\RegistrationController
   path: 'users'
   methods: POST
+
+api_user_me:
+  controller: App\Controller\ProfileController
+  path: 'users/me'
+  methods: GET

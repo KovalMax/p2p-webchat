@@ -1,0 +1,5 @@
+App\Entity\User:
+  attributes:
+    firstName: { groups: [ 'public' ] }
+    lastName: { groups: [ 'public' ] }
+    nickName: { groups: [ 'public' ] }

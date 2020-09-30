@@ -39,6 +39,7 @@ services:
       - messenger-network
 
   websocket-app:
+    restart: on-failure
     build:
       context: ../websocket-app
       dockerfile: ../infrastructure/golang/Dockerfile

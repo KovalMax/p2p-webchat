@@ -8,7 +8,7 @@ use App\Entity\User;
 use App\Repository\UserRepository;
 use Symfony\Component\Security\Core\Encoder\UserPasswordEncoderInterface;
 
-final class UserRegistrationService
+final class UserService
 {
     /**
      * @var UserPasswordEncoderInterface
@@ -22,7 +22,7 @@ final class UserRegistrationService
 
     /**
      * @param UserPasswordEncoderInterface $encoder
-     * @param UserRepository               $repository
+     * @param UserRepository $repository
      */
     public function __construct(UserPasswordEncoderInterface $encoder, UserRepository $repository)
     {
@@ -38,13 +38,14 @@ final class UserRegistrationService
     public function createNewUser(UserRegistration $dto): void
     {
         $user = (new User())
-            ->setEmail($dto->getEmail())
-            ->setFirstName($dto->getFirstName())
-            ->setLastName($dto->getLastName())
-            ->setTimezone($dto->getTimezone());
+            ->setEmail($dto->email)
+            ->setFirstName($dto->firstName)
+            ->setLastName($dto->lastName)
+            ->setNickName($dto->nickName)
+            ->setTimezone($dto->timezone);
 
         $user->setPassword(
-            $this->encoder->encodePassword($user, $dto->getPassword())
+            $this->encoder->encodePassword($user, $dto->password)
         );
 
         $this->repository->save($user);

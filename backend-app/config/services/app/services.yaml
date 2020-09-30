@@ -17,6 +17,10 @@ services:
 
   App\Component\RequestMapper: ~
 
+  App\Component\RequestParamConverter:
+    tags:
+      - { name: request.param_converter }
+
   App\Component\Http\HttpErrorConfigProvider:
     arguments: ['%http_exceptions%']
 
@@ -34,7 +38,7 @@ services:
   App\Listener\KernelSubscriber: ~
 
   App\Service\MessageService: ~
-  App\Service\UserRegistrationService: ~
+  App\Service\UserService: ~
 
   App\Repository\MessageRepository: ~
   App\Repository\UserRepository: ~

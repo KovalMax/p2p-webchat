@@ -2,13 +2,22 @@ package application
 
 import (
     "bytes"
+    "encoding/json"
+    "errors"
+    "log"
     "net/http"
     "time"
 
     "github.com/gorilla/websocket"
 )
 
+type ClientInfo struct {
+    id   string
+    name string
+}
+
 type Client struct {
+    info *ClientInfo
     app  *Application
     conn *websocket.Conn
     sent chan *MessageEvent
@@ -43,12 +52,20 @@ var upgrader = websocket.Upgrader{
 func HandleNewConnection(app *Application, w http.ResponseWriter, r *http.Request) {
     conn, err := upgrader.Upgrade(w, r, nil)
     if err != nil {
-        app.errorChannel <- err
+        app.errors <- err
 
         return
     }
 
-    client := &Client{app, conn, make(chan *MessageEvent)}
+    id := r.URL.Query().Get("clientId")
+    name := r.URL.Query().Get("clientName")
+    if id == "" || name == "" {
+        app.errors <- errors.New("client information not found")
+
+        return
+    }
+
+    client := &Client{&ClientInfo{id, name}, app, conn, make(chan *MessageEvent)}
     app.register <- client
 
     // Read and writes for websocket are doing in a separate per-connection goroutines
@@ -61,7 +78,7 @@ func (c *Client) writer() {
     defer func() {
         ticker.Stop()
         if err := c.conn.Close(); err != nil {
-            c.app.errorChannel <- err
+            c.app.errors <- err
         }
     }()
 
@@ -69,29 +86,36 @@ func (c *Client) writer() {
         select {
         case event, ok := <-c.sent:
             if err := c.conn.SetWriteDeadline(time.Now().Add(writeWait)); err != nil {
-                c.app.errorChannel <- err
+                c.app.errors <- err
             }
 
             if !ok {
                 if err := c.conn.WriteMessage(websocket.CloseMessage, nil); err != nil {
-                    c.app.errorChannel <- err
+                    c.app.errors <- err
                 }
 
                 return
             }
 
-            if err := c.conn.WriteMessage(event.messageType, event.message); err != nil {
-                c.app.errorChannel <- err
+            encoded, err := json.Marshal(event.message)
+            if err != nil {
+                c.app.errors <- err
+
+                return
+            }
+
+            if err := c.conn.WriteMessage(event.messageType, encoded); err != nil {
+                c.app.errors <- err
 
                 return
             }
         case <-ticker.C:
             if err := c.conn.SetWriteDeadline(time.Now().Add(writeWait)); err != nil {
-                c.app.errorChannel <- err
+                c.app.errors <- err
             }
 
             if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
-                c.app.errorChannel <- err
+                c.app.errors <- err
 
                 return
             }
@@ -102,16 +126,16 @@ func (c *Client) writer() {
 func (c *Client) reader() {
     defer func() {
         c.app.unregister <- c
-        c.app.errorChannel <- c.conn.Close()
+        c.app.errors <- c.conn.Close()
     }()
 
     c.conn.SetReadLimit(maxMessageSize)
     if err := c.conn.SetReadDeadline(time.Now().Add(pongWait)); err != nil {
-        c.app.errorChannel <- err
+        c.app.errors <- err
     }
     c.conn.SetPongHandler(func(p string) error {
         if err := c.conn.SetReadDeadline(time.Now().Add(pongWait)); err != nil {
-            c.app.errorChannel <- err
+            c.app.errors <- err
         }
 
         return nil
@@ -120,11 +144,27 @@ func (c *Client) reader() {
     for {
         msgType, message, err := c.conn.ReadMessage()
         if err != nil {
-            c.app.errorChannel <- err
+            c.app.errors <- err
             break
         }
 
         message = bytes.TrimSpace(bytes.Replace(message, newline, space, -1))
-        c.app.broadcast <- &MessageEvent{msgType, message}
+        event, err := buildMessageEvent(message, msgType)
+        if err != nil {
+            c.app.errors <- err
+            break
+        }
+
+        c.app.events <- event
     }
+}
+
+func buildMessageEvent(rawMessage []byte, msgType int) (*MessageEvent, error) {
+    clientMessage := new(Message)
+    if err := json.Unmarshal(rawMessage, clientMessage); err != nil {
+        return nil, err
+    }
+    log.Println("got message", clientMessage)
+
+    return &MessageEvent{msgType, clientMessage}, nil
 }

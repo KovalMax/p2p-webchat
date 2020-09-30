@@ -1,7 +1,7 @@
 import {HttpClient, HttpErrorResponse} from "@angular/common/http";
 import {LoginModel} from "../login/login.model";
 import {Token, TokenModel} from "./token.model";
-import {environment} from "../../environments/environment";
+import {backends} from "../../environments/environment";
 import {Injectable} from "@angular/core";
 import {TokenStorageService} from "./token-storage.service";
 import {BehaviorSubject, Observable, throwError} from "rxjs";
@@ -19,10 +19,9 @@ export class AuthService {
     }
 
     public login(login: LoginModel): Observable<TokenModel> {
-        return this.http.post<TokenModel>(environment.backends.login, login)
+        return this.http.post<TokenModel>(backends.login, login)
             .pipe(
                 catchError((res: HttpErrorResponse) => {
-                    console.log(res);
                     return throwError(res.error && res.error.message ? res.error.message : 'Unexpected error.');
                 }),
                 tap(token => {

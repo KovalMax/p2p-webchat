@@ -3,50 +3,39 @@
 
 namespace App\Controller;
 
-use App\Component\RequestMapper;
 use App\DTO\Request\UserRegistration;
-use App\Service\UserRegistrationService;
+use App\Service\UserService;
 use App\Traits\PsrLoggerTrait;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
-use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 
-class RegistrationController extends AbstractController
+final class RegistrationController extends AbstractController
 {
     use PsrLoggerTrait;
 
     /**
-     * @var UserRegistrationService
+     * @var UserService
      */
-    private UserRegistrationService $registrationService;
+    private UserService $registrationService;
 
     /**
-     * @var RequestMapper
+     * @param UserService $registrationService
      */
-    private RequestMapper $requestMapper;
-
-    /**
-     * @param UserRegistrationService $registrationService
-     * @param RequestMapper           $requestMapper
-     */
-    public function __construct(UserRegistrationService $registrationService, RequestMapper $requestMapper)
+    public function __construct(UserService $registrationService)
     {
         $this->registrationService = $registrationService;
-        $this->requestMapper = $requestMapper;
     }
 
     /**
-     * @param Request $request
+     * @param UserRegistration $registration
      *
      * @return JsonResponse
      * @throws \Exception
      */
-    public function registration(Request $request): JsonResponse
+    public function __invoke(UserRegistration $registration): JsonResponse
     {
-        /** @var UserRegistration $user */
-        $user = $this->requestMapper->toDto(UserRegistration::class, $request->getContent());
-        $this->registrationService->createNewUser($user);
+        $this->registrationService->createNewUser($registration);
 
         return $this->json(['status' => Response::HTTP_OK]);
     }

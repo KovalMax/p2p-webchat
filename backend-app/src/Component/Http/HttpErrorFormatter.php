@@ -16,7 +16,7 @@ final class HttpErrorFormatter
     private const TYPE           = 'type';
     private const TITLE          = 'title';
     private const DETAIL         = 'detail';
-    private const INVALID_PARAMS = 'invalid-params';
+    private const INVALID_PARAMS = 'invalidParams';
     private const STATUS         = 'status';
 
 
@@ -85,17 +85,6 @@ final class HttpErrorFormatter
      */
     private function extractValue(string $attribute, \Throwable $exception, HttpError $formatInstruction)
     {
-        $exploded = explode('-', $attribute);
-        if ($exploded && count($exploded) > 1) {
-            foreach ($exploded as $index => &$word) {
-                if ($index == 0) {
-                    continue;
-                }
-                $word = ucfirst($word);
-            }
-            $attribute = implode('', $exploded);
-        }
-
         $staticParameter = $this->propertyAccessor->getValue($formatInstruction->getStaticParams(), $attribute);
         $classGetterName = $this->propertyAccessor->getValue($formatInstruction->getClassParams(), $attribute);
         if (null !== $classGetterName) {

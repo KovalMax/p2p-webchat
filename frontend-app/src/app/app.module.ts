@@ -16,6 +16,7 @@ import {AuthService} from "./auth/auth.service";
 import {TokenStorageService} from "./auth/token-storage.service";
 import {AuthInterceptorService} from "./auth/auth-interceptor.service";
 import {LoadingSpinnerComponent} from "./shared/loading-spinner/loading-spinner.component";
+import {RegistrationService} from "./registration/registration.service";
 
 @NgModule({
     declarations: [
@@ -38,6 +39,7 @@ import {LoadingSpinnerComponent} from "./shared/loading-spinner/loading-spinner.
         HttpClientModule,
     ],
     providers: [
+        RegistrationService,
         AuthService,
         TokenStorageService,
         {

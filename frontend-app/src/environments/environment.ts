@@ -4,9 +4,12 @@
 
 export const environment = {
     production: false,
-    backends: {
-        login: 'http://127.0.0.1:8099/api/v1/login',
-    },
+};
+
+export const backends = {
+    websocket: 'ws://127.0.0.1:8080/messenger',
+    login: 'http://127.0.0.1:8099/api/v1/login',
+    registration: 'http://127.0.0.1:8099/api/v1/users',
 };
 
 /*

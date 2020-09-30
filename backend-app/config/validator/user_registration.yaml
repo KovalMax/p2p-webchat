@@ -28,5 +28,12 @@ App\DTO\Request\UserRegistration:
           min: 1
           max: 60
 
+    nickName:
+      - NotBlank: ~
+      - Type: string
+      - Length:
+          min: 1
+          max: 60
+
     timezone:
       - Timezone: ~
