@@ -4,9 +4,9 @@
             <mat-card-title>Users online</mat-card-title>
         </mat-card-header>
         <mat-card-content>
-            <mat-selection-list #userList [multiple]="false">
-                <mat-list-option *ngFor="let user of users" [value]="user">
-                    {{ user }}
+            <mat-selection-list #list [multiple]="false" *ngIf="usersOnline | async">
+                <mat-list-option *ngFor="let user of usersOnline | async" [value]="user.id">
+                    {{ user.name }}
                 </mat-list-option>
             </mat-selection-list>
         </mat-card-content>

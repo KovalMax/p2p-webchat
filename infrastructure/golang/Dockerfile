@@ -1,4 +1,4 @@
-FROM golang:1.14-alpine3.11 AS build
+FROM golang:1.15-alpine3.12 AS build
 
 # Do not rebuild C libs, no need to use gcc for building Go code
 ENV CGO_ENABLED 0
@@ -13,7 +13,7 @@ COPY ./src .
 RUN go mod download
 RUN go build -a -installsuffix cgo -o main .
 
-FROM alpine:3.11
+FROM alpine:3.12
 RUN apk --no-cache add ca-certificates
 
 WORKDIR /usr/bin

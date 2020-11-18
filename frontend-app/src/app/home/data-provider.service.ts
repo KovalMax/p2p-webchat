@@ -1,29 +1,31 @@
 import {webSocket, WebSocketSubject} from "rxjs/webSocket";
 import {backends} from "../../environments/environment";
 import {Observable} from "rxjs";
+import {Client, Event} from "./event-model";
 
 export class DataProviderService {
-    private socket: WebSocketSubject<WebSocket>;
+    private socket: WebSocketSubject<WebSocket | Event>;
     private readonly url: string;
 
-    constructor(clientId: string, clientName: string) {
-        this.url = `${backends.websocket}?clientId=${clientId}&clientName=${clientName}`;
-        this.socket = webSocket(this.url);
+    public constructor(client: Client) {
+        this.url = `${backends.websocket}?clientId=${client.id}&clientName=${client.name}`;
+        this.socket = this.getSocket();
     }
 
-    public getObservable(): Observable<WebSocket> {
-        return this.connection().asObservable();
+    public getObservable(): Observable<WebSocket | Event> {
+        return this.getSocket().asObservable();
     }
 
-    public send(value: any) {
-        this.connection().next(value);
+    public send(event: Event): void {
+        this.getSocket().next(event);
     }
 
     public close(): void {
-        this.connection().complete();
+        this.socket.complete();
+        this.socket.unsubscribe();
     }
 
-    private connection(): WebSocketSubject<WebSocket> {
+    private getSocket(): WebSocketSubject<WebSocket | Event> {
         if (!this.socket || this.socket.closed) {
             this.socket = webSocket(this.url);
         }

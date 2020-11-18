@@ -27,7 +27,7 @@ start: ## - Starting all docker containers
 stop: ## - Stop all docker containers
 	@bash scripts/stop.sh $(APP_NAME)
 
-exec: ## - Exec some container e.g. make exec backend-app sh
+exec: ## - Exec some container e.g. make exec backend sh
 	docker-compose -p $(APP_NAME) exec $(RUN_ARGS)
 %:
 @:

@@ -4,6 +4,7 @@ import (
     "bytes"
     "encoding/json"
     "errors"
+    "fmt"
     "log"
     "net/http"
     "time"
@@ -12,8 +13,8 @@ import (
 )
 
 type ClientInfo struct {
-    id   string
-    name string
+    Id   string `json:"id,omitempty"`
+    Name string `json:"name,omitempty"`
 }
 
 type Client struct {
@@ -87,6 +88,8 @@ func (c *Client) writer() {
         case event, ok := <-c.sent:
             if err := c.conn.SetWriteDeadline(time.Now().Add(writeWait)); err != nil {
                 c.app.errors <- err
+
+                return
             }
 
             if !ok {
@@ -112,6 +115,8 @@ func (c *Client) writer() {
         case <-ticker.C:
             if err := c.conn.SetWriteDeadline(time.Now().Add(writeWait)); err != nil {
                 c.app.errors <- err
+
+                return
             }
 
             if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
@@ -131,11 +136,16 @@ func (c *Client) reader() {
 
     c.conn.SetReadLimit(maxMessageSize)
     if err := c.conn.SetReadDeadline(time.Now().Add(pongWait)); err != nil {
-        c.app.errors <- err
+        c.app.errors <- fmt.Errorf("error from read deadline. %w", err)
+
+        return
     }
+
     c.conn.SetPongHandler(func(p string) error {
         if err := c.conn.SetReadDeadline(time.Now().Add(pongWait)); err != nil {
-            c.app.errors <- err
+            c.app.errors <- fmt.Errorf("error from read deadline inside pong handler. %w", err)
+
+            return err
         }
 
         return nil
@@ -144,15 +154,20 @@ func (c *Client) reader() {
     for {
         msgType, message, err := c.conn.ReadMessage()
         if err != nil {
-            c.app.errors <- err
-            break
+            c.app.errors <- fmt.Errorf("error from read(%d) message. %w", msgType, err)
+
+            return
         }
 
-        message = bytes.TrimSpace(bytes.Replace(message, newline, space, -1))
+        message = bytes.TrimSpace(
+            bytes.Replace(message, newline, space, -1),
+        )
+
         event, err := buildMessageEvent(message, msgType)
         if err != nil {
-            c.app.errors <- err
-            break
+            c.app.errors <- fmt.Errorf("error from read(%d) build message. %w", msgType, err)
+
+            return
         }
 
         c.app.events <- event
@@ -164,7 +179,7 @@ func buildMessageEvent(rawMessage []byte, msgType int) (*MessageEvent, error) {
     if err := json.Unmarshal(rawMessage, clientMessage); err != nil {
         return nil, err
     }
-    log.Println("got message", clientMessage)
+    log.Println("got message", msgType, clientMessage)
 
     return &MessageEvent{msgType, clientMessage}, nil
 }

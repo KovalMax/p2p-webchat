@@ -26,10 +26,10 @@ const (
 )
 
 type Message struct {
-    Kind        MessageType
-    Source      string
-    Destination string
-    Context     interface{}
+    Kind        MessageType `json:"kind,omitempty"`
+    Source      string      `json:"source,omitempty"`
+    Destination string      `json:"destination,omitempty"`
+    Context     interface{} `json:"context,omitempty"`
 }
 
 func NewApplication(ech chan error) *Application {
@@ -45,20 +45,22 @@ func NewApplication(ech chan error) *Application {
 func (a *Application) Start() {
     for {
         select {
-        case newClient := <-a.register:
-            a.clients[newClient.info.id] = newClient
-        case closedClient := <-a.unregister:
-            delete(a.clients, closedClient.info.id)
-            close(closedClient.sent)
-        case event := <-a.events:
-            a.sendEvent(event)
+        case registeredClient := <-a.register:
+            a.clients[registeredClient.info.Id] = registeredClient
+        case disconnectedClient := <-a.unregister:
+            if _, ok := a.clients[disconnectedClient.info.Id]; ok {
+                delete(a.clients, disconnectedClient.info.Id)
+                close(disconnectedClient.sent)
+            }
+        case clientEvent := <-a.events:
+            a.sendEvent(clientEvent)
         }
     }
 }
 
 func (a *Application) Logger() {
     err := <-a.errors
-    log.Fatalf("Error from errChan listener. %q. Type %T", err.Error(), err)
+    log.Printf("Error from errChan listener. %q. Type %T", err.Error(), err)
 }
 
 func (a *Application) sendEvent(event *MessageEvent) {
@@ -69,10 +71,11 @@ func (a *Application) sendEvent(event *MessageEvent) {
             return
         }
 
-        online := make(map[string]string)
-        for id, val := range a.clients {
-            online[id] = val.info.name
+        var online []*ClientInfo
+        for _, val := range a.clients {
+            online = append(online, val.info)
         }
+
         event.message.Context = online
         client.sent <- event
     case SendMessage:
@@ -80,6 +83,7 @@ func (a *Application) sendEvent(event *MessageEvent) {
         if !ok {
             return
         }
+
         client.sent <- event
     }
 

@@ -1,7 +1,7 @@
 version: '3.7'
 
 services:
-  frontend-app:
+  frontend:
     container_name: messenger_frontend
     build:
       context: ../frontend-app
@@ -18,7 +18,7 @@ services:
     networks:
       - messenger-network
 
-  backend-app:
+  backend:
     container_name: messenger_backend
     build:
       context: php
@@ -34,19 +34,20 @@ services:
     volumes:
       - ../backend-app:/var/www
     depends_on:
-      - database-app
+      - database
     networks:
       - messenger-network
 
-  websocket-app:
-    restart: on-failure
+  websocket:
+    container_name: messenger_websocket
     build:
       context: ../websocket-app
       dockerfile: ../infrastructure/golang/Dockerfile
     networks:
       - messenger-network
 
-  web-server-app:
+  webserver:
+    container_name: messenger_webserver
     build:
       context: nginx
       args:
@@ -54,11 +55,12 @@ services:
     volumes:
       - ../backend-app/assets:/var/www/assets
     depends_on:
-      - backend-app
+      - backend
     networks:
       - messenger-network
 
-  database-app:
+  database:
+    container_name: messenger_db
     image: postgres:${APP_DB_VERSION}-alpine
     environment:
       POSTGRES_DB: ${APP_DB_NAME}

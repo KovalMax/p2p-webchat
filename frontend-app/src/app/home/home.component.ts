@@ -1,7 +1,8 @@
-import {ChangeDetectionStrategy, Component, OnDestroy, OnInit} from '@angular/core';
+import {ChangeDetectionStrategy, Component, HostListener, OnDestroy, OnInit} from '@angular/core';
 import {DataProviderService} from "./data-provider.service";
 import {EventType} from "./event-type.enum";
-import {EventModel} from "./event-model";
+import {Client, ClientModel, Event, EventModel} from "./event-model";
+import {BehaviorSubject, Observable, Subscription} from "rxjs";
 
 @Component({
     changeDetection: ChangeDetectionStrategy.OnPush,
@@ -10,29 +11,56 @@ import {EventModel} from "./event-model";
     styleUrls: ['./home.component.css']
 })
 export class HomeComponent implements OnInit, OnDestroy {
-    public users?: string[];
+    public usersOnline: BehaviorSubject<Client[]>;
     private dataProvider: DataProviderService;
-    private readonly id: number;
+    private subscription: Subscription = new Subscription;
+    private readonly client: Client;
 
-    constructor() {
-        let min = Math.ceil(100);
-        let max = Math.floor(200);
-        this.id = Math.floor(Math.random() * (max - min + 1)) + min;
+    public constructor() {
+        let id = (
+            Math.floor(
+                Math.random() * (
+                Math.floor(200) - Math.ceil(100) + 1)
+            ) + Math.ceil(100)
+        ).toString(10);
+        this.client = ClientModel.from(id, `client-${id}`);
 
-        this.dataProvider = new DataProviderService(this.id.toString(10), `client-${this.id}`);
+        this.dataProvider = new DataProviderService(this.client);
+        this.usersOnline = new BehaviorSubject<Client[]>([]);
     }
 
-    ngOnInit(): void {
-        this.dataProvider.getObservable().subscribe(
-            msg => console.log('Got msg: ', msg),
-            err => console.log('Got error: ', err),
-            () => console.log('Complete')
+    public ngOnInit(): void {
+        this.subscription = this.dataProvider.getObservable().subscribe(
+            msg => {
+                console.log('Got msg: ', msg);
+                this.handleIncomingEvent(msg as Event);
+            },
+            err => {
+                console.log('Got error: ', err);
+            },
+            () => {
+                console.log('Complete');
+            }
         );
 
-        this.dataProvider.send(new EventModel(EventType.Clients, this.id.toString(10)));
+        this.sendEventGetUsersOnline();
     }
 
-    ngOnDestroy(): void {
+    @HostListener('window:beforeunload')
+    public ngOnDestroy(): void {
+        this.subscription.unsubscribe();
         this.dataProvider.close();
+    }
+
+    private handleIncomingEvent(event: Event): void {
+        switch (event.kind) {
+            case EventType.Clients:
+                this.usersOnline.next(event.context as Client[]);
+                break;
+        }
+    }
+
+    private sendEventGetUsersOnline(): void {
+        this.dataProvider.send(EventModel.buildOnlineUsersEvent(this.client.id));
     }
 }
