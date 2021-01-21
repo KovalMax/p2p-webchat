@@ -10,7 +10,7 @@
   },
   "version": "1.0.0",
   "dependencies": {
-    "socket.io": "^2.3"
+    "socket.io": "^2.4"
   },
   "scripts": {
     "build": "rollup -c",
