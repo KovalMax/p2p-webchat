@@ -6,34 +6,17 @@ namespace App\Service;
 use App\DTO\Request\UserRegistration;
 use App\Entity\User;
 use App\Repository\UserRepository;
-use Symfony\Component\Security\Core\Encoder\UserPasswordEncoderInterface;
+use Exception;
+use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 
 final class UserService
 {
-    /**
-     * @var UserPasswordEncoderInterface
-     */
-    private UserPasswordEncoderInterface $encoder;
-
-    /**
-     * @var UserRepository
-     */
-    private UserRepository $repository;
-
-    /**
-     * @param UserPasswordEncoderInterface $encoder
-     * @param UserRepository $repository
-     */
-    public function __construct(UserPasswordEncoderInterface $encoder, UserRepository $repository)
+    public function __construct(private readonly UserPasswordHasherInterface $encoder, private readonly UserRepository $repository)
     {
-        $this->encoder = $encoder;
-        $this->repository = $repository;
     }
 
     /**
-     * @param UserRegistration $dto
-     *
-     * @throws \Exception
+     * @throws Exception
      */
     public function createNewUser(UserRegistration $dto): void
     {
@@ -45,7 +28,7 @@ final class UserService
             ->setTimezone($dto->timezone);
 
         $user->setPassword(
-            $this->encoder->encodePassword($user, $dto->password)
+            $this->encoder->hashPassword($user, $dto->password)
         );
 
         $this->repository->save($user);

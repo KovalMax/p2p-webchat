@@ -5,7 +5,8 @@ namespace App\Repository;
 use App\Entity\Message;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Common\Collections\Criteria;
-use Doctrine\Common\Persistence\ManagerRegistry;
+use Doctrine\Persistence\ManagerRegistry;
+use Exception;
 
 /**
  * @method Message|null find($id, $lockMode = null, $lockVersion = null)
@@ -24,9 +25,6 @@ final class MessageRepository extends ServiceEntityRepository
     }
 
     /**
-     * @param null|int   $limit
-     * @param null|array $orderBy
-     *
      * @return Message[]
      */
     public function getLastMessages(?int $limit = null, ?array $orderBy = null): iterable
@@ -42,10 +40,7 @@ final class MessageRepository extends ServiceEntityRepository
     }
 
     /**
-     * @param Message $message
-     *
-     * @return void
-     * @throws \Exception
+     * @throws Exception
      */
     public function saveMessage(Message $message): void
     {

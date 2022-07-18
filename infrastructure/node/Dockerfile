@@ -1,4 +1,4 @@
-FROM node:12.18
+FROM node:16
 
 ARG UID=1000
 ARG GID=1000
@@ -8,7 +8,7 @@ RUN mkdir -p /home/app/node_modules && chown -R $UID:$GID /home/app
 
 WORKDIR /home/app
 
-RUN groupmod -g $GID $NODE_USER_NAME \
+RUN groupmod -og $GID $NODE_USER_NAME \
   && usermod -u $UID -g $GID $NODE_USER_NAME
 
 COPY package*.json ./

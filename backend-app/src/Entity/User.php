@@ -6,32 +6,30 @@ use App\Traits\CreatedAtTrait;
 use App\Traits\IdentityTrait;
 use Doctrine\Common\Collections\ArrayCollection;
 use Doctrine\Common\Collections\Collection;
+use Exception;
+use Serializable;
+use Symfony\Component\Security\Core\User\PasswordAuthenticatedUserInterface;
 use Symfony\Component\Security\Core\User\UserInterface;
+use function serialize;
+use function unserialize;
 
-class User implements UserInterface, \Serializable
+class User implements UserInterface, Serializable, PasswordAuthenticatedUserInterface
 {
     use CreatedAtTrait, IdentityTrait;
 
     public const ROLE_USER = 'ROLE_USER';
 
     private Collection $messages;
-
     private string $email;
-
     private string $password;
-
     private string $firstName;
-
     private string $lastName;
-
     private string $nickName;
-
     private string $timezone;
-
     private array $roles;
 
     /**
-     * @throws \Exception
+     * @throws Exception
      */
     public function __construct()
     {
@@ -57,9 +55,6 @@ class User implements UserInterface, \Serializable
         return $this->email;
     }
 
-    /**
-     * @see UserInterface
-     */
     public function getRoles(): array
     {
         return $this->roles;
@@ -72,12 +67,9 @@ class User implements UserInterface, \Serializable
         return $this;
     }
 
-    /**
-     * @see UserInterface
-     */
     public function getPassword(): string
     {
-        return (string)$this->password;
+        return $this->password;
     }
 
     public function setPassword(string $password): self
@@ -87,19 +79,11 @@ class User implements UserInterface, \Serializable
         return $this;
     }
 
-    /**
-     * @return string
-     */
     public function getFirstName(): string
     {
         return $this->firstName;
     }
 
-    /**
-     * @param string $firstName
-     *
-     * @return User
-     */
     public function setFirstName(string $firstName): User
     {
         $this->firstName = $firstName;
@@ -107,19 +91,11 @@ class User implements UserInterface, \Serializable
         return $this;
     }
 
-    /**
-     * @return string
-     */
     public function getLastName(): string
     {
         return $this->lastName;
     }
 
-    /**
-     * @param string $lastName
-     *
-     * @return User
-     */
     public function setLastName(string $lastName): User
     {
         $this->lastName = $lastName;
@@ -127,19 +103,11 @@ class User implements UserInterface, \Serializable
         return $this;
     }
 
-    /**
-     * @return string
-     */
     public function getNickName(): string
     {
         return $this->nickName;
     }
 
-    /**
-     * @param string $nickName
-     *
-     * @return User
-     */
     public function setNickName(string $nickName): self
     {
         $this->nickName = $nickName;
@@ -147,19 +115,11 @@ class User implements UserInterface, \Serializable
         return $this;
     }
 
-    /**
-     * @return string
-     */
     public function getTimezone(): string
     {
         return $this->timezone;
     }
 
-    /**
-     * @param string $timezone
-     *
-     * @return User
-     */
     public function setTimezone(string $timezone): self
     {
         $this->timezone = $timezone;
@@ -167,20 +127,12 @@ class User implements UserInterface, \Serializable
         return $this;
     }
 
-    /**
-     * @see UserInterface
-     */
     public function getSalt(): void
     {
-        return;
     }
 
-    /**
-     * @see UserInterface
-     */
     public function eraseCredentials(): void
     {
-        return;
     }
 
     public function serialize(): string
@@ -198,7 +150,7 @@ class User implements UserInterface, \Serializable
         );
     }
 
-    public function unserialize($serialized): void
+    public function unserialize($data): void
     {
         [
             $this->id,
@@ -208,6 +160,32 @@ class User implements UserInterface, \Serializable
             $this->firstName,
             $this->lastName,
             $this->roles,
-        ] = unserialize($serialized);
+        ] = unserialize($data);
+    }
+
+    public function __serialize(): array
+    {
+        return [
+            $this->id,
+            $this->email,
+            $this->password,
+            $this->createdAt,
+            $this->firstName,
+            $this->lastName,
+            $this->roles,
+        ];
+    }
+
+    public function __unserialize(array $data): void
+    {
+        [
+            $this->id,
+            $this->email,
+            $this->password,
+            $this->createdAt,
+            $this->firstName,
+            $this->lastName,
+            $this->roles,
+        ] = $data;
     }
 }

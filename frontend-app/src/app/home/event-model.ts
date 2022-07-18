@@ -1,4 +1,4 @@
-import {EventType} from "./event-type.enum";
+import {EventType} from './event-type.enum';
 
 export interface Event {
     kind: EventType;
@@ -12,7 +12,7 @@ export interface Client {
     name: string;
 }
 
-export class ClientModel implements Client{
+export class ClientModel implements Client {
     constructor(private _id: string, private _name: string) {
     }
 

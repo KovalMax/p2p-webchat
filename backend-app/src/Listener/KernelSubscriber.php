@@ -9,19 +9,14 @@ use Symfony\Component\EventDispatcher\EventSubscriberInterface;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpKernel\Event\ExceptionEvent;
 use Symfony\Component\HttpKernel\KernelEvents;
+use Throwable;
 
 class KernelSubscriber implements EventSubscriberInterface
 {
     use PsrLoggerTrait;
 
-    /**
-     * @var HttpErrorFormatter
-     */
-    private HttpErrorFormatter $httpErrorFormatter;
-
-    public function __construct(HttpErrorFormatter $httpErrorFormatter)
+    public function __construct(private readonly HttpErrorFormatter $httpErrorFormatter)
     {
-        $this->httpErrorFormatter = $httpErrorFormatter;
     }
 
     /**
@@ -36,11 +31,6 @@ class KernelSubscriber implements EventSubscriberInterface
         ];
     }
 
-    /**
-     * @param ExceptionEvent $event
-     *
-     * @return void
-     */
     public function onKernelException(ExceptionEvent $event): void
     {
         $exception = $event->getThrowable();
@@ -49,7 +39,7 @@ class KernelSubscriber implements EventSubscriberInterface
         $event->setResponse(new JsonResponse($error->getError(), $error->getResponseCode()));
     }
 
-    private function logException(\Throwable $exception): void
+    private function logException(Throwable $exception): void
     {
         if ($exception instanceof ConstraintValidationException) {
             return;

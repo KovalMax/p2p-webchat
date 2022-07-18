@@ -8,24 +8,10 @@ use Symfony\Component\EventDispatcher\EventSubscriberInterface;
 
 class JwtSubscriber implements EventSubscriberInterface
 {
-    /**
-     * @var int
-     */
-    private int $tokenLifetime;
-
-    /**
-     * @var string
-     */
-    private string $tokenType;
-
-    /**
-     * @param int    $tokenLifetime
-     * @param string $tokenType
-     */
-    public function __construct(int $tokenLifetime, string $tokenType)
-    {
-        $this->tokenLifetime = $tokenLifetime;
-        $this->tokenType = $tokenType;
+    public function __construct(
+        private readonly int $tokenLifetime,
+        private readonly string $tokenType
+    ) {
     }
 
     /**

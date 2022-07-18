@@ -52,7 +52,7 @@ export class RegistrationService {
                 {
                     validators: [
                         Validators.required,
-                        Validators.minLength(1),
+                        Validators.minLength(2),
                         Validators.maxLength(60)
                     ]
                 }
@@ -62,11 +62,21 @@ export class RegistrationService {
                 {
                     validators: [
                         Validators.required,
-                        Validators.minLength(1),
+                        Validators.minLength(2),
                         Validators.maxLength(60)
                     ]
                 }
             ],
+            nickName: [
+                '',
+                {
+                    validators: [
+                        Validators.required,
+                        Validators.minLength(2),
+                        Validators.maxLength(60)
+                    ]
+                }
+            ]
         },
         options: {
             validators: ApplicationValidators.compare('password', 'confirmPassword')

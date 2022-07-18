@@ -3,6 +3,7 @@ export interface Registration {
     password: string;
     firstName: string;
     lastName: string;
+    nickName: string;
     timezone: string;
 }
 
@@ -15,6 +16,7 @@ export class RegistrationModel implements Registration {
         public email: string,
         public firstName: string,
         public lastName: string,
+        public nickName: string,
         public password: string,
         public timezone: string,
     ) {
@@ -30,6 +32,9 @@ export class RegistrationModel implements Registration {
         if (!('lastName' in values)) {
             throw new Error('lastName key not found');
         }
+        if (!('nickName' in values)) {
+            throw new Error('nickName key not found');
+        }
         if (!('password' in values)) {
             throw new Error('password key not found');
         }
@@ -38,6 +43,7 @@ export class RegistrationModel implements Registration {
             values.email,
             values.firstName,
             values.lastName,
+            values.nickName,
             values.password,
             values.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone,
         );

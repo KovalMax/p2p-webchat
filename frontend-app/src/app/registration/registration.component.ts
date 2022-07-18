@@ -68,11 +68,15 @@ export class RegistrationComponent {
     }
 
     public get firstName(): AbstractControl {
-        return this.form.controls.confirmPassword;
+        return this.form.controls.firstName;
     }
 
     public get lastName(): AbstractControl {
-        return this.form.controls.confirmPassword;
+        return this.form.controls.lastName;
+    }
+
+    public get nickName(): AbstractControl {
+        return this.form.controls.nickName;
     }
 
     public get confirmPassword(): AbstractControl {

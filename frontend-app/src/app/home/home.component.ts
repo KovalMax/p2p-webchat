@@ -1,8 +1,8 @@
 import {ChangeDetectionStrategy, Component, HostListener, OnDestroy, OnInit} from '@angular/core';
-import {DataProviderService} from "./data-provider.service";
-import {EventType} from "./event-type.enum";
-import {Client, ClientModel, Event, EventModel} from "./event-model";
-import {BehaviorSubject, Observable, Subscription} from "rxjs";
+import {DataProviderService} from './data-provider.service';
+import {EventType} from './event-type.enum';
+import {Client, ClientModel, Event, EventModel} from './event-model';
+import {BehaviorSubject, Subscription} from 'rxjs';
 
 @Component({
     changeDetection: ChangeDetectionStrategy.OnPush,
@@ -17,7 +17,7 @@ export class HomeComponent implements OnInit, OnDestroy {
     private readonly client: Client;
 
     public constructor() {
-        let id = (
+        const id = (
             Math.floor(
                 Math.random() * (
                 Math.floor(200) - Math.ceil(100) + 1)
@@ -32,7 +32,6 @@ export class HomeComponent implements OnInit, OnDestroy {
     public ngOnInit(): void {
         this.subscription = this.dataProvider.getObservable().subscribe(
             msg => {
-                console.log('Got msg: ', msg);
                 this.handleIncomingEvent(msg as Event);
             },
             err => {
@@ -53,9 +52,23 @@ export class HomeComponent implements OnInit, OnDestroy {
     }
 
     private handleIncomingEvent(event: Event): void {
+        const clients = this.usersOnline.getValue();
         switch (event.kind) {
             case EventType.Clients:
                 this.usersOnline.next(event.context as Client[]);
+                break;
+            case EventType.NewConnection:
+                clients.push(ClientModel.from(event.source, event.context as string));
+                this.usersOnline.next(clients);
+                break;
+            case EventType.RemoveConnection:
+                clients.forEach((item, index) => {
+                    if (item.id === event.source) {
+                        clients.splice(index, 1);
+                        return;
+                    }
+                });
+                this.usersOnline.next(clients);
                 break;
         }
     }

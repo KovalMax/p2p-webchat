@@ -5,33 +5,19 @@ namespace App\Controller;
 
 use App\DTO\Request\UserRegistration;
 use App\Service\UserService;
-use App\Traits\PsrLoggerTrait;
+use Exception;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Response;
 
 final class RegistrationController extends AbstractController
 {
-    use PsrLoggerTrait;
-
-    /**
-     * @var UserService
-     */
-    private UserService $registrationService;
-
-    /**
-     * @param UserService $registrationService
-     */
-    public function __construct(UserService $registrationService)
+    public function __construct(private readonly UserService $registrationService)
     {
-        $this->registrationService = $registrationService;
     }
 
     /**
-     * @param UserRegistration $registration
-     *
-     * @return JsonResponse
-     * @throws \Exception
+     * @throws Exception
      */
     public function __invoke(UserRegistration $registration): JsonResponse
     {
