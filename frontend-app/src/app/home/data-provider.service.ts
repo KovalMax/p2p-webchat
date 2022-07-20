@@ -1,7 +1,7 @@
-import {webSocket, WebSocketSubject} from "rxjs/webSocket";
-import {backends} from "../../environments/environment";
-import {Observable} from "rxjs";
-import {Client, Event} from "./event-model";
+import {webSocket, WebSocketSubject} from 'rxjs/webSocket';
+import {backends} from '../../environments/environment';
+import {Observable} from 'rxjs';
+import {Client, Event} from './event-model';
 
 export class DataProviderService {
     private socket: WebSocketSubject<WebSocket | Event>;

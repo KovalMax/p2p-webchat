@@ -5,7 +5,7 @@
     <form
         (ngSubmit)="onSubmit()"
         *ngIf="!isLoading"
-        [formGroup]="form"
+        [formGroup]="loginForm"
         fxLayout="column"
         fxLayoutAlign="center center"
         fxLayoutGap="1em"
@@ -17,9 +17,9 @@
                 placeholder="Your email"
                 type="email"
             >
-            <mat-hint *ngIf="form.get('email')?.untouched">Please enter a valid email.</mat-hint>
-            <mat-error *ngIf="form.get('email')?.getError('required')">Field is required!</mat-error>
-            <mat-error *ngIf="form.get('email')?.getError('email')">Invalid email.</mat-error>
+            <mat-hint *ngIf="email.untouched">Please enter a valid email.</mat-hint>
+            <mat-error *ngIf="email.errors?.['required']">Field is required!</mat-error>
+            <mat-error *ngIf="email.errors?.['email']">Invalid email.</mat-error>
         </mat-form-field>
 
         <mat-form-field>
@@ -29,9 +29,9 @@
                 placeholder="Your password"
                 type="password"
             >
-            <mat-hint *ngIf="form.get('password')?.untouched">Please enter your password.</mat-hint>
-            <mat-error *ngIf="form.get('password')?.getError('required')">Field is required!</mat-error>
+            <mat-hint *ngIf="password.untouched">Please enter your password.</mat-hint>
+            <mat-error *ngIf="password.errors?.['required']">Field is required!</mat-error>
         </mat-form-field>
-        <button [disabled]="form.invalid" color="primary" mat-raised-button type="submit">Sign In</button>
+        <button [disabled]="loginForm.invalid" color="primary" mat-raised-button type="submit">Sign In</button>
     </form>
 </section>

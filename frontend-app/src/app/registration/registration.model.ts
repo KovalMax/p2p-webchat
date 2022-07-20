@@ -1,3 +1,12 @@
+export interface RegistrationForm {
+    email: string;
+    password: string;
+    confirmPassword: string;
+    firstName: string;
+    lastName: string;
+    nickName: string;
+}
+
 export interface Registration {
     email: string;
     password: string;
@@ -22,7 +31,7 @@ export class RegistrationModel implements Registration {
     ) {
     }
 
-    static createFrom(values: Registration): Registration {
+    static createFrom(values: RegistrationForm): Registration {
         if (!('email' in values)) {
             throw new Error('email key not found');
         }
@@ -45,7 +54,7 @@ export class RegistrationModel implements Registration {
             values.lastName,
             values.nickName,
             values.password,
-            values.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone,
+            Intl.DateTimeFormat().resolvedOptions().timeZone,
         );
     }
 }

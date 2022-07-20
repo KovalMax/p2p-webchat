@@ -127,5 +127,7 @@
             }
         }
     },
-    "defaultProject": "messenger"
+    "cli": {
+      "analytics": false
+    }
 }

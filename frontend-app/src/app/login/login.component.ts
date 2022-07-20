@@ -1,9 +1,11 @@
-import {Component} from "@angular/core";
-import {FormBuilder, FormGroup, Validators} from "@angular/forms";
-import {AuthService} from "../auth/auth.service";
-import {Router} from "@angular/router";
-import {MatSnackBar} from "@angular/material/snack-bar";
-import {finalize} from "rxjs/operators";
+import {Component} from '@angular/core';
+import {FormControl, FormGroup, Validators} from '@angular/forms';
+import {AuthService} from '../auth/auth.service';
+import {Router} from '@angular/router';
+import {MatSnackBar} from '@angular/material/snack-bar';
+import {finalize} from 'rxjs/operators';
+import {ControlsOf} from '../shared/model/controlOf';
+import {Login} from './login';
 
 @Component({
     selector: 'app-login',
@@ -12,34 +14,40 @@ import {finalize} from "rxjs/operators";
 })
 
 export class LoginComponent {
-    public isLoading: boolean = false;
-    public form!: FormGroup;
+    public isLoading = false;
+    public loginForm: FormGroup<ControlsOf<Login>>;
 
     constructor(
         private client: AuthService,
         private router: Router,
         private snackBar: MatSnackBar,
-        private builder: FormBuilder
     ) {
-        this.form = builder.group({
-            email: builder.control(
+        this.loginForm = new FormGroup<ControlsOf<Login>>({
+            email: new FormControl(
                 '',
-                {validators: [Validators.required, Validators.email]}
+                {
+                    validators: [Validators.required, Validators.email],
+                    nonNullable: true
+                }
             ),
-            password: builder.control(
+            password: new FormControl(
                 '',
-                {validators: [Validators.required]}
+                {
+                    validators: [Validators.required],
+                    nonNullable: true
+                }
             )
         });
     }
 
     public onSubmit(): void {
-        if (this.form.invalid) {
+        if (this.loginForm.invalid) {
             return;
         }
 
         this.toggleFormLoading();
-        this.client.login(this.form.getRawValue())
+        this.client
+            .login(this.loginForm.getRawValue())
             .pipe(finalize(() => this.toggleFormLoading()))
             .subscribe(
                 () => {
@@ -52,12 +60,20 @@ export class LoginComponent {
                         'Close',
                         {
                             duration: 60 * 1000,
-                            horizontalPosition: "center",
-                            verticalPosition: "top",
+                            horizontalPosition: 'center',
+                            verticalPosition: 'top',
                         }
                     );
                 }
             );
+    }
+
+    public get email() {
+        return this.loginForm.controls.email;
+    }
+
+    public get password() {
+        return this.loginForm.controls.password;
     }
 
     private toggleFormLoading(): void {

@@ -1,8 +1,8 @@
-import {Injectable} from "@angular/core";
-import {ActivatedRouteSnapshot, Resolve, Router, RouterStateSnapshot} from "@angular/router";
-import {AuthService} from "./auth.service";
-import {Observable} from "rxjs";
-import {map, take} from "rxjs/operators";
+import {Injectable} from '@angular/core';
+import {ActivatedRouteSnapshot, Resolve, Router, RouterStateSnapshot} from '@angular/router';
+import {AuthService} from './auth.service';
+import {Observable} from 'rxjs';
+import {map, take} from 'rxjs/operators';
 
 @Injectable({providedIn: 'root'})
 export class AuthResolver implements Resolve<boolean> {

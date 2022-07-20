@@ -1,7 +1,7 @@
 import {Component, EventEmitter, OnDestroy, OnInit, Output} from '@angular/core';
-import {AuthService} from "../../auth/auth.service";
-import {Router} from "@angular/router";
-import {Subscription} from "rxjs";
+import {AuthService} from '../../auth/auth.service';
+import {Router} from '@angular/router';
+import {Subscription} from 'rxjs';
 
 @Component({
     selector: 'app-side',
@@ -10,7 +10,7 @@ import {Subscription} from "rxjs";
 })
 export class SideComponent implements OnInit, OnDestroy {
     @Output() closeSidenav = new EventEmitter<void>();
-    public isAuthenticated: boolean = false;
+    public isAuthenticated = false;
     private tokenSubscription!: Subscription;
 
     constructor(private authService: AuthService, private router: Router) {

@@ -13,14 +13,14 @@ import {BehaviorSubject, Subscription} from 'rxjs';
 export class HomeComponent implements OnInit, OnDestroy {
     public usersOnline: BehaviorSubject<Client[]>;
     private dataProvider: DataProviderService;
-    private subscription: Subscription = new Subscription;
+    private subscription: Subscription = new Subscription();
     private readonly client: Client;
 
     public constructor() {
         const id = (
             Math.floor(
                 Math.random() * (
-                Math.floor(200) - Math.ceil(100) + 1)
+                    Math.floor(200) - Math.ceil(100) + 1)
             ) + Math.ceil(100)
         ).toString(10);
         this.client = ClientModel.from(id, `client-${id}`);

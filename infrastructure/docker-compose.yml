@@ -13,8 +13,8 @@ services:
     environment:
       NODE_ENV: ${NODE_ENV}
     volumes:
-      - ../frontend-app:/home/app
-      - messenger-node-modules:/home/app/node_modules
+      - ../frontend-app:/app
+      - messenger-node-modules:/app/node_modules
     networks:
       - messenger-network
 

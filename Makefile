@@ -28,4 +28,4 @@ exec: ## - Exec some docker container e.g. make exec backend sh (backend just a 
 	make -C infrastructure exec $(RUN_ARGS)
 
 copy_node_modules: ## - Copying node modules from container to host machine
-	@docker cp messenger_frontend:/home/app/node_modules frontend-app/node_modules
+	@docker cp messenger_frontend:/app/node_modules frontend-app/

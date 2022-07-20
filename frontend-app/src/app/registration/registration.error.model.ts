@@ -9,5 +9,5 @@ export interface InvalidParam {
 }
 
 export interface InvalidParamMap {
-    [name:string]: string
+    [name: string]: string;
 }
