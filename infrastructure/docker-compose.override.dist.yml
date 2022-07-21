@@ -3,9 +3,9 @@ version: '3.7'
 services:
   websocket:
     build:
-      target: cli # for local development
+      target: dev
     volumes:
-      - ../websocket-app:/go/app # for local development
+      - ../websocket-app:/app
     ports:
       - '8080:8080'
 
