@@ -1,33 +1,34 @@
 .DEFAULT_GOAL := help
-.PHONY: help run stop
-
-help:
-	@echo ''
-	@fgrep -h "##" $(MAKEFILE_LIST) | fgrep -v fgrep | sed -e 's/\\$$//' | sed -e 's/##//'
-	@echo ''
-
-KEYS := build exec
 APP_NAME ?= "messenger"
 
-define LOOPBODY
-  ifneq ($$(filter $$(KEYS),$(v)),)
-    RUN_ARGS := $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS))
-    $(eval $(RUN_ARGS):;@:)
-  endif
-endef
+ifeq (exec,$(firstword $(MAKECMDGOALS)))
+  # use the rest as arguments for "exec"
+  RUN_ARGS := $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS))
+  # ...and turn them into do-nothing targets
+  $(eval $(RUN_ARGS):;@:)
+endif
 
-$(foreach v,$(firstword $(MAKECMDGOALS)),$(eval $(LOOPBODY)))
+.PHONY: help
+help:
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
 
-## Commands:
-start: ## - Starting all docker containers
-	cp -n .env.dist .env || true
-	cp -n docker-compose.override.dist.yml docker-compose.override.yml || true
+.PHONY: start
+start: check_dist_files ## - Starting all docker containers from compose file
 	@bash scripts/start.sh $(APP_NAME)
 
-stop: ## - Stop all docker containers
+.PHONY: stop
+stop: ## - Stop all docker containers from compose file
 	@bash scripts/stop.sh $(APP_NAME)
 
-exec: ## - Exec some container e.g. make exec app-fpm sh
+.PHONY: build
+build: check_dist_files ## - build all docker containers from compose file
+	@bash scripts/build.sh $(APP_NAME)
+
+.PHONY: exec
+exec: ## - Exec some docker container e.g. make exec backend sh (backend just a service name from compose file)
 	docker-compose -p $(APP_NAME) exec $(RUN_ARGS)
-%:
-@:
+
+.PHONY: check_dist_files
+check_dist_files:
+	cp -n .env.dist .env || true
+	cp -n docker-compose.override.dist.yml docker-compose.override.yml || true

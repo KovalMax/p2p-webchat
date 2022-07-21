@@ -1,22 +1,24 @@
-FROM node:13.8-alpine3.11
+FROM node:16
 
 ARG UID=1000
 ARG GID=1000
 ARG NODE_USER_NAME=node
 
-WORKDIR /var/www
+RUN mkdir -p /app/node_modules && chown -R $UID:$GID /app
 
-RUN deluser --remove-home $NODE_USER_NAME \
-    && addgroup -S $NODE_USER_NAME -g $GID \
-    && adduser -S -G $NODE_USER_NAME -u $UID $NODE_USER_NAME
+WORKDIR /app
+
+RUN groupmod -og $GID $NODE_USER_NAME \
+  && usermod -u $UID -g $GID $NODE_USER_NAME
 
 COPY package*.json ./
 
-RUN npm i --quiet \
-    && npm cache clean --force
+RUN npm i
 
-COPY . .
+COPY --chown=$UID:$GID . .
 
 USER $NODE_USER_NAME
 
-CMD npm run start:$NODE_ENV
+EXPOSE 4200
+
+CMD npm run start

@@ -1,0 +1,7 @@
+.home-container {
+    text-align: center;
+}
+
+mat-card::ng-deep.mat-card-header-text {
+    width: 100%;
+}

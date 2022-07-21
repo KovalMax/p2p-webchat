@@ -1,10 +1,22 @@
 version: '3.7'
 
 services:
-  app-web-server:
+  websocket:
+    build:
+      target: cli # for local development
+    volumes:
+      - ../websocket-app:/go/app # for local development
     ports:
-      - 8099:8081
+      - '8080:8080'
 
-  app-db:
+  webserver:
     ports:
-      - 3379:3306
+      - '8099:8081'
+
+  frontend:
+    ports:
+      - '4200:4200'
+
+  database:
+    ports:
+      - '3379:5432'

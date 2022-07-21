@@ -1,4 +1,4 @@
-FROM nginx:1.17-alpine
+FROM nginx:1.18-alpine
 
 ARG SERVER_NAME=localhost
 

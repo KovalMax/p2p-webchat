@@ -1,28 +1,25 @@
 version: '3.7'
 
 services:
-  app-node:
-    container_name: messenger_node
+  frontend:
+    container_name: messenger_frontend
     build:
-      context: ../socket-app
+      context: ../frontend-app
+      dockerfile: ../infrastructure/node/Dockerfile
       args:
         UID: ${UID}
         GID: ${GID}
         NODE_USER_NAME: ${NODE_USER_NAME}
-      dockerfile: ../infrastructure/node/Dockerfile
     environment:
-      SOCKET_PORT: ${SOCKET_PORT}
       NODE_ENV: ${NODE_ENV}
-      SSL_KEY: ${SSL_KEY}
-      SSL_CERT: ${SSL_CERT}
     volumes:
-      - /var/www/node_modules
-      - ../socket-app:/var/www
+      - ../frontend-app:/app
+      - messenger-node-modules:/app/node_modules
     networks:
-      - app-network
+      - messenger-network
 
-  app-fpm:
-    container_name: messenger_fpm
+  backend:
+    container_name: messenger_backend
     build:
       context: php
       args:
@@ -30,42 +27,54 @@ services:
         GID: ${GID}
         FPM_USER_NAME: ${FPM_USER_NAME}
         XDEBUG: ${XDEBUG}
+        JWT_KEY_PASS: ${JWT_KEY_PASS}
+        JWT_KEY_PATH: ${JWT_KEY_PATH}
     env_file:
       - .env
     volumes:
-      - ../web-app:/var/www
+      - ../backend-app:/var/www
     depends_on:
-      - app-db
+      - database
     networks:
-      - app-network
+      - messenger-network
 
-  app-web-server:
+  websocket:
+    container_name: messenger_websocket
+    build:
+      context: ../websocket-app
+      dockerfile: ../infrastructure/golang/Dockerfile
+    networks:
+      - messenger-network
+
+  webserver:
+    container_name: messenger_webserver
     build:
       context: nginx
       args:
         SERVER_NAME: ${SERVER_NAME}
     volumes:
-      - ../web-app/assets:/var/www/assets
+      - ../backend-app/assets:/var/www/assets
     depends_on:
-      - app-fpm
+      - backend
     networks:
-      - app-network
+      - messenger-network
 
-  app-db:
+  database:
+    container_name: messenger_db
     image: postgres:${APP_DB_VERSION}-alpine
     environment:
       POSTGRES_DB: ${APP_DB_NAME}
       POSTGRES_USER: ${APP_DB_USER}
       POSTGRES_PASSWORD: ${APP_DB_PASSWORD}
     volumes:
-      - app-db-volume:/var/lib/postgresql/data
+      - messenger-db:/var/lib/postgresql/data
     networks:
-      - app-network
+      - messenger-network
 
 volumes:
-  app-db-volume:
-  app-node-modules:
+  messenger-db:
+  messenger-node-modules:
 
 networks:
-  app-network:
+  messenger-network:
     driver: bridge
