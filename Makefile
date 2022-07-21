@@ -24,8 +24,8 @@ build: ## - build all docker containers from compose file
 	make -C infrastructure build
 
 .PHONY: exec
-exec: ## - Exec some docker container e.g. make exec backend sh (backend just a service name from compose file)
+exec: ## - Exec some docker container e.g. make exec backend sh (for list of containers see infrastructure/docker-compose.yml)
 	make -C infrastructure exec $(RUN_ARGS)
 
-copy_node_modules: ## - Copying node modules from container to host machine
+copy_node_modules: ## - Copying node modules from container to your host machine(since angular app have a dedicated volume for that)
 	@docker cp messenger_frontend:/app/node_modules frontend-app/
