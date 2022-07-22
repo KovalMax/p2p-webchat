@@ -176,9 +176,6 @@
     "psr/event-dispatcher": {
         "version": "1.0.0"
     },
-    "psr/link": {
-        "version": "1.0.0"
-    },
     "psr/log": {
         "version": "1.1.2"
     },
@@ -205,9 +202,6 @@
         "files": [
             "config/packages/sensio_framework_extra.yaml"
         ]
-    },
-    "symfony/asset": {
-        "version": "v5.0.1"
     },
     "symfony/browser-kit": {
         "version": "v5.0.1"
@@ -273,9 +267,6 @@
     "symfony/event-dispatcher-contracts": {
         "version": "v2.0.1"
     },
-    "symfony/expression-language": {
-        "version": "v5.0.1"
-    },
     "symfony/filesystem": {
         "version": "v5.0.1"
     },
@@ -293,9 +284,6 @@
         "files": [
             ".env"
         ]
-    },
-    "symfony/form": {
-        "version": "v5.0.1"
     },
     "symfony/framework-bundle": {
         "version": "4.4",
@@ -389,9 +377,6 @@
             "config/packages/notifier.yaml"
         ]
     },
-    "symfony/options-resolver": {
-        "version": "v5.0.1"
-    },
     "symfony/orm-pack": {
         "version": "v1.0.7"
     },
@@ -414,9 +399,6 @@
     "symfony/polyfill-intl-grapheme": {
         "version": "v1.13.1"
     },
-    "symfony/polyfill-intl-icu": {
-        "version": "v1.13.1"
-    },
     "symfony/polyfill-intl-idn": {
         "version": "v1.13.1"
     },
@@ -428,9 +410,6 @@
     },
     "symfony/polyfill-php73": {
         "version": "v1.13.1"
-    },
-    "symfony/process": {
-        "version": "v5.0.1"
     },
     "symfony/profiler-pack": {
         "version": "v1.0.4"
@@ -552,9 +531,6 @@
     "symfony/var-exporter": {
         "version": "v5.0.1"
     },
-    "symfony/web-link": {
-        "version": "v5.0.1"
-    },
     "symfony/web-profiler-bundle": {
         "version": "3.3",
         "recipe": {
@@ -571,9 +547,6 @@
     },
     "symfony/yaml": {
         "version": "v5.0.1"
-    },
-    "twig/extra-bundle": {
-        "version": "v3.0.0"
     },
     "twig/twig": {
         "version": "v3.0.0"
