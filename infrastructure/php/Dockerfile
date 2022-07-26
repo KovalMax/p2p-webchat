@@ -6,7 +6,6 @@ ENV APP_DEPS ca-certificates libzip curl tar xz openssl git openssh-client pcre 
 ARG UID=1000
 ARG GID=1000
 ARG FPM_USER_NAME=www-data
-ARG XDEBUG=1
 ARG JWT_KEY_PATH=/secret/path
 ARG JWT_KEY_PASS=secret
 

@@ -7,7 +7,7 @@ export const environment = {
 };
 
 export const backends = {
-    websocket: 'ws://127.0.0.1:8080/messenger',
+    websocket: 'ws://127.0.0.1:8088/messenger',
     login: 'http://127.0.0.1:8099/api/v1/login',
     registration: 'http://127.0.0.1:8099/api/v1/users',
 };

@@ -12,9 +12,6 @@ services:
         NODE_USER_NAME: ${NODE_USER_NAME}
     environment:
       NODE_ENV: ${NODE_ENV}
-    volumes:
-      - ../frontend-app:/app
-      - messenger-node-modules:/app/node_modules
     networks:
       - messenger-network
 
@@ -26,13 +23,10 @@ services:
         UID: ${UID}
         GID: ${GID}
         FPM_USER_NAME: ${FPM_USER_NAME}
-        XDEBUG: ${XDEBUG}
         JWT_KEY_PASS: ${JWT_KEY_PASS}
         JWT_KEY_PATH: ${JWT_KEY_PATH}
     env_file:
       - .env
-    volumes:
-      - ../backend-app:/var/www
     depends_on:
       - database
     networks:
@@ -43,6 +37,9 @@ services:
     build:
       context: ../websocket-app
       dockerfile: ../infrastructure/golang/Dockerfile
+    environment:
+      SOCKET_PORT: ${SOCKET_PORT}
+      SOCKET_ROUTE: ${SOCKET_ROUTE}
     networks:
       - messenger-network
 
@@ -52,8 +49,6 @@ services:
       context: nginx
       args:
         SERVER_NAME: ${SERVER_NAME}
-    volumes:
-      - ../backend-app/assets:/var/www/assets
     depends_on:
       - backend
     networks:
@@ -66,14 +61,8 @@ services:
       POSTGRES_DB: ${APP_DB_NAME}
       POSTGRES_USER: ${APP_DB_USER}
       POSTGRES_PASSWORD: ${APP_DB_PASSWORD}
-    volumes:
-      - messenger-db:/var/lib/postgresql/data
     networks:
       - messenger-network
-
-volumes:
-  messenger-db:
-  messenger-node-modules:
 
 networks:
   messenger-network:

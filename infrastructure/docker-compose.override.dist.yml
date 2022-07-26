@@ -10,13 +10,28 @@ services:
       - '8080:8080'
 
   webserver:
+    volumes:
+      - ../backend-app/assets:/var/www/assets
     ports:
       - '8099:8081'
 
+  backend:
+    volumes:
+      - ../backend-app:/var/www
+
   frontend:
+    volumes:
+      - ../frontend-app:/app
+      - messenger-node-modules:/app/node_modules
     ports:
       - '4200:4200'
 
   database:
+    volumes:
+      - messenger-db:/var/lib/postgresql/data
     ports:
       - '3379:5432'
+
+volumes:
+  messenger-db:
+  messenger-node-modules:
