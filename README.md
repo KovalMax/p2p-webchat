@@ -13,4 +13,15 @@
 #### `infrastructure/.env.dist` - example with all needed values for startup
 #### `infrastructure/docker-compose.override.yml` - for custom container settings volumes, port bindings, etc
 #### `infrastructure/docker-compose.override.dist.yml` - example with all needed values for local development
-During make start or build command `.env` and `docker-compose.override.yml` will be copied from dist files if not exists in infrastructure folder
+
+P.S.
+During `make start` or `make build` - `.env` and `docker-compose.override.yml` will be copied from dist files if not exists in infrastructure folder
+
+### Development plan :dart:
+
+- Authentication :white_check_mark:
+- Registration :white_check_mark:
+- Users online :white_check_mark:
+- Room with 1-1/p2p messaging :x:
+- Storing messages :x:
+- Loading history for chat rooms :x:
