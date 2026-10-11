@@ -17,6 +17,7 @@ import {HomeNotificationService} from './home-notification.service';
 import {CallPresentationAction, CallPresentationActionID, CallPresentationControl, CallPresentationControlChange, CallPresentationDevice, CallPresentationParticipants, CallPresentationProfile} from './call-presentation.model';
 import {GroupMemberAction, GroupMemberActionID, GroupMemberActionIntent} from './group-member-actions.model';
 import {GroupMemberListComponent} from './group-member-list.component';
+import {ZweiIconName} from '../shared/zwei-icon/zwei-icon.component';
 import {DirectCallSurfaceIntent} from './call-presentation/direct-call-surface.component';
 import {GroupCallSurfaceIntent} from './call-presentation/group-call-surface.component';
 
@@ -35,7 +36,7 @@ export class HomeComponent implements OnInit, OnDestroy {
     public conversationsError = false;
     public archiveMode: 'active' | 'archived' = 'active';
     public archiveActionError = '';
-    public readonly archiveActionsPending = new Set<string>();
+    public readonly archiveActionsPending = new Map<string, 'archive' | 'restore'>();
     public groupPageLoading = false;
     public groupPageError = false;
     public groupPageLoaded = false;
@@ -1407,7 +1408,7 @@ export class HomeComponent implements OnInit, OnDestroy {
         const archiving = sourceMode === 'active';
         const destinationMode = archiving ? 'archived' : 'active';
         this.archiveActionError = '';
-        this.archiveActionsPending.add(conversation.id);
+        this.archiveActionsPending.set(conversation.id, archiving ? 'archive' : 'restore');
         this.changeDetector.markForCheck();
         const mutation = archiving ? this.conversationService.archiveConversation(conversation.id) : this.conversationService.restoreConversation(conversation.id);
         const subscription = mutation.pipe(finalize(() => {
@@ -1440,6 +1441,24 @@ export class HomeComponent implements OnInit, OnDestroy {
             },
         });
         this.listRequests.add(subscription);
+    }
+
+    public archiveActionIcon(conversation: Conversation): ZweiIconName {
+        if (this.archiveActionsPending.has(conversation.id)) return 'hourglass_top';
+        return this.archiveMode === 'active' ? 'archive' : 'unarchive';
+    }
+
+    public archiveActionLabel(conversation: Conversation): string {
+        const name = this.conversationName(conversation);
+        const pendingAction = this.archiveActionsPending.get(conversation.id);
+        if (pendingAction) return `${pendingAction === 'archive' ? 'Archiving' : 'Restoring'} ${name}`;
+        return `${this.archiveMode === 'active' ? 'Archive' : 'Restore'} ${name}`;
+    }
+
+    public archiveActionTooltip(conversation: Conversation): string {
+        const pendingAction = this.archiveActionsPending.get(conversation.id);
+        if (pendingAction) return `${pendingAction === 'archive' ? 'Archiving' : 'Restoring'} ${this.conversationName(conversation)}…`;
+        return this.archiveMode === 'active' ? 'Archive chat' : 'Restore chat';
     }
 
     private groupVerificationPlaceholder(groupID: string): GroupConversation {

@@ -3,6 +3,7 @@ import {fakeAsync, tick} from '../../testing/vitest-timers';
 import { ChangeDetectorRef } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
 import { By } from '@angular/platform-browser';
+import { MatTooltip } from '@angular/material/tooltip';
 import { BehaviorSubject, EMPTY, NEVER, Observable, of, Subject, throwError, map } from 'rxjs';
 
 import { HomeComponent } from './home.component';
@@ -2641,6 +2642,56 @@ describe('HomeComponent', () => {
         expect(emptyState?.textContent).toContain('No archived chats.');
         expect(emptyState?.textContent).toContain('Archive a conversation from All chats to find it here.');
     });
+
+    for (const mode of ['active', 'archived'] as const) {
+        it(`renders an accessible icon-only ${mode === 'active' ? 'archive' : 'restore'} action and its pending state`, () => {
+            const mutation = new Subject<void>();
+            const item = conversation(`icon-action-${mode}`);
+            const otherItem = conversation(`other-icon-action-${mode}`);
+            const service = TestBed.inject(ConversationService);
+            vi.spyOn(service, 'listHomeSnapshot').mockReturnValue(of({direct: [], groups: {items: [], nextCursor: null}}));
+            const archive = vi.spyOn(service, 'archiveConversation').mockReturnValue(mutation.asObservable());
+            const restore = vi.spyOn(service, 'restoreConversation').mockReturnValue(mutation.asObservable());
+            vi.spyOn(TestBed.inject(AuthService), 'profile').mockReturnValue(of({id: 'test-user', display_name: 'Test'} as Profile));
+            vi.spyOn(fixture.debugElement.injector.get(DataProviderService), 'getObservable').mockReturnValue(NEVER);
+            component.archiveMode = mode;
+            component.conversations.next([item, otherItem]);
+            fixture.detectChanges();
+
+            const button = (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>('.archive-chat-button');
+            expect(button).not.toBeNull();
+            if (!button) throw new Error('Archive action is missing');
+            const conversationName = component.conversationName(item);
+            const tooltip = fixture.debugElement.queryAll(By.directive(MatTooltip)).find(element => element.nativeElement === button)?.injector.get(MatTooltip);
+            expect(button.getAttribute('aria-label')).toBe(`${mode === 'active' ? 'Archive' : 'Restore'} ${conversationName}`);
+            expect(tooltip?.message).toBe(mode === 'active' ? 'Archive chat' : 'Restore chat');
+            expect(button.textContent?.trim()).toBe('');
+            expect(button.querySelector('zwei-icon')).not.toBeNull();
+            expect(button.querySelector('zwei-icon path')?.getAttribute('d')).toContain(mode === 'active' ? 'M20.54 5.23' : 'M4 11h16v9');
+            expect(tooltip?.disabled).toBe(false);
+
+            button.click();
+            fixture.detectChanges();
+            expect(mode === 'active' ? archive : restore).toHaveBeenCalledTimes(1);
+            expect(button.disabled).toBe(false);
+            expect(button.getAttribute('aria-disabled')).toBe('true');
+            expect(button.getAttribute('aria-busy')).toBe('true');
+            expect(button.getAttribute('aria-label')).toBe(`${mode === 'active' ? 'Archiving' : 'Restoring'} ${conversationName}`);
+            expect(tooltip?.message).toBe(`${mode === 'active' ? 'Archiving' : 'Restoring'} ${conversationName}…`);
+            expect(tooltip?.disabled).toBe(true);
+            expect(button.querySelector('zwei-icon path')?.getAttribute('d')).toContain('M6 2v6');
+            expect(component.archiveActionIcon(item)).toBe('hourglass_top');
+            const otherButton = (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>(`[aria-label="${mode === 'active' ? 'Archive' : 'Restore'} ${component.conversationName(otherItem)}"]`);
+            expect(otherButton?.disabled).toBe(false);
+            component.toggleArchive(item);
+            expect(mode === 'active' ? archive : restore).toHaveBeenCalledTimes(1);
+
+            mutation.next();
+            mutation.complete();
+            fixture.detectChanges();
+            expect(component.archiveActionsPending.has(item.id)).toBe(false);
+        });
+    }
 });
 
 function snapshotFrom(source: Observable<Conversation[]>): Observable<{direct: Conversation[]; groups: {items: GroupConversation[]; nextCursor: string | null}}> {

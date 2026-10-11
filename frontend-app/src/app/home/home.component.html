@@ -33,13 +33,13 @@
         </div>
         <div class="rail-label"><span>{{ archiveMode === 'active' ? 'All chats' : 'Archived chats' }}</span><span class="count">{{ (conversations | async)?.length || 0 }}</span></div>
         <p class="archive-action-error" *ngIf="archiveActionError" role="alert">{{ archiveActionError }}</p>
-        <div class="people-list" *ngIf="!conversationsError && (conversations | async) as items">
+        <div class="people-list" [class.has-conversations]="items.length > 0" *ngIf="!conversationsError && (conversations | async) as items">
             <div class="conversation-row" *ngFor="let conversation of items; trackBy: trackConversation">
             <button class="person-option" type="button" [attr.data-conversation-id]="conversation.id" [class.selected]="selectedConversation?.id === conversation.id" [attr.aria-label]="conversationName(conversation)" (click)="selectConversation(conversation)">
                 <span class="person-avatar" aria-hidden="true">{{ conversation.kind === 'group' && conversation.accessNeedsVerification ? '?' : initials(conversation) }}</span>
                 <span class="conversation-copy"><strong>{{ conversationName(conversation) }}</strong><small>{{ conversationSubtitle(conversation) }}</small></span><span class="conversation-time" *ngIf="conversation.kind !== 'group' || !conversation.accessNeedsVerification">{{ conversationTime(conversation) }}</span><span class="unread-count" *ngIf="(conversation.kind !== 'group' || !conversation.accessNeedsVerification) && conversation.unreadCount" [attr.aria-label]="conversation.unreadCount + ' unread messages'">{{ conversation.unreadCount }}</span>
             </button>
-            <button class="archive-chat-button" type="button" [disabled]="archiveActionsPending.has(conversation.id)" [attr.aria-label]="(archiveMode === 'active' ? 'Archive ' : 'Restore ') + conversationName(conversation)" (click)="toggleArchive(conversation)">{{ archiveActionsPending.has(conversation.id) ? 'Saving…' : archiveMode === 'active' ? 'Archive' : 'Restore' }}</button>
+            <button class="archive-chat-button" type="button" [attr.aria-disabled]="archiveActionsPending.has(conversation.id) ? 'true' : null" [attr.aria-label]="archiveActionLabel(conversation)" [attr.aria-busy]="archiveActionsPending.has(conversation.id) ? 'true' : null" [matTooltip]="archiveActionTooltip(conversation)" [matTooltipDisabled]="archiveActionsPending.has(conversation.id)" matTooltipPosition="above" (click)="toggleArchive(conversation)"><zwei-icon [name]="archiveActionIcon(conversation)"></zwei-icon></button>
             </div>
             <div class="empty-rail" *ngIf="items.length === 0 && !isLoading" role="status"><zwei-icon name="forum"></zwei-icon><span>{{ archiveMode === 'active' ? 'No conversations yet.' : 'No archived chats.' }}</span><small *ngIf="archiveMode === 'archived'">Archive a conversation from All chats to find it here.</small></div>
             <div class="group-page-error" *ngIf="groupPageError" role="alert">Could not load more groups. <button type="button" [disabled]="groupSnapshotLoading" (click)="loadMoreGroups()">Retry</button></div>

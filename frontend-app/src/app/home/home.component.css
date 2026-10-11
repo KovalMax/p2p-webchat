@@ -102,6 +102,7 @@
 @media (max-width: 760px) { .workspace { display: block; }.conversation-rail, .chat-panel { height: 100%; }.chat-panel { display: none; }.workspace.conversation-open .conversation-rail { display: none; }.workspace.conversation-open .chat-panel { display: flex; }.conversation-rail { padding: 12px 10px; }.back-button { display: inline-flex; }.call-panel-full { padding: 24px 12px; }.message-history { padding: 16px; }.message-bubble { min-width: min(var(--chat-message-min-width), 86%); max-width: 86%; }.composer { margin: 8px 10px 12px; }.rail-footer { padding-bottom: env(safe-area-inset-bottom); } }
 
 .message-bubble time { white-space: nowrap; }
+.people-list.has-conversations { box-sizing: border-box; padding-top: 8px; }
 .people-list { padding-bottom: 24px; }
 
 

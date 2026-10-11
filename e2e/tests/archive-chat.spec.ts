@@ -10,6 +10,20 @@ const compactDesktop = {width: 1024, height: 900};
 const mobile = {width: 390, height: 844};
 const viewports = [wideDesktop, desktop, compactDesktop, mobile];
 
+function contrastRatio(foreground: string, background: string): number {
+  const luminance = (color: string): number => {
+    const channels = color.match(/[\d.]+/g)?.slice(0, 3).map(Number);
+    if (!channels || channels.length !== 3) throw new Error(`Unsupported computed color: ${color}`);
+    const linear = channels.map(channel => {
+      const value = channel / 255;
+      return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+    });
+    return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2];
+  };
+  const values = [luminance(foreground), luminance(background)].sort((left, right) => right - left);
+  return (values[0] + 0.05) / (values[1] + 0.05);
+}
+
 type Token = {access_token: string; token_type: string};
 
 function uniqueEmail(name: string): string {
@@ -119,7 +133,8 @@ async function expectRailContained(page: Page, context: string, position: 'top' 
         const button = row.querySelector<HTMLElement>('.person-option')?.getBoundingClientRect();
         const action = row.querySelector<HTMLElement>('.archive-chat-button')?.getBoundingClientRect();
         const bounds = row.getBoundingClientRect();
-        return button && action ? {row: bounds.toJSON(), button: button.toJSON(), action: action.toJSON(), fullyVisible: !!listBounds && bounds.top >= listBounds.top - 1 && bounds.bottom <= listBounds.bottom + 1, overlap: button.left < action.right && button.right > action.left && button.top < action.bottom && button.bottom > action.top} : undefined;
+        const actionElement = row.querySelector<HTMLElement>('.archive-chat-button');
+        return button && action ? {row: bounds.toJSON(), button: button.toJSON(), action: action.toJSON(), actionIconPath: actionElement?.querySelector('svg path')?.getAttribute('d'), fullyVisible: !!listBounds && bounds.top >= listBounds.top - 1 && bounds.bottom <= listBounds.bottom + 1, overlap: button.left < action.right && button.right > action.left && button.top < action.bottom && button.bottom > action.top} : undefined;
       }),
       rowCount: rows.length,
       firstVisible: !!first && !!listBounds && first.top >= listBounds.top - 1 && first.bottom <= listBounds.bottom + 1,
@@ -141,6 +156,9 @@ async function expectRailContained(page: Page, context: string, position: 'top' 
   for (const row of geometry.rows) {
     expect(row, `${context}: missing archive row geometry`).toBeTruthy();
     expect(row!.overlap, `${context}: archive control overlaps conversation ${JSON.stringify(row)}`).toBe(false);
+    expect(row!.action.width, `${context}: archive control width`).toBe(44);
+    expect(row!.action.height, `${context}: archive control height`).toBe(44);
+    expect(row!.actionIconPath, `${context}: archive action icon should render`).toBeTruthy();
     expect(row!.action.left, context).toBeGreaterThanOrEqual(geometry.rail.left - 1);
     expect(row!.action.right, context).toBeLessThanOrEqual(geometry.rail.right + 1);
     if (row!.fullyVisible && geometry.list) {
@@ -162,6 +180,8 @@ test('archive and explicitly restore direct and group chats per user; inbound me
   // the whole long multi-user scenario timeout without identifying its step.
   alice.setDefaultTimeout(10_000);
   bob.setDefaultTimeout(10_000);
+  let releaseArchiveResponse: () => void = () => {};
+  let releaseRestoreResponse: () => void = () => {};
 
   try {
     await register(alice, aliceEmail, 'Alice Archive');
@@ -171,6 +191,16 @@ test('archive and explicitly restore direct and group chats per user; inbound me
     const bobID = await userID(alice, aliceToken, bobEmail);
 
     await expect(alice.getByRole('status').filter({hasText: 'No conversations yet.'})).toBeVisible();
+    for (const theme of ['light', 'dark'] as const) {
+      await setTheme(alice, theme);
+      for (const viewport of viewports) {
+        await alice.setViewportSize(viewport);
+        await expect(alice.getByRole('status').filter({hasText: 'No conversations yet.'})).toBeVisible();
+        await expectRailContained(alice, `${theme}/${viewport.width}x${viewport.height} empty All chats state`);
+        await alice.screenshot({path: testInfo.outputPath(`archive-empty-all-chats-${theme}-${viewport.width}x${viewport.height}.png`)});
+      }
+    }
+    await alice.setViewportSize(desktop);
     let releaseArchivedGroups!: () => void;
     let archivedGroupsRequested!: () => void;
     const archivedGroupsGate = new Promise<void>(resolve => { releaseArchivedGroups = resolve; });
@@ -231,8 +261,20 @@ test('archive and explicitly restore direct and group chats per user; inbound me
     await expect(bob.locator(`.person-option[data-conversation-id="${group.id}"]`)).toBeVisible();
 
     let failArchive = true;
+    let holdArchive = false;
+    let signalArchiveStarted: () => void = () => {};
+    let archiveRequestStarted = new Promise<void>(resolve => { signalArchiveStarted = resolve; });
+    let archiveResponseGate = new Promise<void>(resolve => { releaseArchiveResponse = resolve; });
+    let archiveMutationRequests = 0;
     const archiveRoute = async (route: import('@playwright/test').Route): Promise<void> => {
+      if (route.request().method() === 'PUT') archiveMutationRequests += 1;
       if (failArchive && route.request().method() === 'PUT') await route.fulfill({status: 500, contentType: 'application/json', body: JSON.stringify({error: 'injected archive failure'})});
+      else if (holdArchive && route.request().method() === 'PUT') {
+        holdArchive = false;
+        signalArchiveStarted();
+        await archiveResponseGate;
+        await route.continue();
+      }
       else await route.continue();
     };
     await alice.route('**/api/chat/conversations/*/archive', archiveRoute);
@@ -241,10 +283,33 @@ test('archive and explicitly restore direct and group chats per user; inbound me
     await expect(alice.locator('.person-option[aria-label="Bob Archive"]')).toBeVisible();
     await expect(alice.locator('.person-option[aria-label="Bob Archive"]')).toHaveClass(/selected/);
     await expect(alice.locator('.chat-header h2')).toHaveText('Bob Archive');
+    await expect(alice.getByRole('button', {name: 'Archive Bob Archive'})).toBeFocused();
+    await alice.screenshot({path: testInfo.outputPath('archive-selected-row-error-dark-1440.png')});
     failArchive = false;
-    const archiveDirectResponse = alice.waitForResponse(response => response.request().method() === 'PUT' && /\/api\/chat\/conversations\/[^/]+\/archive$/.test(response.url()));
+    holdArchive = true;
+    archiveRequestStarted = new Promise<void>(resolve => { signalArchiveStarted = resolve; });
+    archiveResponseGate = new Promise<void>(resolve => { releaseArchiveResponse = resolve; });
+    const archiveDirectResponse = alice.waitForResponse(response => response.request().method() === 'PUT' && /\/api\/chat\/conversations\/[^/]+\/archive$/.test(response.url()), {timeout: 15_000}).catch(() => undefined);
     await alice.getByRole('button', {name: 'Archive Bob Archive'}).click();
-    expect((await archiveDirectResponse).status(), 'archiving the selected direct conversation must be accepted').toBe(204);
+    await archiveRequestStarted;
+    const pendingArchive = alice.getByRole('button', {name: 'Archiving Bob Archive'});
+    await expect(pendingArchive).toHaveAttribute('aria-disabled', 'true');
+    await expect(pendingArchive).toHaveAttribute('aria-busy', 'true');
+    await expect(pendingArchive).toBeFocused();
+    await expect(pendingArchive.locator('svg path')).toHaveAttribute('d', /M6 2v6/);
+    await expect(alice.locator('.mat-mdc-tooltip')).toBeHidden();
+    const requestsWhilePending = archiveMutationRequests;
+    const duplicateArchiveRequest = alice.waitForRequest(request => request.method() === 'PUT' && /\/api\/chat\/conversations\/[^/]+\/archive$/.test(request.url()), {timeout: 300}).then(() => true, () => false);
+    const pendingArchiveBounds = await pendingArchive.boundingBox();
+    expect(pendingArchiveBounds, 'pending archive action should remain visible').toBeTruthy();
+    await alice.mouse.click(pendingArchiveBounds!.x + pendingArchiveBounds!.width / 2, pendingArchiveBounds!.y + pendingArchiveBounds!.height / 2);
+    expect(await duplicateArchiveRequest, 'a pending archive action must not issue a duplicate request').toBe(false);
+    expect(archiveMutationRequests).toBe(requestsWhilePending);
+    await expect(alice.locator('.archive-chat-button:not([aria-disabled="true"])').first()).toBeVisible();
+    await alice.screenshot({path: testInfo.outputPath('archive-pending-dark-1440.png')});
+    releaseArchiveResponse();
+    const archivedResponse = await archiveDirectResponse;
+    expect(archivedResponse?.status(), 'archiving the selected direct conversation must be accepted').toBe(204);
     await alice.unroute('**/api/chat/conversations/*/archive', archiveRoute);
     await expect(alice.locator('.person-option[aria-label="Bob Archive"]')).toHaveCount(0);
     await expect(alice.locator('.chat-header h2')).toHaveText('Choose a conversation');
@@ -256,8 +321,20 @@ test('archive and explicitly restore direct and group chats per user; inbound me
     await expect(alice.locator('.person-option[aria-label="Bob Archive"]')).toBeVisible();
     await expect(alice.locator(`.person-option[data-conversation-id="${group.id}"]`)).toHaveCount(0);
     let failRestore = true;
+    let holdRestore = false;
+    let signalRestoreStarted: () => void = () => {};
+    let restoreRequestStarted = new Promise<void>(resolve => { signalRestoreStarted = resolve; });
+    let restoreResponseGate = new Promise<void>(resolve => { releaseRestoreResponse = resolve; });
+    let restoreMutationRequests = 0;
     const restoreRoute = async (route: import('@playwright/test').Route): Promise<void> => {
+      if (route.request().method() === 'DELETE') restoreMutationRequests += 1;
       if (failRestore && route.request().method() === 'DELETE') await route.fulfill({status: 500, contentType: 'application/json', body: JSON.stringify({error: 'injected restore failure'})});
+      else if (holdRestore && route.request().method() === 'DELETE') {
+        holdRestore = false;
+        signalRestoreStarted();
+        await restoreResponseGate;
+        await route.continue();
+      }
       else await route.continue();
     };
     await alice.route('**/api/chat/conversations/*/archive', restoreRoute);
@@ -268,13 +345,36 @@ test('archive and explicitly restore direct and group chats per user; inbound me
     await expect(alice.locator('.person-option[aria-label="Bob Archive"]')).toHaveClass(/selected/);
     await expect(alice.locator('.chat-header h2')).toHaveText('Bob Archive');
     failRestore = false;
+    holdRestore = true;
+    restoreRequestStarted = new Promise<void>(resolve => { signalRestoreStarted = resolve; });
+    restoreResponseGate = new Promise<void>(resolve => { releaseRestoreResponse = resolve; });
+    const restoreDirectResponse = alice.waitForResponse(response => response.request().method() === 'DELETE' && /\/api\/chat\/conversations\/[^/]+\/archive$/.test(response.url()), {timeout: 15_000}).catch(() => undefined);
     await alice.getByRole('button', {name: 'Restore Bob Archive'}).click();
-    await expect(alice.locator('.person-option[aria-label="Bob Archive"]')).toBeVisible();
-    await expect(alice.getByRole('button', {name: 'Restore Bob Archive'})).toHaveCount(0);
+    await restoreRequestStarted;
+    const pendingRestore = alice.getByRole('button', {name: 'Restoring Bob Archive'});
+    await expect(pendingRestore).toHaveAttribute('aria-disabled', 'true');
+    await expect(pendingRestore).toHaveAttribute('aria-busy', 'true');
+    await expect(pendingRestore).toBeFocused();
+    await expect(pendingRestore.locator('svg path')).toHaveAttribute('d', /M6 2v6/);
+    await expect(alice.locator('.mat-mdc-tooltip')).toBeHidden();
+    const restoresWhilePending = restoreMutationRequests;
+    const duplicateRestoreRequest = alice.waitForRequest(request => request.method() === 'DELETE' && /\/api\/chat\/conversations\/[^/]+\/archive$/.test(request.url()), {timeout: 300}).then(() => true, () => false);
+    const pendingRestoreBounds = await pendingRestore.boundingBox();
+    expect(pendingRestoreBounds, 'pending restore action should remain visible').toBeTruthy();
+    await alice.mouse.click(pendingRestoreBounds!.x + pendingRestoreBounds!.width / 2, pendingRestoreBounds!.y + pendingRestoreBounds!.height / 2);
+    expect(await duplicateRestoreRequest, 'a pending restore action must not issue a duplicate request').toBe(false);
+    expect(restoreMutationRequests).toBe(restoresWhilePending);
+    await alice.screenshot({path: testInfo.outputPath('restore-pending-dark-1440.png')});
+    releaseRestoreResponse();
+    const restoredResponse = await restoreDirectResponse;
+    expect(restoredResponse?.status(), 'restoring the selected direct conversation must be accepted').toBe(204);
+    await expect(alice.locator('.person-option[aria-label="Bob Archive"]')).toHaveCount(0);
     await alice.unroute('**/api/chat/conversations/*/archive', restoreRoute);
 
     // Group archive and explicit restore are also private to Alice.
     await showAllChats(alice);
+    await expect(alice.locator('.person-option[aria-label="Bob Archive"]')).toBeVisible();
+    await expect(alice.getByRole('button', {name: 'Restore Bob Archive'})).toHaveCount(0);
     const groupRow = alice.locator(`.conversation-row:has(.person-option[data-conversation-id="${group.id}"])`);
     await expect(groupRow.getByRole('button', {name: 'Archive Archive Crew'})).toBeVisible();
     await groupRow.getByRole('button', {name: 'Archive Archive Crew'}).click();
@@ -355,24 +455,106 @@ test('archive and explicitly restore direct and group chats per user; inbound me
           await expect(list.locator('.conversation-row').first()).toBeVisible();
           await list.evaluate(element => { element.scrollTop = 0; element.dispatchEvent(new Event('scroll')); });
           await expectRailContained(alice, state, 'top');
-          if (theme === 'dark' && viewport.width === desktop.width && surface === 'archived') {
-            const archivedTab = alice.getByRole('button', {name: 'Archived'});
-            const restore = alice.getByRole('button', {name: 'Restore Archive Crew'});
-            await archivedTab.focus();
-            let reachedRestore = await restore.evaluate(element => document.activeElement === element);
+          const actionVerb = surface === 'active' ? 'Archive' : 'Restore';
+          const actionTooltip = surface === 'active' ? 'Archive chat' : 'Restore chat';
+          const firstRow = list.locator('.conversation-row').first();
+          const conversationLabel = await firstRow.locator('.person-option').getAttribute('aria-label');
+          expect(conversationLabel, `${state}: conversation needs an accessible name`).toBeTruthy();
+          const action = firstRow.getByRole('button', {name: `${actionVerb} ${conversationLabel}`});
+          await expect(action).toBeVisible();
+          await expect(action).not.toHaveAttribute('aria-busy');
+          await expect(action.locator('svg path')).toBeVisible();
+          expect(await action.locator('svg path').getAttribute('d')).toContain(surface === 'active' ? 'M20.54 5.23' : 'M4 11h16v9');
+          const iconContrast = await action.evaluate(element => {
+            const rail = element.closest('.conversation-rail');
+            return {foreground: getComputedStyle(element).color, background: rail ? getComputedStyle(rail).backgroundColor : ''};
+          });
+          expect(contrastRatio(iconContrast.foreground, iconContrast.background), `${state}: icon contrast ${JSON.stringify(iconContrast)}`).toBeGreaterThanOrEqual(3);
+          await action.hover();
+          const tooltip = alice.locator('.mat-mdc-tooltip');
+          await expect(tooltip).toHaveText(actionTooltip);
+          const tooltipBounds = await tooltip.boundingBox();
+          expect(tooltipBounds, `${state}: tooltip must be rendered`).toBeTruthy();
+          const tooltipOverlap = await tooltip.evaluate(element => {
+            const tooltipRect = element.getBoundingClientRect();
+            const intersects = (target: Element | null): boolean => {
+              if (!target) return false;
+              const targetRect = target.getBoundingClientRect();
+              return tooltipRect.left < targetRect.right && tooltipRect.right > targetRect.left && tooltipRect.top < targetRect.bottom && tooltipRect.bottom > targetRect.top;
+            };
+            const countHeader = document.querySelector('.rail-label');
+            const topRow = document.querySelector('.people-list .conversation-row');
+            const rowContent = topRow ? Array.from(topRow.querySelectorAll<HTMLElement>('.person-avatar, .conversation-copy, .conversation-time, .unread-count')) : [];
+            return {
+              hasCountHeader: !!countHeader,
+              hasTopRow: !!topRow,
+              countHeader: intersects(countHeader),
+              countHeaderBounds: countHeader?.getBoundingClientRect().toJSON(),
+              rowContent: rowContent.map(target => ({className: target.className, overlaps: intersects(target), bounds: target.getBoundingClientRect().toJSON()})),
+            };
+          });
+          expect(tooltipOverlap.hasCountHeader, `${state}: rail count or heading should be present for overlap check`).toBe(true);
+          expect(tooltipOverlap.hasTopRow, `${state}: first conversation row should be present for overlap check`).toBe(true);
+          expect(tooltipOverlap.countHeader, `${state}: tooltip must not obscure rail count or heading ${JSON.stringify(tooltipOverlap)}`).toBe(false);
+          expect(tooltipOverlap.rowContent.length, `${state}: first conversation row should have visible content to check`).toBeGreaterThan(0);
+          expect(tooltipOverlap.rowContent.filter(target => target.overlaps), `${state}: tooltip must not obscure visible first-row content ${JSON.stringify(tooltipOverlap.rowContent)}`).toHaveLength(0);
+          expect(tooltipBounds!.x, `${state}: tooltip must stay inside viewport`).toBeGreaterThanOrEqual(0);
+          expect(tooltipBounds!.x + tooltipBounds!.width, `${state}: tooltip must stay inside viewport`).toBeLessThanOrEqual(viewport.width + 1);
+          expect(tooltipBounds!.y, `${state}: tooltip must stay inside viewport`).toBeGreaterThanOrEqual(0);
+          expect(tooltipBounds!.y + tooltipBounds!.height, `${state}: tooltip must stay inside viewport`).toBeLessThanOrEqual(viewport.height + 1);
+          await alice.screenshot({path: testInfo.outputPath(`archive-${surface}-${theme}-${viewport.width}x${viewport.height}-action-tooltip.png`)});
+          await alice.mouse.move(0, 0);
+          await expect(tooltip).toBeHidden();
+          {
+            const modeTab = alice.getByRole('button', {name: surface === 'active' ? 'All chats' : 'Archived'});
+            await modeTab.focus();
+            let reachedAction = await action.evaluate(element => document.activeElement === element);
             const tabStops = (await list.locator('.conversation-row').count()) * 2 + 2;
-            for (let step = 0; step < tabStops && !reachedRestore; step++) {
+            for (let step = 0; step < tabStops && !reachedAction; step++) {
               await alice.keyboard.press('Tab');
-              reachedRestore = await restore.evaluate(element => document.activeElement === element);
+              reachedAction = await action.evaluate(element => document.activeElement === element);
             }
-            const focus = await restore.evaluate(element => ({
-              active: document.activeElement === element,
-              outlineStyle: getComputedStyle(element).outlineStyle,
-              outlineWidth: getComputedStyle(element).outlineWidth,
-            }));
-            expect(reachedRestore && focus.active, `${state}: keyboard navigation should reach Restore Archive Crew`).toBe(true);
+            const focus = await action.evaluate(element => {
+              const rect = element.getBoundingClientRect();
+              const railElement = element.closest('.conversation-rail');
+              const rail = railElement?.getBoundingClientRect();
+              const list = element.closest<HTMLElement>('.people-list');
+              const scrollport = list?.getBoundingClientRect();
+              const expansion = Number.parseFloat(getComputedStyle(element).outlineWidth) + Number.parseFloat(getComputedStyle(element).outlineOffset);
+              return {
+                active: document.activeElement === element,
+                outlineStyle: getComputedStyle(element).outlineStyle,
+                outlineWidth: getComputedStyle(element).outlineWidth,
+                outlineColor: getComputedStyle(element).outlineColor,
+                railBackground: railElement ? getComputedStyle(railElement).backgroundColor : '',
+                listScrollTop: list?.scrollTop,
+                outlineBounds: {left: rect.left - expansion, right: rect.right + expansion, top: rect.top - expansion, bottom: rect.bottom + expansion},
+                railBounds: rail ? {left: rail.left, right: rail.right, top: rail.top, bottom: rail.bottom} : undefined,
+                scrollportBounds: scrollport ? {left: scrollport.left, right: scrollport.right, top: scrollport.top, bottom: scrollport.bottom} : undefined,
+              };
+            });
+            expect(reachedAction && focus.active, `${state}: keyboard navigation should reach ${actionVerb} icon`).toBe(true);
             expect(focus.outlineStyle, `${state}: keyboard focus outline style`).not.toBe('none');
             expect(Number.parseFloat(focus.outlineWidth), `${state}: keyboard focus outline width`).toBeGreaterThan(0);
+            expect(contrastRatio(focus.outlineColor, focus.railBackground), `${state}: keyboard focus indicator contrast`).toBeGreaterThanOrEqual(3);
+            expect(focus.outlineBounds.left, `${state}: focus outline left containment`).toBeGreaterThanOrEqual(0);
+            expect(focus.outlineBounds.right, `${state}: focus outline right containment`).toBeLessThanOrEqual(viewport.width);
+            expect(focus.outlineBounds.top, `${state}: focus outline top containment`).toBeGreaterThanOrEqual(0);
+            expect(focus.outlineBounds.bottom, `${state}: focus outline bottom containment`).toBeLessThanOrEqual(viewport.height);
+            expect(focus.outlineBounds.left, `${state}: focus outline left containment in rail`).toBeGreaterThanOrEqual(focus.railBounds!.left - 1);
+            expect(focus.outlineBounds.right, `${state}: focus outline right containment in rail`).toBeLessThanOrEqual(focus.railBounds!.right + 1);
+            expect(focus.outlineBounds.top, `${state}: focus outline top containment in rail`).toBeGreaterThanOrEqual(focus.railBounds!.top - 1);
+            expect(focus.outlineBounds.bottom, `${state}: focus outline bottom containment in rail`).toBeLessThanOrEqual(focus.railBounds!.bottom + 1);
+            expect(focus.outlineBounds.left, `${state}: focus outline left containment in scrollport`).toBeGreaterThanOrEqual(focus.scrollportBounds!.left - 1);
+            expect(focus.outlineBounds.right, `${state}: focus outline right containment in scrollport`).toBeLessThanOrEqual(focus.scrollportBounds!.right + 1);
+            expect(focus.outlineBounds.top, `${state}: focus outline top containment in scrollport`).toBeGreaterThanOrEqual(focus.scrollportBounds!.top - 1);
+            expect(focus.outlineBounds.bottom, `${state}: focus outline bottom containment in scrollport`).toBeLessThanOrEqual(focus.scrollportBounds!.bottom + 1);
+            expect(focus.listScrollTop, `${state}: focus test should start at list top`).toBe(0);
+            await expect(tooltip).toBeVisible();
+            await expect(tooltip).toHaveText(actionTooltip);
+            await alice.screenshot({path: testInfo.outputPath(`archive-${surface}-${theme}-${viewport.width}x${viewport.height}-action-keyboard-focus.png`)});
+            await action.evaluate(element => element.blur());
+            await expect(tooltip).toBeHidden();
             await list.evaluate(element => { element.scrollTop = 0; element.dispatchEvent(new Event('scroll')); });
           }
           await alice.screenshot({path: testInfo.outputPath(`archive-${surface}-${theme}-${viewport.width}x${viewport.height}-top.png`)});
@@ -422,6 +604,8 @@ test('archive and explicitly restore direct and group chats per user; inbound me
     await expect(alice.locator('.conversation-rail')).toHaveCount(0);
     await expect(alice.locator('body')).not.toContainText('Archive Crew');
   } finally {
+    releaseArchiveResponse();
+    releaseRestoreResponse();
     await aliceContext.close();
     await bobContext.close();
   }

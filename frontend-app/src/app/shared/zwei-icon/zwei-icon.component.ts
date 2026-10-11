@@ -3,6 +3,7 @@ import {ChangeDetectionStrategy, Component, computed, input} from '@angular/core
 export type ZweiIconName =
     | 'arrow_back'
     | 'arrow_forward'
+    | 'archive'
     | 'badge'
     | 'audio_track'
     | 'block'
@@ -32,11 +33,13 @@ export type ZweiIconName =
     | 'screen_share'
     | 'stop_screen_share'
     | 'swap_horiz'
-    | 'sync';
+    | 'sync'
+    | 'unarchive';
 
 const ICON_PATHS: Record<ZweiIconName, string> = {
     arrow_back: 'M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z',
     arrow_forward: 'm12 4-1.41 1.41L16.17 11H4v2h12.17l-5.58 5.59L12 20l8-8-8-8z',
+    archive: 'M20.54 5.23 19.5 4H4.5L3.46 5.23 2 7v2h20V7l-1.46-1.77zM4 11v9h16v-9H4zm6 2h4v2h-4v-2z',
     badge: 'M20 5h-3.17L15 3H9L7.17 5H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm-8 2c1.1 0 2 .9 2 2s-.9 2-2 2-2-.9-2-2 .9-2 2-2zm4 10H8v-1c0-1.33 2.67-2 4-2s4 .67 4 2v1z',
     audio_track: 'M3 10v4h3l4 4V6l-4 4H3zm13.5 2a4.5 4.5 0 0 0-2.5-4.03v8.05a4.5 4.5 0 0 0 2.5-4.02zM14 3.23v2.06a7 7 0 0 1 0 13.42v2.06a9 9 0 0 0 0-17.54z',
     block: 'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm5.66 14.24L7.76 6.34A7.96 7.96 0 0 1 17.66 16.24zM6.34 7.76l9.9 9.9A7.96 7.96 0 0 1 6.34 7.76z',
@@ -67,6 +70,7 @@ const ICON_PATHS: Record<ZweiIconName, string> = {
     stop_screen_share: 'M21 3H3c-1.1 0-2 .9-2 2v12h2V5h18v12h2V5c0-1.1-.9-2-2-2zM7 11h10v5H7v-5zm-2 8h14v2H5v-2z',
     swap_horiz: 'M16 17v-3H4v-2h12V9l5 4-5 4zM8 7v3L3 6l5-4v3h12v2H8z',
     sync: 'M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.96-.7 2.8l1.46 1.46A7.93 7.93 0 0 0 20 12c0-4.42-3.58-8-8-8zm-6.76 3.74A7.93 7.93 0 0 0 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3c-3.31 0-6-2.69-6-6 0-1.01.25-1.96.7-2.8L5.24 7.74z',
+    unarchive: 'M20.54 5.23 19.5 4H4.5L3.46 5.23 2 7v2h20V7l-1.46-1.77zM4 11h16v9H4v-9zm7 6h2v-2h3l-4-4-4 4h3v2z',
 };
 
 @Component({
