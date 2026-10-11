@@ -34,4 +34,15 @@ describe('ZweiIconComponent', () => {
         fixture.detectChanges();
         expect(fixture.nativeElement.querySelector('path')?.getAttribute('d')).toContain('12 2a10');
     });
+
+    it('renders the inline archive and restore action paths', () => {
+        fixture.componentRef.setInput('name', 'archive');
+        fixture.detectChanges();
+        expect(fixture.nativeElement.querySelector('path')?.getAttribute('d')).toContain('M20.54 5.23');
+
+        fixture.componentRef.setInput('name', 'unarchive');
+        fixture.detectChanges();
+        expect(fixture.nativeElement.querySelector('path')?.getAttribute('d')).toContain('M20.54 5.23');
+        expect(fixture.nativeElement.querySelector('path')?.getAttribute('d')).toContain('M4 11h16v9');
+    });
 });
