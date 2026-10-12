@@ -2041,6 +2041,29 @@ test('direct call offers and answers connect in the browser UI', async ({browser
     await alice.getByRole('button', {name: 'Start audio call'}).click();
     await expect(alice.getByText('Ringing...')).toBeVisible();
     await expect(bob.getByText('Incoming audio call.')).toBeVisible();
+    // Notification avatars track the selected conversation header, while the full call profile remains larger.
+    for (const theme of ['dark', 'light'] as const) {
+      await Promise.all([setTheme(alice, theme), setTheme(bob, theme)]);
+      for (const viewport of [{width: 2560, height: 1440}, {width: 1440, height: 900}, {width: 1024, height: 900}, {width: 390, height: 844}, {width: 320, height: 844}]) {
+        await Promise.all([alice.setViewportSize(viewport), bob.setViewportSize(viewport)]);
+        for (const page of [alice, bob]) {
+          const avatarGeometry = await page.evaluate(() => {
+            const notification = document.querySelector<HTMLElement>('.call-panel:not(.call-panel-full) .call-presentation-avatar');
+            const conversation = document.querySelector<HTMLElement>('.chat-header .hero-avatar');
+            const notificationRect = notification?.getBoundingClientRect();
+            const conversationRect = conversation?.getBoundingClientRect();
+            return {notification: notificationRect && {width: notificationRect.width, height: notificationRect.height}, conversation: conversationRect && {width: conversationRect.width, height: conversationRect.height}};
+          });
+          expect(avatarGeometry.notification, `${theme}/${viewport.width}px notification avatar missing`).toBeDefined();
+          expect(avatarGeometry.conversation, `${theme}/${viewport.width}px conversation avatar missing`).toBeDefined();
+          expect(Math.abs((avatarGeometry.notification?.width ?? 0) - (avatarGeometry.conversation?.width ?? 0)), `${theme}/${viewport.width}px avatar width mismatch: ${JSON.stringify(avatarGeometry)}`).toBeLessThanOrEqual(1);
+          expect(Math.abs((avatarGeometry.notification?.height ?? 0) - (avatarGeometry.conversation?.height ?? 0)), `${theme}/${viewport.width}px avatar height mismatch: ${JSON.stringify(avatarGeometry)}`).toBeLessThanOrEqual(1);
+          expect(avatarGeometry.notification?.width).toBe(42);
+          await page.screenshot({path: testInfo.outputPath(`direct-call-notification-avatar-${page === alice ? 'outgoing' : 'incoming'}-${theme}-${viewport.width}.png`), fullPage: false, timeout: 15_000});
+        }
+      }
+    }
+    await Promise.all([alice.setViewportSize({width: 1440, height: 900}), bob.setViewportSize({width: 1440, height: 900}), setTheme(alice, 'dark'), setTheme(bob, 'dark')]);
     await bob.getByRole('button', {name: 'Accept'}).click();
     await expect(alice.getByText('Audio call connected.')).toBeVisible({timeout: 10_000});
     await expect(bob.getByText('Audio call connected.')).toBeVisible({timeout: 10_000});
@@ -2149,6 +2172,7 @@ test('direct call offers and answers connect in the browser UI', async ({browser
           const card = panel?.querySelector<HTMLElement>('.call-card');
           const callActions = panel?.querySelector<HTMLElement>('.call-actions');
           const profile = panel?.querySelector<HTMLElement>('.call-card > app-call-profile');
+          const profileAvatar = profile?.querySelector<HTMLElement>('.call-presentation-avatar');
           const profileName = profile?.querySelector<HTMLElement>('.call-presentation-copy strong');
           const controls = Array.from(panel?.querySelectorAll<HTMLElement>('.call-devices [role="combobox"], .call-presentation-icon-actions button, .call-actions button') || []);
             const end = panel?.querySelector<HTMLElement>('.direct-call-end-button');
@@ -2168,6 +2192,7 @@ test('direct call offers and answers connect in the browser UI', async ({browser
               left: Number.parseFloat(getComputedStyle(panel).paddingLeft),
             } : undefined,
             card: cardRect ? {left: cardRect.left, right: cardRect.right} : undefined,
+            profileAvatar: profileAvatar ? {width: profileAvatar.getBoundingClientRect().width, height: profileAvatar.getBoundingClientRect().height} : undefined,
             profileSurface: profile ? getComputedStyle(profile).backgroundColor : '',
             profileText: profileName ? getComputedStyle(profileName).color : '',
             callActionsJustifyContent: callActions ? getComputedStyle(callActions).justifyContent : undefined,
@@ -2190,6 +2215,8 @@ test('direct call offers and answers connect in the browser UI', async ({browser
         expect(metrics.panelPadding?.right).toBeCloseTo(fullCallGutter, 1);
         expect(metrics.scrollWidth).toBeLessThanOrEqual(metrics.viewportWidth + 1);
         expect(metrics.card).toBeDefined();
+        expect(metrics.profileAvatar?.width).toBe(64);
+        expect(metrics.profileAvatar?.height).toBe(64);
         expect(metrics.controls).not.toHaveLength(0);
         expect(metrics.callActionsJustifyContent).toBe('flex-end');
         if (theme === 'light') {
@@ -3309,9 +3336,12 @@ test('register, create conversation, and deliver a message', async ({ browser },
               const rect = banner.getBoundingClientRect();
               const controls = Array.from(banner.querySelectorAll<HTMLElement>('button')).map(control => control.getBoundingClientRect());
               const status = Array.from(banner.querySelectorAll<HTMLElement>('.call-minimized-summary strong, .call-minimized-summary small')).map(element => ({text: element.innerText, scrollWidth: element.scrollWidth, clientWidth: element.clientWidth, scrollHeight: element.scrollHeight, clientHeight: element.clientHeight, rect: element.getBoundingClientRect().toJSON()}));
-              return {left: rect.left, right: rect.right, width: rect.width, scrollWidth: banner.scrollWidth, controls: controls.map(control => ({left: control.left, right: control.right, top: control.top, bottom: control.bottom})), status};
+              return {left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom, width: rect.width, scrollWidth: banner.scrollWidth, compactCopy: !!banner.querySelector('.support-reference-compact'), copyLabel: banner.querySelector('app-copy-support-reference button')?.textContent?.trim(), controls: controls.map(control => ({left: control.left, right: control.right, top: control.top, bottom: control.bottom, width: control.width, height: control.height})), status};
             });
             expect(layout.scrollWidth, `${theme}/${viewport.width}px minimized support action overflows: ${JSON.stringify(layout)}`).toBeLessThanOrEqual(layout.width + 1);
+            expect(layout.compactCopy, 'Direct-call copy control must retain its standard presentation').toBeFalsy();
+            expect(layout.copyLabel).toBe('Copy support reference');
+            expect(layout.bottom - layout.top, `${theme}/${viewport.width}px direct minimized banner should retain its previous multi-row layout: ${JSON.stringify(layout)}`).toBeGreaterThan(64);
             expect(layout.status.map(item => item.text).join(' ')).toContain('Call with Bob');
             expect(layout.status.map(item => item.text).join(' ')).toContain('Sharing screen');
             expect(layout.status.map(item => item.text).join(' ')).toMatch(/00:[0-5]\d/);
@@ -3329,7 +3359,11 @@ test('register, create conversation, and deliver a message', async ({ browser },
             for (const control of layout.controls) {
               expect(control.left).toBeGreaterThanOrEqual(layout.left - 1);
               expect(control.right).toBeLessThanOrEqual(layout.right + 1);
+              expect(control.width).toBeGreaterThanOrEqual(32);
+              expect(control.height).toBeGreaterThanOrEqual(32);
             }
+            expect(layout.controls[1].top).toBeGreaterThan(layout.controls[0].top);
+            expect(layout.controls[2].top).toBeGreaterThan(layout.controls[0].top);
             for (const status of layout.status) {
               for (const control of layout.controls.slice(1)) {
                 const overlaps = status.rect.left < control.right && status.rect.right > control.left && status.rect.top < control.bottom && status.rect.bottom > control.top;
@@ -3341,6 +3375,11 @@ test('register, create conversation, and deliver a message', async ({ browser },
         }
         await alice.setViewportSize({width: 1440, height: 900});
         await setTheme(alice, 'dark');
+        await alice.evaluate(() => Object.defineProperty(navigator, 'clipboard', {configurable: true, value: {writeText: async () => { throw new Error('clipboard denied'); }}}));
+        await alice.locator('.call-minimized-banner-rail').getByRole('button', {name: 'Copy support reference'}).click();
+        await expect(alice.locator('.call-minimized-banner-rail .support-reference-feedback')).toContainText('Could not copy support reference');
+        await expect(alice.getByLabel('Support reference, select and copy manually', {exact: true})).toBeVisible();
+        await expect(alice.locator('.call-minimized-banner-rail .support-reference-compact')).not.toBeAttached();
       await expect(alice.locator('.person-option').filter({hasText: 'Bob'}).locator('.unread-count')).not.toBeVisible();
       await expect(bob.getByText(incomingDuringCall).locator('xpath=ancestor::article').getByRole('img', {name: 'Read by peer'})).toBeVisible({timeout: 5_000});
       await alice.getByRole('button', {name: 'Return to call with Bob'}).click();
@@ -5767,6 +5806,11 @@ test('runs a deterministic three-member group media lifecycle', async ({browser}
       data: {name: 'Deterministic media group', member_ids: [memberID, observerID]},
     });
     expect(created.status()).toBe(201);
+    const otherConversation = await ownerContext.request.post(`${chatBase}/api/chat/groups`, {
+      headers: {Authorization: `${ownerToken.token_type} ${ownerToken.access_token}`},
+      data: {name: 'Another group conversation', member_ids: [memberID]},
+    });
+    expect(otherConversation.status()).toBe(201);
 
     for (const page of [owner, member, observer]) {
       await page.reload();
@@ -6003,6 +6047,59 @@ test('runs a deterministic three-member group media lifecycle', async ({browser}
     await member.getByRole('button', {name: 'Present screen'}).click();
     await expect(member.getByRole('button', {name: 'Stop presenting'})).toBeVisible();
     await assertRemotePresentationFrame('group-call-remote-presentation-restarted-dark');
+    await member.getByRole('button', {name: 'Minimize group call'}).click();
+    const minimizedWhileSharing = member.locator('.group-call-minimized');
+    await expect(minimizedWhileSharing).toContainText('Sharing screen');
+    await expect(member.locator('.group-presentation')).toBeHidden();
+    const memberOtherGroup = member.locator('.person-option').filter({hasText: 'Another group conversation'});
+    await expect(memberOtherGroup).toBeVisible({timeout: 10_000});
+    await memberOtherGroup.click();
+    await expect(memberOtherGroup).toHaveClass(/selected/);
+    for (const theme of ['light', 'dark'] as const) {
+      for (const viewport of [{width: 2560, height: 1440}, {width: 1440, height: 900}, {width: 1024, height: 900}, {width: 390, height: 844}, {width: 320, height: 844}]) {
+        await member.setViewportSize(viewport);
+        await setTheme(member, theme);
+        await expect(memberOtherGroup).toHaveClass(/selected/);
+        await expect(minimizedWhileSharing).toContainText('Sharing screen');
+        const bounds = await minimizedWhileSharing.evaluate(element => {
+          const banner = element.getBoundingClientRect();
+          const status = Array.from(element.querySelectorAll<HTMLElement>('.call-minimized-summary strong, .call-minimized-summary small'))
+            .map(node => ({text: node.innerText, scrollWidth: node.scrollWidth, clientWidth: node.clientWidth, scrollHeight: node.scrollHeight, clientHeight: node.clientHeight, rect: node.getBoundingClientRect()}));
+          const controls = Array.from(element.querySelectorAll<HTMLElement>('.call-minimized-summary, .support-reference-compact-button, .call-minimized-end'))
+            .map(control => { const rect = control.getBoundingClientRect(); return {left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom, width: rect.width, height: rect.height}; });
+          return {height: banner.height, left: banner.left, right: banner.right, scrollWidth: document.documentElement.scrollWidth, clientWidth: document.documentElement.clientWidth, controls, status, viewportHeight: innerHeight};
+        });
+        expect(bounds.height, `${theme}/${viewport.width}px minimized sharing banner height`).toBeLessThanOrEqual(80);
+        expect(bounds.scrollWidth, `${theme}/${viewport.width}px minimized sharing document overflow`).toBeLessThanOrEqual(bounds.clientWidth + 1);
+        expect(bounds.left).toBeGreaterThanOrEqual(0);
+        expect(bounds.right).toBeLessThanOrEqual(viewport.width + 1);
+        expect(bounds.controls).toHaveLength(3);
+        for (const control of bounds.controls) {
+          expect(control.left).toBeGreaterThanOrEqual(bounds.left - 1);
+          expect(control.right).toBeLessThanOrEqual(bounds.right + 1);
+          expect(control.top).toBeGreaterThanOrEqual(0);
+          expect(control.bottom).toBeLessThanOrEqual(bounds.viewportHeight);
+          expect(control.width).toBeGreaterThanOrEqual(44);
+          expect(control.height).toBeGreaterThanOrEqual(44);
+        }
+        for (const status of bounds.status) {
+          expect(status.scrollWidth, `${theme}/${viewport.width}px clipped sharing status: ${JSON.stringify(status)}`).toBeLessThanOrEqual(status.clientWidth + 1);
+          expect(status.scrollHeight, `${theme}/${viewport.width}px vertically clipped sharing status: ${JSON.stringify(status)}`).toBeLessThanOrEqual(status.clientHeight + 1);
+          for (const control of bounds.controls.slice(1)) {
+            const overlaps = status.rect.left < control.right && status.rect.right > control.left && status.rect.top < control.bottom && status.rect.bottom > control.top;
+            expect(overlaps, `${theme}/${viewport.width}px sharing status overlaps a control`).toBeFalsy();
+          }
+        }
+        await member.screenshot({path: testInfo.outputPath(`group-call-minimized-while-sharing-other-conversation-${theme}-${viewport.width}.png`), fullPage: false, timeout: 15_000});
+      }
+    }
+    await member.setViewportSize({width: 1440, height: 900});
+    const memberActiveGroup = member.locator('.person-option').filter({hasText: 'Deterministic media group'});
+    await expect(memberActiveGroup).toBeVisible();
+    await memberActiveGroup.click();
+    await expect(memberActiveGroup).toHaveClass(/selected/);
+    await member.getByRole('button', {name: 'Return to group call'}).click();
+    await assertRemotePresentationFrame('group-call-remote-presentation-restored-after-minimize-dark');
     for (const theme of ['light', 'dark'] as const) {
       for (const viewport of [{width: 2560, height: 1440}, {width: 1440, height: 900}, {width: 1024, height: 900}, {width: 390, height: 844}]) {
         await assertGroupPresentationLayout(owner, testInfo, theme, viewport);
@@ -6123,8 +6220,29 @@ test('runs a deterministic three-member group media lifecycle', async ({browser}
     await expect(minimizedEndCall).toHaveText('End group call');
     await expect(owner.locator('audio[groupRemoteAudio]')).toHaveCount(1);
     await expect.poll(async () => remoteAudio?.evaluate(audio => audio.isConnected && !audio.paused), {timeout: 10_000}).toBe(true);
+    const otherGroupOption = owner.locator('.person-option').filter({hasText: 'Another group conversation'});
+    await expect(otherGroupOption).toBeVisible({timeout: 10_000});
+    await otherGroupOption.click();
+    await expect(otherGroupOption).toHaveClass(/selected/);
+    await expect(minimizedGroupCall).toBeVisible();
     for (const theme of ['light', 'dark'] as const) {
-      for (const viewport of [{width: 2560, height: 1440}, {width: 1440, height: 900}, {width: 1024, height: 900}, {width: 390, height: 844}]) {
+      for (const viewport of [{width: 2560, height: 1440}, {width: 1440, height: 900}, {width: 1024, height: 900}, {width: 390, height: 844}, {width: 320, height: 844}]) {
+        await owner.setViewportSize(viewport);
+        await setTheme(owner, theme);
+        await expect(otherGroupOption).toHaveClass(/selected/);
+        await expect(minimizedGroupCall).toContainText('Group call in progress');
+        const height = await minimizedGroupCall.evaluate(element => ({height: element.getBoundingClientRect().height, scrollWidth: document.documentElement.scrollWidth, clientWidth: document.documentElement.clientWidth}));
+        expect(height.height, `${theme}/${viewport.width}px minimized other-conversation banner height`).toBeLessThanOrEqual(80);
+        expect(height.scrollWidth).toBeLessThanOrEqual(height.clientWidth + 1);
+        await owner.screenshot({path: testInfo.outputPath(`group-call-minimized-other-conversation-${theme}-${viewport.width}.png`), fullPage: false, timeout: 15_000});
+      }
+    }
+    await owner.setViewportSize({width: 1440, height: 900});
+    const activeGroupOption = owner.locator('.person-option').filter({hasText: 'Deterministic media group'});
+    await activeGroupOption.click();
+    await expect(activeGroupOption).toHaveClass(/selected/);
+    for (const theme of ['light', 'dark'] as const) {
+      for (const viewport of [{width: 2560, height: 1440}, {width: 1440, height: 900}, {width: 1024, height: 900}, {width: 390, height: 844}, {width: 320, height: 844}]) {
         await owner.setViewportSize(viewport);
         await setTheme(owner, theme);
         const minimizedCopy = minimizedGroupCall.getByRole('button', {name: 'Copy support reference'});
@@ -6135,12 +6253,21 @@ test('runs a deterministic three-member group media lifecycle', async ({browser}
            const end = element.querySelector<HTMLElement>('.call-minimized-end')?.getBoundingClientRect();
            const copy = element.querySelector<HTMLElement>('app-copy-support-reference button')?.getBoundingClientRect();
            const status = Array.from(element.querySelectorAll<HTMLElement>('.call-minimized-summary strong, .call-minimized-summary small')).map(node => ({text: node.innerText, scrollWidth: node.scrollWidth, clientWidth: node.clientWidth, scrollHeight: node.scrollHeight, clientHeight: node.clientHeight, rect: node.getBoundingClientRect().toJSON()}));
-           return {rect: {left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom}, restore: restore && {left: restore.left, right: restore.right, top: restore.top, bottom: restore.bottom}, end: end && {left: end.left, right: end.right, top: end.top, bottom: end.bottom}, copy: copy && {left: copy.left, right: copy.right, top: copy.top, bottom: copy.bottom}, status, scrollWidth: element.scrollWidth, clientWidth: element.clientWidth, documentScrollWidth: document.documentElement.scrollWidth, documentClientWidth: document.documentElement.clientWidth, viewportHeight: window.innerHeight};
+            return {rect: {left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom}, restore: restore && {left: restore.left, right: restore.right, top: restore.top, bottom: restore.bottom}, end: end && {left: end.left, right: end.right, top: end.top, bottom: end.bottom}, copy: copy && {left: copy.left, right: copy.right, top: copy.top, bottom: copy.bottom}, compactCopy: !!element.querySelector('.support-reference-compact'), status, scrollWidth: element.scrollWidth, clientWidth: element.clientWidth, documentScrollWidth: document.documentElement.scrollWidth, documentClientWidth: document.documentElement.clientWidth, viewportHeight: window.innerHeight};
          });
         expect(bounds.documentScrollWidth).toBeLessThanOrEqual(bounds.documentClientWidth + 1);
          expect(bounds.scrollWidth).toBeLessThanOrEqual(bounds.clientWidth + 1);
          expect(bounds.status.map(item => item.text).join(' ')).toContain('Group call in progress');
          expect(bounds.status.map(item => item.text).join(' ')).toContain('2 participants in the group call.');
+         expect(bounds.compactCopy, 'Group-call copy control should use the compact presentation').toBeTruthy();
+           expect(bounds.rect.bottom - bounds.rect.top, `${theme}/${viewport.width}px minimized group-call banner should stay compact: ${JSON.stringify(bounds)}`).toBeLessThanOrEqual(80);
+          if (!bounds.restore || !bounds.copy || !bounds.end) throw new Error(`Minimized group call controls are missing: ${JSON.stringify(bounds)}`);
+         expect(bounds.copy.right - bounds.copy.left).toBeGreaterThanOrEqual(44);
+         expect(bounds.copy.bottom - bounds.copy.top).toBeGreaterThanOrEqual(44);
+         expect(bounds.end.right - bounds.end.left).toBeGreaterThanOrEqual(44);
+          expect(bounds.end.bottom - bounds.end.top).toBeGreaterThanOrEqual(44);
+           expect(Math.abs((bounds.restore.top + bounds.restore.bottom) / 2 - (bounds.copy.top + bounds.copy.bottom) / 2), `${theme}/${viewport.width}px group summary/copy row alignment: ${JSON.stringify(bounds)}`).toBeLessThanOrEqual(2);
+           expect(Math.abs((bounds.copy.top + bounds.copy.bottom) / 2 - (bounds.end.top + bounds.end.bottom) / 2), `${theme}/${viewport.width}px group copy/End row alignment: ${JSON.stringify(bounds)}`).toBeLessThanOrEqual(2);
          for (const item of bounds.status) {
            expect(item.scrollWidth, `${theme}/${viewport.width}px clipped group-call status: ${JSON.stringify(item)}`).toBeLessThanOrEqual(item.clientWidth + 1);
            expect(item.scrollHeight, `${theme}/${viewport.width}px vertically clipped group-call status: ${JSON.stringify(item)}`).toBeLessThanOrEqual(item.clientHeight + 1);
@@ -6177,15 +6304,16 @@ test('runs a deterministic three-member group media lifecycle', async ({browser}
         expect(minimizedTooltipBounds?.y).toBeGreaterThanOrEqual(0);
         expect((minimizedTooltipBounds?.x ?? viewport.width) + (minimizedTooltipBounds?.width ?? viewport.width)).toBeLessThanOrEqual(viewport.width);
         expect((minimizedTooltipBounds?.y ?? viewport.height) + (minimizedTooltipBounds?.height ?? viewport.height)).toBeLessThanOrEqual(viewport.height);
-        const restoreBounds = await owner.getByRole('button', {name: 'Return to group call'}).boundingBox();
-        expect(minimizedTooltipBounds?.y).toBeGreaterThanOrEqual((bounds.rect.bottom) - 1);
-        const tooltipOverlapsRestore = !!minimizedTooltipBounds && !!restoreBounds && minimizedTooltipBounds.x < restoreBounds.x + restoreBounds.width && minimizedTooltipBounds.x + minimizedTooltipBounds.width > restoreBounds.x && minimizedTooltipBounds.y < restoreBounds.y + restoreBounds.height && minimizedTooltipBounds.y + minimizedTooltipBounds.height > restoreBounds.y;
-        expect(tooltipOverlapsRestore, `${theme}/${viewport.width}px minimized tooltip overlaps restore control: ${JSON.stringify({minimizedTooltipBounds, restoreBounds})}`).toBeFalsy();
+        expect(minimizedTooltipBounds?.y).toBeGreaterThanOrEqual((bounds.end.bottom) - 1);
+        const tooltipOverlapsControl = (control: {left: number; right: number; top: number; bottom: number} | undefined) => !!minimizedTooltipBounds && !!control && minimizedTooltipBounds.x < control.right && minimizedTooltipBounds.x + minimizedTooltipBounds.width > control.left && minimizedTooltipBounds.y < control.bottom && minimizedTooltipBounds.y + minimizedTooltipBounds.height > control.top;
+        expect(tooltipOverlapsControl(bounds.restore), `${theme}/${viewport.width}px minimized tooltip overlaps restore control: ${JSON.stringify({minimizedTooltipBounds, bounds})}`).toBeFalsy();
+        expect(tooltipOverlapsControl(bounds.copy), `${theme}/${viewport.width}px minimized tooltip overlaps copy control: ${JSON.stringify({minimizedTooltipBounds, bounds})}`).toBeFalsy();
+        expect(tooltipOverlapsControl(bounds.end), `${theme}/${viewport.width}px minimized tooltip overlaps End control: ${JSON.stringify({minimizedTooltipBounds, bounds})}`).toBeFalsy();
          await owner.screenshot({path: testInfo.outputPath(`group-call-minimized-end-tooltip-${theme}-${viewport.width}.png`), fullPage: false, timeout: 15_000});
          await owner.mouse.move(0, 0);
          await expect(minimizedEndTooltip, `${theme}/${viewport.width}px minimized End tooltip should dismiss when the pointer leaves`).not.toBeVisible();
         if (viewport.width === 390) {
-         for (const control of [owner.getByRole('button', {name: 'Return to group call'}), minimizedEndCall]) {
+          for (const control of [owner.getByRole('button', {name: 'Return to group call'}), minimizedCopy, minimizedEndCall]) {
             await control.focus();
             await owner.keyboard.press('Tab');
             await owner.keyboard.press('Shift+Tab');
@@ -6197,6 +6325,43 @@ test('runs a deterministic three-member group media lifecycle', async ({browser}
          }
          await expect(minimizedEndTooltip, `${theme}/${viewport.width}px minimized screenshot must not retain the End tooltip`).not.toBeVisible();
          await owner.screenshot({path: testInfo.outputPath(`group-call-minimized-${theme}-${viewport.width}.png`), fullPage: false, timeout: 15_000});
+      }
+    }
+    await owner.evaluate(() => Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: {writeText: async () => { throw new Error('clipboard denied'); }},
+    }));
+    await owner.setViewportSize({width: 390, height: 844});
+    await setTheme(owner, 'light');
+    const minimizedNormalHeight = await minimizedGroupCall.evaluate(element => element.getBoundingClientRect().height);
+    await minimizedGroupCall.getByRole('button', {name: 'Copy support reference'}).click();
+    await expect(minimizedGroupCall.locator('.support-reference-feedback')).toContainText('Could not copy support reference');
+    const minimizedManualCopy = owner.getByLabel('Support reference, select and copy manually', {exact: true});
+    await expect(minimizedManualCopy).toBeVisible();
+    await expect(minimizedManualCopy).toHaveAttribute('tabindex', '0');
+    for (const theme of ['light', 'dark'] as const) {
+      await setTheme(owner, theme);
+      for (const viewport of [{width: 1440, height: 900}, {width: 390, height: 844}, {width: 320, height: 844}]) {
+        await owner.setViewportSize(viewport);
+        const minimizedFailureGeometry = await minimizedGroupCall.evaluate(element => {
+          const rect = (selector: string) => element.querySelector<HTMLElement>(selector)?.getBoundingClientRect();
+          const banner = element.getBoundingClientRect();
+          const end = rect('.call-minimized-end');
+          const details = rect('.support-reference-details');
+          const manual = rect('.support-reference-manual');
+          return {banner: {left: banner.left, right: banner.right, top: banner.top, bottom: banner.bottom, height: banner.height}, end: end && {left: end.left, right: end.right, top: end.top, bottom: end.bottom}, details: details && {left: details.left, right: details.right, top: details.top, bottom: details.bottom}, manual: manual && {left: manual.left, right: manual.right, top: manual.top, bottom: manual.bottom}, scrollWidth: document.documentElement.scrollWidth, clientWidth: document.documentElement.clientWidth};
+        });
+         expect(minimizedFailureGeometry.banner.height, `${theme}/${viewport.width}px clipboard fallback must not expand the minimized banner`).toBeLessThanOrEqual(80);
+        if (theme === 'light' && viewport.width === 390) expect(minimizedFailureGeometry.banner.height, 'Clipboard fallback must not increase the mobile banner height').toBeLessThanOrEqual(minimizedNormalHeight + 1);
+        expect(minimizedFailureGeometry.scrollWidth).toBeLessThanOrEqual(minimizedFailureGeometry.clientWidth + 1);
+        expect(minimizedFailureGeometry.details?.left).toBeGreaterThanOrEqual(minimizedFailureGeometry.banner.left - 1);
+        expect(minimizedFailureGeometry.details?.right).toBeLessThanOrEqual(minimizedFailureGeometry.banner.right + 1);
+        expect(minimizedFailureGeometry.end).toBeDefined();
+        expect(minimizedFailureGeometry.details?.bottom).toBeLessThanOrEqual(viewport.height);
+        const failureOverlapsEnd = !!minimizedFailureGeometry.details && !!minimizedFailureGeometry.end && minimizedFailureGeometry.details.left < minimizedFailureGeometry.end.right && minimizedFailureGeometry.details.right > minimizedFailureGeometry.end.left && minimizedFailureGeometry.details.top < minimizedFailureGeometry.end.bottom && minimizedFailureGeometry.details.bottom > minimizedFailureGeometry.end.top;
+        expect(failureOverlapsEnd, `${theme}/${viewport.width}px clipboard fallback popover must not overlap End: ${JSON.stringify(minimizedFailureGeometry)}`).toBeFalsy();
+        expect(minimizedFailureGeometry.manual?.right).toBeLessThanOrEqual(minimizedFailureGeometry.banner.right + 1);
+        await owner.screenshot({path: testInfo.outputPath(`group-call-minimized-copy-failure-${theme}-${viewport.width}.png`), fullPage: false, timeout: 15_000});
       }
     }
     await owner.setViewportSize({width: 1440, height: 900});

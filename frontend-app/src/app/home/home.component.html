@@ -80,7 +80,7 @@
         </section>
         <div class="group-call-minimized call-minimized-banner" *ngIf="groupCall?.isOngoing && groupCallMinimized" role="status">
             <button type="button" class="call-minimized-summary" aria-label="Return to group call" (click)="restoreGroupCall()"><span><strong>Group call in progress</strong><small><span *ngIf="groupCall.state.sharing" class="call-minimized-sharing-label">Sharing screen ·</span>{{ groupCall.state.statusLabel }}</small></span></button>
-            <app-copy-support-reference *ngIf="groupCall.state.supportRef" [reference]="groupCall.state.supportRef"></app-copy-support-reference><button type="button" class="call-minimized-end" aria-label="End group call for everyone" title="End group call for everyone" matTooltip="End group call for everyone" matTooltipClass="group-call-end-tooltip" matTooltipPosition="below" (click)="onGroupCallSurfaceIntent({type: 'end'})">End group call</button>
+            <app-copy-support-reference *ngIf="groupCall.state.supportRef" [reference]="groupCall.state.supportRef" [compact]="true"></app-copy-support-reference><button type="button" class="call-minimized-end" aria-label="End group call for everyone" title="End group call for everyone" matTooltip="End group call for everyone" matTooltipClass="group-call-end-tooltip" matTooltipPosition="below" (click)="onGroupCallSurfaceIntent({type: 'end'})">End group call</button>
         </div>
         <ng-container *ngIf="groupCall">
         <ng-container *ngIf="groupCall.state$ | async as groupCallState">

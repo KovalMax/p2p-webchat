@@ -16,6 +16,20 @@ app-home .call-minimized-summary:hover { background: color-mix(in srgb, var(--ch
 app-home .call-minimized-end { grid-column: 2; grid-row: 2; padding: 8px 12px; color: var(--chat-danger-text); font-size: 12px; font-weight: 700; white-space: nowrap; }
 app-home app-copy-support-reference { grid-column: 1; grid-row: 2; justify-self: start; }
 app-home .call-minimized-end:hover { background: var(--chat-danger-surface); }
+app-home .group-call-minimized { position: relative; grid-template-columns: minmax(0, 1fr) 44px auto; grid-template-rows: minmax(44px, auto); align-items: center; gap: 4px 6px; padding: 4px 6px; }
+app-home .group-call-minimized .call-minimized-summary { grid-column: 1; grid-row: 1; min-height: 44px; padding: 2px 6px; }
+app-home .group-call-minimized .call-minimized-summary > span { gap: 0; }
+app-home .group-call-minimized .call-minimized-summary strong, app-home .group-call-minimized .call-minimized-summary small { line-height: 15px; }
+app-home .group-call-minimized .call-minimized-summary small { gap: 0 6px; font-size: 12px; }
+app-home .group-call-minimized .call-minimized-end { grid-column: 3; grid-row: 1; min-width: 44px; min-height: 44px; box-sizing: border-box; padding: 0 10px; }
+app-home .group-call-minimized > app-copy-support-reference { grid-column: 2; grid-row: 1; justify-self: center; min-width: 44px; }
+app-home .group-call-minimized .support-reference-compact { position: static; display: block; width: 44px; }
+app-home .group-call-minimized .support-reference-compact .support-reference-compact-button { width: 44px; min-width: 44px; height: 44px; border-radius: 9px; }
+app-home .group-call-minimized .support-reference-compact .support-reference-details { position: absolute !important; z-index: 10; top: calc(100% + 10px); right: 0; left: auto; width: min(320px, calc(100vw - 48px)); max-width: min(320px, calc(100vw - 48px)); }
+app-home .group-call-minimized .support-reference-compact .support-reference-details-success { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); }
+app-home .group-call-minimized .call-minimized-end:focus-visible, app-home .group-call-minimized .call-minimized-summary:focus-visible { outline: 3px solid var(--zwei-focus); outline-offset: 2px; }
+app-home .call-panel:not(.call-panel-full) app-call-profile .call-presentation-avatar { width: 42px; height: 42px; flex-basis: 42px; font-size: 15px; }
+app-home .call-panel-full app-call-profile .call-presentation-avatar, app-home .group-call-card app-call-profile .call-presentation-avatar { width: 64px; height: 64px; flex-basis: 64px; font-size: 18px; }
 
 @media (max-width: 760px) {
     app-home { --chat-header-row-min-height: 64px; --chat-header-gutter-x: 12px; }
@@ -26,4 +40,11 @@ app-home .call-minimized-end:hover { background: var(--chat-danger-surface); }
     app-home .call-minimized-summary { padding: 6px 8px; }
     app-home .call-minimized-summary strong { font-size: 12px; }
     app-home .call-minimized-end { padding: 6px 10px; }
+    app-home .group-call-minimized { gap: 4px 4px; padding: 4px; }
+    app-home .group-call-minimized .call-minimized-summary { padding: 2px 4px; }
+    app-home .group-call-minimized .call-minimized-end { min-height: 44px; padding: 0 8px; }
+}
+
+@media (max-width: 340px) {
+    app-home .group-call-minimized .call-minimized-summary strong { font-size: 11px; line-height: 14px; }
 }
