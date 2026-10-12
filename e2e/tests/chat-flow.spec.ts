@@ -1639,7 +1639,10 @@ async function assertGroupCallLayout(page: Page, testInfo: import('@playwright/t
     const headerAction = document.querySelector<HTMLElement>('.chat-header > .call-button')?.getBoundingClientRect();
        const selectText = select?.querySelector<HTMLElement>('.mat-mdc-select-value-text, .mat-mdc-select-value');
        const action = element.querySelector<HTMLElement>('.group-call-actions .mat-mdc-outlined-button');
-       const leaveAction = element.querySelector<HTMLElement>('.group-call-actions button.mat-mdc-outlined-button');
+        const leaveAction = element.querySelector<HTMLElement>('.group-call-actions button.mat-mdc-outlined-button');
+        const callActions = element.querySelector<HTMLElement>('.group-call-actions');
+        const supportCopy = element.querySelector<HTMLElement>('.group-call-header app-copy-support-reference button');
+        const header = element.querySelector<HTMLElement>('.group-call-header');
         const endAction = element.querySelector<HTMLElement>('.group-call-active-controls .group-call-end-button:not(.group-call-end-button-labeled)');
         const activeControlRow = element.querySelector<HTMLElement>('.group-call-active-controls')?.getBoundingClientRect();
        const collapse = element.querySelector<HTMLElement>('.group-call-collapse-button');
@@ -1672,7 +1675,9 @@ async function assertGroupCallLayout(page: Page, testInfo: import('@playwright/t
        groupTitle: groupTitle && groupTitleRect ? {text: groupTitle.textContent?.trim(), left: groupTitleRect.left, right: groupTitleRect.right, top: groupTitleRect.top, bottom: groupTitleRect.bottom, clientHeight: groupTitle.clientHeight, scrollHeight: groupTitle.scrollHeight, whiteSpace: getComputedStyle(groupTitle).whiteSpace, overflow: getComputedStyle(groupTitle).overflow, textOverflow: getComputedStyle(groupTitle).textOverflow} : undefined,
        select: select ? {background: getComputedStyle(select).backgroundColor, color: getComputedStyle(select).color, text: selectText ? getComputedStyle(selectText).color : '', value: selectText?.textContent?.trim() || select.textContent?.trim() || '', width: select.getBoundingClientRect().width} : undefined,
        action: action ? {background: getComputedStyle(action).backgroundColor, color: getComputedStyle(action).color, border: getComputedStyle(action).borderTopColor} : undefined,
-       leaveAction: leaveAction ? {label: leaveAction.innerText.trim(), background: getComputedStyle(leaveAction).backgroundColor, color: getComputedStyle(leaveAction).color, border: getComputedStyle(leaveAction).borderTopColor, rect: leaveAction.getBoundingClientRect()} : undefined,
+        leaveAction: leaveAction ? {label: leaveAction.innerText.trim(), background: getComputedStyle(leaveAction).backgroundColor, color: getComputedStyle(leaveAction).color, border: getComputedStyle(leaveAction).borderTopColor, rect: leaveAction.getBoundingClientRect()} : undefined,
+        callActions: callActions ? {display: getComputedStyle(callActions).display, flexDirection: getComputedStyle(callActions).flexDirection} : undefined,
+        supportCopy: supportCopy ? {rect: supportCopy.getBoundingClientRect(), label: supportCopy.getAttribute('aria-label'), header: header?.getBoundingClientRect()} : undefined,
         endAction: endAction ? {background: getComputedStyle(endAction).backgroundColor, color: getComputedStyle(endAction).color, rect: endAction.getBoundingClientRect(), contrast: (() => { const background = luminance(getComputedStyle(endAction).backgroundColor); const foreground = luminance(getComputedStyle(endAction).color); return (Math.max(background, foreground) + .05) / (Math.min(background, foreground) + .05); })()} : undefined,
         activeControlRow: activeControlRow ? {left: activeControlRow.left, right: activeControlRow.right, top: activeControlRow.top, bottom: activeControlRow.bottom} : undefined,
        collapse: collapse ? {rect: collapse.getBoundingClientRect(), width: collapse.getBoundingClientRect().width, height: collapse.getBoundingClientRect().height} : undefined,
@@ -1710,7 +1715,26 @@ async function assertGroupCallLayout(page: Page, testInfo: import('@playwright/t
       expect(metrics.endAction.rect.width).toBe(viewport.width <= 760 ? 64 : 68);
       expect(metrics.endAction.rect.height).toBe(viewport.width <= 760 ? 64 : 68);
       expect(metrics.activeControlRow).toBeDefined();
-      if (!metrics.leaveAction || !metrics.collapse || !metrics.avatar) throw new Error('Active group call leave/collapse controls were not rendered');
+       if (!metrics.leaveAction || !metrics.collapse || !metrics.avatar) throw new Error('Active group call leave/collapse controls were not rendered');
+        if (!metrics.supportCopy || !metrics.callActions) throw new Error('Active group call header copy/footer controls were not rendered');
+        expect(metrics.supportCopy.label).toBe('Copy support reference');
+        expect(metrics.supportCopy.rect.width).toBeGreaterThanOrEqual(44);
+        expect(metrics.supportCopy.rect.height).toBeGreaterThanOrEqual(44);
+        expect(metrics.supportCopy.rect.left).toBeGreaterThanOrEqual((metrics.supportCopy.header?.left ?? 0) - 1);
+        expect(metrics.supportCopy.rect.right).toBeLessThanOrEqual((metrics.supportCopy.header?.right ?? 0) + 1);
+        expect(metrics.supportCopy.rect.left).toBeGreaterThanOrEqual(metrics.collapse.rect.right - 1);
+        expect(metrics.supportCopy.rect.left - metrics.collapse.rect.right).toBeLessThanOrEqual(9);
+        await page.locator('.group-call-collapse-button').focus();
+        await page.keyboard.press('Tab');
+        const supportCopyFocus = await page.locator('.group-call-header app-copy-support-reference button').evaluate(button => ({focused: document.activeElement === button, focusVisible: button.matches(':focus-visible'), outlineStyle: getComputedStyle(button).outlineStyle, outlineWidth: getComputedStyle(button).outlineWidth}));
+        expect(supportCopyFocus.focused, JSON.stringify(supportCopyFocus)).toBe(true);
+        expect(supportCopyFocus.focusVisible, JSON.stringify(supportCopyFocus)).toBe(true);
+        expect(supportCopyFocus.outlineStyle, JSON.stringify(supportCopyFocus)).not.toBe('none');
+        expect(supportCopyFocus.outlineWidth, JSON.stringify(supportCopyFocus)).not.toBe('0px');
+        await page.keyboard.press('Tab');
+        expect(metrics.groupTitle?.right).toBeLessThanOrEqual(metrics.supportCopy.rect.left + 1);
+        expect(metrics.callActions.display).toBe('flex');
+        expect(metrics.callActions.flexDirection).toBe('column');
        const leaveContrast = await measureRenderedTextContrast(page.getByRole('button', {name: 'Leave call'}));
        expect(leaveContrast.ratio, `${theme}/${viewport.width} Leave call contrast: ${JSON.stringify(leaveContrast)}`).toBeGreaterThanOrEqual(4.5);
        console.info(`GROUP_CALL_VIEWPORT ${JSON.stringify({theme, viewport, leaveContrast, selectorWidth: metrics.select.width, contentScrollWidth: metrics.contentScrollWidth, contentClientWidth: metrics.contentClientWidth, contentScrollHeight: metrics.contentScrollHeight, contentClientHeight: metrics.contentClientHeight})}`);
@@ -1742,7 +1766,9 @@ async function assertGroupCallLayout(page: Page, testInfo: import('@playwright/t
      expect(collapseIntersectsAvatar, `${theme}/${viewport.width} collapse/avatar overlap ${JSON.stringify({collapse: metrics.collapse.rect, avatar: metrics.avatar})}`).toBeFalsy();
      expect(metrics.leaveAction.rect.left).toBeGreaterThanOrEqual(metrics.card.rect.left - 1);
       expect(metrics.leaveAction.rect.right).toBeLessThanOrEqual(metrics.card.rect.right + 1);
-       expect(metrics.leaveAction.rect.bottom).toBeLessThanOrEqual(metrics.card.rect.bottom + 1);
+        expect(metrics.leaveAction.rect.bottom).toBeLessThanOrEqual(metrics.card.rect.bottom + 1);
+        expect(metrics.leaveAction.rect.top).toBeGreaterThanOrEqual((metrics.activeControlRow?.bottom ?? 0) - 1);
+        expect(Math.abs((metrics.leaveAction.rect.left + metrics.leaveAction.rect.right) / 2 - (metrics.card.rect.left + metrics.card.rect.right) / 2)).toBeLessThanOrEqual(1);
         expect(metrics.leaveAction.label).toBe('Leave call');
         expect(metrics.leaveAction.background).not.toBe(metrics.endAction.background);
        const roomEnd = page.getByRole('button', {name: 'End group call for everyone'});
@@ -4201,7 +4227,7 @@ test('a departed member quarantines private group UI after a newer revision and 
       await expect(page.locator('.group-call-panel')).toContainText('2 participants in the group call.', {timeout: 10_000});
       await expect(page.getByRole('button', {name: 'Leave call'})).toBeVisible();
       await expect(page.getByRole('button', {name: 'End group call for everyone'})).toBeVisible();
-      await expect(page.getByRole('button', {name: 'Copy support reference'})).toBeVisible();
+      await expect(page.locator('.group-call-header').getByRole('button', {name: 'Copy support reference'})).toBeVisible();
     }));
     await owner.waitForTimeout(2_000);
     await owner.getByRole('button', {name: 'End group call for everyone'}).click({force: true});
@@ -6193,6 +6219,127 @@ test('runs a deterministic three-member group media lifecycle', async ({browser}
     await assertGroupCallLayout(owner, testInfo, 'dark', {width: 390, height: 844});
     await assertGroupCallLayout(owner, testInfo, 'light', {width: 390, height: 844});
 
+    await owner.evaluate(() => Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: {writeText: async () => undefined},
+    }));
+    const groupSupportCopy = owner.getByRole('button', {name: 'Copy support reference'});
+    for (const theme of ['dark', 'light'] as const) {
+      await setTheme(owner, theme);
+      await owner.setViewportSize({width: 390, height: 844});
+      const beforeSuccess = await owner.locator('.group-call-card').evaluate(card => ({
+        header: card.querySelector<HTMLElement>('.group-call-header')?.getBoundingClientRect().toJSON(),
+        profileTop: card.querySelector<HTMLElement>(':scope > app-call-profile')?.getBoundingClientRect().top,
+        actionsTop: card.querySelector<HTMLElement>('.group-call-actions')?.getBoundingClientRect().top,
+      }));
+      await groupSupportCopy.click();
+      await expect(owner.getByRole('status').filter({hasText: 'Support reference copied.'})).toBeVisible();
+      const afterSuccess = await owner.locator('.group-call-card').evaluate(card => ({
+        header: card.querySelector<HTMLElement>('.group-call-header')?.getBoundingClientRect().toJSON(),
+        profileTop: card.querySelector<HTMLElement>(':scope > app-call-profile')?.getBoundingClientRect().top,
+        actionsTop: card.querySelector<HTMLElement>('.group-call-actions')?.getBoundingClientRect().top,
+        details: card.querySelector<HTMLElement>('.support-reference-details')?.getBoundingClientRect().toJSON(),
+        iconPath: card.querySelector('.group-call-header app-copy-support-reference zwei-icon svg path')?.getAttribute('d'),
+      }));
+      expect(afterSuccess.profileTop).toBe(beforeSuccess.profileTop);
+      expect(afterSuccess.actionsTop).toBe(beforeSuccess.actionsTop);
+      expect(afterSuccess.header).toEqual(beforeSuccess.header);
+      expect(afterSuccess.iconPath).toBe('M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z');
+      expect(afterSuccess.details?.width).toBeLessThanOrEqual(1);
+      await owner.screenshot({path: testInfo.outputPath(`group-call-copy-success-${theme}-390x844.png`), fullPage: false, timeout: 15_000});
+    }
+
+    await owner.evaluate(() => Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: {writeText: async () => { throw new Error('clipboard denied'); }},
+    }));
+    const groupSupportStatus = owner.getByRole('status').filter({hasText: 'Could not copy support reference'});
+    const groupSupportFallback = owner.getByLabel('Support reference, select and copy manually', {exact: true});
+    for (const theme of ['dark', 'light'] as const) {
+      for (const viewport of [{width: 1440, height: 900}, {width: 390, height: 844}, {width: 390, height: 640}]) {
+        await setTheme(owner, theme);
+        await owner.setViewportSize(viewport);
+        await groupSupportCopy.click();
+        await expect(groupSupportStatus).toBeVisible();
+        await expect(groupSupportFallback).toBeVisible();
+        const fallbackGeometry = await owner.locator('.group-call-header .support-reference-details').evaluate(details => {
+          const statusElement = details.querySelector<HTMLElement>('[role="status"]');
+          const fallbackElement = details.querySelector<HTMLElement>('.support-reference-manual');
+          const status = statusElement?.getBoundingClientRect();
+          const fallback = fallbackElement?.getBoundingClientRect();
+          const card = details.closest('.group-call-card')?.getBoundingClientRect();
+          const quality = details.closest('.group-call-card')?.querySelector<HTMLElement>('.group-call-devices .call-quality-control')?.getBoundingClientRect();
+          const actions = details.closest('.group-call-card')?.querySelector<HTMLElement>('.group-call-actions')?.getBoundingClientRect();
+          const profile = details.closest('.group-call-card')?.querySelector<HTMLElement>(':scope > app-call-profile')?.getBoundingClientRect();
+          const header = details.closest('.group-call-card')?.querySelector<HTMLElement>('.group-call-header');
+          const component = details.closest('app-copy-support-reference');
+          return {status: status && {left: status.left, right: status.right, top: status.top, bottom: status.bottom}, fallback: fallback && {left: fallback.left, right: fallback.right, top: fallback.top, bottom: fallback.bottom}, detailsStyle: {position: getComputedStyle(details).position, display: getComputedStyle(details).display}, cardClass: details.closest('.group-call-card')?.className, headerStyle: header && {position: getComputedStyle(header).position, display: getComputedStyle(header).display}, header: header?.getBoundingClientRect().toJSON(), component: component?.getBoundingClientRect().toJSON(), statusContent: statusElement && {scrollWidth: statusElement.scrollWidth, clientWidth: statusElement.clientWidth, scrollHeight: statusElement.scrollHeight, clientHeight: statusElement.clientHeight}, fallbackContent: fallbackElement && {scrollWidth: fallbackElement.scrollWidth, clientWidth: fallbackElement.clientWidth, scrollHeight: fallbackElement.scrollHeight, clientHeight: fallbackElement.clientHeight}, card: card && {left: card.left, right: card.right, top: card.top, bottom: card.bottom}, quality: quality && {top: quality.top, bottom: quality.bottom}, actions: actions && {top: actions.top, bottom: actions.bottom}, profile: profile && {left: profile.left, right: profile.right, top: profile.top, bottom: profile.bottom}, documentScrollWidth: document.documentElement.scrollWidth, documentClientWidth: document.documentElement.clientWidth};
+        });
+        const {status, fallback, statusContent, fallbackContent, card} = fallbackGeometry;
+        if (!status || !fallback || !card) throw new Error(`Group-call copy fallback geometry is missing: ${JSON.stringify(fallbackGeometry)}`);
+        await owner.screenshot({path: testInfo.outputPath(`group-call-copy-failure-${theme}-${viewport.width}x${viewport.height}.png`), fullPage: false, timeout: 15_000});
+        expect(fallbackGeometry.cardClass).toContain('group-call-copy-failed');
+        if (viewport.width <= 760) {
+          expect(fallbackGeometry.headerStyle?.position).toBe('static');
+          expect(fallbackGeometry.headerStyle?.display).toBe('grid');
+        }
+        expect(status.bottom).toBeLessThanOrEqual(fallback.top);
+        expect(status.left).toBeGreaterThanOrEqual(card.left - 1);
+        expect(fallback.left).toBeGreaterThanOrEqual(card.left - 1);
+        expect(status.right).toBeLessThanOrEqual(card.right + 1);
+        expect(fallback.right).toBeLessThanOrEqual(card.right + 1);
+        expect(status.top).toBeGreaterThanOrEqual(card.top - 1);
+        expect(fallback.bottom, JSON.stringify(fallbackGeometry)).toBeLessThanOrEqual(card.bottom + 1);
+        expect(statusContent).toBeDefined();
+        expect(fallbackContent).toBeDefined();
+        expect(statusContent?.scrollWidth).toBeLessThanOrEqual((statusContent?.clientWidth ?? 0) + 1);
+        expect(statusContent?.scrollHeight).toBeLessThanOrEqual((statusContent?.clientHeight ?? 0) + 1);
+        expect(fallbackContent?.scrollWidth).toBeLessThanOrEqual((fallbackContent?.clientWidth ?? 0) + 1);
+        expect(fallbackContent?.scrollHeight).toBeLessThanOrEqual((fallbackContent?.clientHeight ?? 0) + 1);
+        if (viewport.width <= 760) {
+          expect(fallbackGeometry.quality).toBeDefined();
+          expect(fallbackGeometry.actions).toBeDefined();
+          expect(fallbackGeometry.profile).toBeDefined();
+          expect(fallback.bottom).toBeLessThanOrEqual((fallbackGeometry.profile?.top ?? viewport.height) + 1);
+          expect(fallbackGeometry.quality?.top ?? 0).toBeGreaterThanOrEqual((fallbackGeometry.profile?.bottom ?? 0) - 1);
+          expect(fallback.bottom).toBeLessThanOrEqual((fallbackGeometry.actions?.top ?? viewport.height) + 1);
+          expect((fallbackGeometry.profile?.right ?? 0) - (fallbackGeometry.profile?.left ?? 0)).toBeGreaterThanOrEqual((card.right - card.left) - 48);
+        }
+        expect(fallbackGeometry.documentScrollWidth).toBeLessThanOrEqual(fallbackGeometry.documentClientWidth + 1);
+        if (viewport.width <= 760) {
+          const qualityVisibility = await owner.locator('.group-call-content').evaluate(content => {
+            const quality = content.querySelector<HTMLElement>('.call-quality-trigger');
+            quality?.scrollIntoView({block: 'nearest', inline: 'nearest'});
+            const qualityBounds = quality?.getBoundingClientRect();
+            const contentBounds = content.getBoundingClientRect();
+            const actionsTop = content.closest('.group-call-card')?.querySelector<HTMLElement>('.group-call-actions')?.getBoundingClientRect().top;
+            return {quality: qualityBounds && {top: qualityBounds.top, bottom: qualityBounds.bottom}, content: {top: contentBounds.top, bottom: contentBounds.bottom}, actionsTop};
+          });
+          if (!qualityVisibility.quality || qualityVisibility.actionsTop === undefined) throw new Error(`Group-call quality control geometry is missing: ${JSON.stringify(qualityVisibility)}`);
+          expect(qualityVisibility.quality.top).toBeGreaterThanOrEqual(qualityVisibility.content.top - 1);
+          expect(qualityVisibility.quality.bottom).toBeLessThanOrEqual(qualityVisibility.content.bottom + 1);
+          expect(qualityVisibility.quality.bottom).toBeLessThanOrEqual(qualityVisibility.actionsTop + 1);
+          await owner.screenshot({path: testInfo.outputPath(`group-call-copy-failure-quality-visible-${theme}-${viewport.width}x${viewport.height}.png`), fullPage: false, timeout: 15_000});
+          const scrollEnd = await owner.locator('.group-call-content').evaluate(content => {
+            const lastControl = content.querySelector<HTMLElement>('.share-audio-toggle');
+            lastControl?.scrollIntoView({block: 'end', inline: 'nearest'});
+            const lastDeviceControl = lastControl?.getBoundingClientRect();
+            const contentRect = content.getBoundingClientRect();
+            const actions = content.closest('.group-call-card')?.querySelector<HTMLElement>('.group-call-actions')?.getBoundingClientRect();
+            return {scrollTop: content.scrollTop, scrollHeight: content.scrollHeight, clientHeight: content.clientHeight, content: {top: contentRect.top, bottom: contentRect.bottom}, lastDeviceControl: lastDeviceControl && {top: lastDeviceControl.top, bottom: lastDeviceControl.bottom}, actions: actions && {top: actions.top}};
+          });
+          if (!scrollEnd.lastDeviceControl || !scrollEnd.actions) throw new Error(`Group-call mobile scroll geometry is missing: ${JSON.stringify(scrollEnd)}`);
+          expect(scrollEnd.scrollHeight).toBeGreaterThan(scrollEnd.clientHeight);
+          expect(scrollEnd.scrollTop).toBeGreaterThan(0);
+          expect(scrollEnd.lastDeviceControl.top).toBeGreaterThanOrEqual(scrollEnd.content.top - 1);
+          expect(scrollEnd.lastDeviceControl.bottom).toBeLessThanOrEqual(scrollEnd.content.bottom + 1);
+          expect(scrollEnd.lastDeviceControl.bottom).toBeLessThanOrEqual(scrollEnd.actions.top + 1);
+          await owner.screenshot({path: testInfo.outputPath(`group-call-copy-failure-scrolled-${theme}-${viewport.width}x${viewport.height}.png`), fullPage: false, timeout: 15_000});
+          await owner.locator('.group-call-content').evaluate(content => { content.scrollTop = 0; });
+        }
+      }
+    }
+
     const observerSyncsBeforeTerminal = await observer.evaluate(() => (window as Window & {__groupSyncRequests?: string[]}).__groupSyncRequests?.length ?? 0);
     dropObserverTerminal = true;
     await setTheme(owner, 'light');
@@ -6204,7 +6351,7 @@ test('runs a deterministic three-member group media lifecycle', async ({browser}
     await expect(ownerTerminal).toBeVisible({timeout: 5_000});
     await expect(ownerTerminal).toContainText('Group call ended.');
     const ownerTerminalStyle = await ownerTerminal.evaluate(element => ({background: getComputedStyle(element).backgroundColor, color: getComputedStyle(element).color}));
-    const ownerTerminalContrast = await measureRenderedTextContrastAtSurface(ownerTerminal.locator('span'));
+    const ownerTerminalContrast = await measureRenderedTextContrastAtSurface(ownerTerminal.locator('.call-terminal-message'));
     expect(ownerTerminalContrast.ratio, `light owner terminal contrast: ${JSON.stringify({ownerTerminalStyle, ownerTerminalContrast})}`).toBeGreaterThanOrEqual(4.5);
     await owner.screenshot({path: testInfo.outputPath('group-call-terminal-owner-light-1440-immediate.png'), fullPage: false, timeout: 15_000});
     await owner.setViewportSize({width: 390, height: 844});
@@ -6221,9 +6368,9 @@ test('runs a deterministic three-member group media lifecycle', async ({browser}
     const observerTerminalStyle = await observerTerminal.evaluate(element => ({
       background: getComputedStyle(element).backgroundColor,
       color: getComputedStyle(element).color,
-      text: element.querySelector('span')?.textContent?.trim() ?? '',
+      text: element.querySelector('.call-terminal-message')?.textContent?.trim() ?? '',
     }));
-    const observerTerminalContrast = await measureRenderedTextContrastAtSurface(observerTerminal.locator('span'));
+    const observerTerminalContrast = await measureRenderedTextContrastAtSurface(observerTerminal.locator('.call-terminal-message'));
     expect(observerTerminalStyle.text).toBe('Group call ended.');
     expect(observerTerminalContrast.ratio, `dark terminal notice contrast: ${JSON.stringify({observerTerminalStyle, observerTerminalContrast})}`).toBeGreaterThanOrEqual(4.5);
     await observer.screenshot({path: testInfo.outputPath('group-call-terminal-dark-1440-immediate.png'), fullPage: false, timeout: 15_000});

@@ -3,11 +3,12 @@
         <audio *ngFor="let peer of callState.peers; trackBy: trackPeer" groupRemoteAudio autoplay playsinline [srcObject]="peer.stream"></audio>
     </ng-container>
     <section class="group-call-panel group-call-panel-full" *ngIf="callState.phase !== 'idle' && callState.phase !== 'left' && callState.phase !== 'ended' && callState.phase !== 'error' && !minimized" aria-label="Group audio call" aria-live="polite">
-        <div class="group-call-card">
+        <div class="group-call-card" [class.group-call-copy-failed]="supportReferenceCopyFailed">
             <div class="group-call-header" *ngIf="ongoing">
                 <button class="group-call-collapse-button" mat-icon-button type="button" aria-label="Minimize group call" (click)="emit({type: 'collapse'})">
                     <zwei-icon name="expand_more"></zwei-icon>
                 </button>
+                <app-copy-support-reference *ngIf="callState.supportRef" [reference]="callState.supportRef" [compact]="true" (copyFailedChange)="supportReferenceCopyFailed = $event"></app-copy-support-reference>
             </div>
             <app-call-profile *ngIf="profile as groupProfile" [profile]="groupProfile"></app-call-profile>
             <div class="group-call-content">
@@ -25,12 +26,11 @@
                 </div>
             </div>
             <div class="group-call-actions">
-                <app-copy-support-reference *ngIf="callState.supportRef && ongoing" [reference]="callState.supportRef"></app-copy-support-reference>
                 <button class="group-call-join" mat-flat-button color="primary" type="button" *ngIf="callState.phase === 'ringing' && !callState.localStream" (click)="emit({type: 'join'})">Join call</button>
                 <button class="group-call-enable-sound" mat-stroked-button type="button" *ngIf="callState.audioPlaybackBlocked" (click)="emit({type: 'enable-sound'})">Enable sound</button>
                 <div class="group-call-active-controls" *ngIf="callState.localStream" role="group" aria-label="Active group call controls">
                     <app-call-icon-actions class="group-call-action-mute" [actions]="actions | slice:0:1" (action)="emit({type: 'action', actionID: $event})"></app-call-icon-actions>
-                    <button class="group-call-end-button" mat-icon-button type="button" aria-label="End group call for everyone" title="End group call for everyone" matTooltip="End group call for everyone" matTooltipClass="group-call-end-tooltip" [matTooltipPosition]="endCallTooltipPosition" (click)="emit({type: 'end'})"><zwei-icon name="call_end"></zwei-icon></button>
+                    <button class="group-call-end-button" mat-icon-button type="button" aria-label="End group call for everyone" title="End group call for everyone" matTooltip="End group call for everyone" matTooltipClass="group-call-end-tooltip" matTooltipPosition="above" (click)="emit({type: 'end'})"><zwei-icon name="call_end"></zwei-icon></button>
                     <app-call-icon-actions class="group-call-action-share" [actions]="actions | slice:1" (action)="emit({type: 'action', actionID: $event})"></app-call-icon-actions>
                 </div>
                 <button class="group-call-leave" mat-stroked-button type="button" *ngIf="callState.localStream" (click)="emit({type: 'leave'})">Leave call</button>

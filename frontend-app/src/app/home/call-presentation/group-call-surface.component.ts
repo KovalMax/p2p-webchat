@@ -21,7 +21,15 @@ export type GroupCallSurfaceIntent =
     changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class GroupCallSurfaceComponent implements OnDestroy {
-    @Input({required: true}) public state?: GroupCallState;
+    private currentState?: GroupCallState;
+    @Input({required: true})
+    public set state(value: GroupCallState | undefined) {
+        if (!value || value.phase === 'idle' || value.phase === 'left' || value.phase === 'ended' || value.phase === 'error' || this.currentState?.supportRef !== value.supportRef) {
+            this.supportReferenceCopyFailed = false;
+        }
+        this.currentState = value;
+    }
+    public get state(): GroupCallState | undefined { return this.currentState; }
     @Input() public minimized = false;
     @Input() public ongoing = false;
     @Input() public profile?: CallPresentationProfile;
@@ -33,11 +41,8 @@ export class GroupCallSurfaceComponent implements OnDestroy {
 
     public presentationFullscreen = false;
     public fullscreenStatus = '';
+    public supportReferenceCopyFailed = false;
     @ViewChild('presentationStage') private presentationStage?: ElementRef<HTMLElement>;
-
-    public get endCallTooltipPosition(): 'above' | 'below' {
-        return window.matchMedia('(max-width: 760px)').matches ? 'below' : 'above';
-    }
 
     public get fullscreenSupported(): boolean {
         return typeof document.createElement('section').requestFullscreen === 'function'

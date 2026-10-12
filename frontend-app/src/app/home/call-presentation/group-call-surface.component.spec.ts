@@ -102,15 +102,33 @@ describe('GroupCallSurfaceComponent', () => {
         ]);
     });
 
-    it('shows the server support reference on an active group surface and omits it for older servers', () => {
+    it('shows a compact header copy control for a server reference and omits it for older servers', () => {
         fixture.componentRef.setInput('state', {...activeState(), supportRef: 'group-ref-1'});
         fixture.componentRef.setInput('ongoing', true);
         fixture.detectChanges();
-        expect(fixture.nativeElement.querySelector('app-copy-support-reference button')?.textContent).toContain('Copy support reference');
+        const copy = fixture.nativeElement.querySelector('.group-call-header app-copy-support-reference button') as HTMLButtonElement | null;
+        expect(copy?.getAttribute('aria-label')).toBe('Copy support reference');
+        expect(copy?.querySelector('zwei-icon svg path')?.getAttribute('d')).toBeTruthy();
+        expect(copy?.textContent?.trim()).toBe('');
+        expect(fixture.nativeElement.querySelector('.group-call-actions app-copy-support-reference')).toBeNull();
 
         fixture.componentRef.setInput('state', activeState());
         fixture.detectChanges();
-        expect(fixture.nativeElement.querySelector('app-copy-support-reference button')).toBeNull();
+        expect(fixture.nativeElement.querySelector('.group-call-header app-copy-support-reference')).toBeNull();
+    });
+
+    it('clears copy failure layout state when a call ends and a new reference arrives', () => {
+        fixture.componentRef.setInput('state', {...activeState(), supportRef: 'group-ref-1'});
+        fixture.componentRef.setInput('ongoing', true);
+        fixture.detectChanges();
+        component.supportReferenceCopyFailed = true;
+
+        fixture.componentRef.setInput('state', {...activeState(), phase: 'ended', supportRef: 'group-ref-1'});
+        fixture.detectChanges();
+        fixture.componentRef.setInput('state', {...activeState(), supportRef: 'group-ref-2'});
+        fixture.detectChanges();
+
+        expect(component.supportReferenceCopyFailed).toBe(false);
     });
 
     it('keeps Join and room End separate before a local participant joins', () => {

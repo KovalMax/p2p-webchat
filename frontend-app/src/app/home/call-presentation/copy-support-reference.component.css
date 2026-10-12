@@ -1,6 +1,17 @@
 .support-reference { display: inline-flex; box-sizing: border-box; width: 100%; min-width: 0; max-width: 100%; flex-wrap: wrap; }
+.support-reference-details { display: flex; flex-basis: 100%; max-width: 100%; flex-direction: column; gap: 4px; }
 .support-reference button { min-height: 40px; padding: 0 10px; border: 1px solid var(--chat-line-strong); border-radius: var(--zwei-radius-control); background: var(--chat-surface-control); color: var(--chat-text); font: 700 12px 'DM Sans', sans-serif; white-space: nowrap; cursor: pointer; }
 .support-reference button:focus-visible { outline: 3px solid var(--zwei-focus); outline-offset: 2px; }
 .support-reference-feedback { flex-basis: 100%; max-width: 100%; padding-top: 4px; color: var(--chat-muted); font: 500 11px/1.35 'DM Sans', sans-serif; overflow-wrap: anywhere; }
 .support-reference-manual { flex-basis: 100%; max-width: 100%; margin-top: 4px; padding: 4px; color: var(--chat-text); background: var(--chat-surface-control); font: 500 12px/1.4 monospace; overflow-wrap: anywhere; user-select: text; }
 .support-reference-manual:focus-visible { outline: 3px solid var(--zwei-focus); outline-offset: 2px; }
+.support-reference-compact { position: relative; width: auto; flex: 0 0 auto; }
+.support-reference-compact .support-reference-compact-button { display: grid; width: 44px; min-width: 44px; height: 44px; place-items: center; padding: 0; border-radius: 50%; }
+.support-reference-compact-button zwei-icon { width: 20px; height: 20px; }
+.support-reference-compact .support-reference-details { position: absolute; z-index: 3; top: 48px; right: 0; width: min(320px, calc(100vw - 48px)); max-width: min(320px, calc(100vw - 48px)); box-sizing: border-box; padding: 8px; border: 1px solid var(--chat-line-strong); border-radius: 8px; background: var(--chat-surface); box-shadow: 0 4px 14px rgba(17, 28, 43, .18); }
+.support-reference-compact .support-reference-manual { margin: 0; }
+@media (max-width: 760px) {
+    .support-reference-compact { position: static; display: grid; width: 100%; grid-template-columns: minmax(0, 1fr); justify-items: end; }
+    .support-reference-compact .support-reference-details { position: static; align-self: stretch; width: min(320px, 100%); max-width: 100%; margin-top: 4px; }
+}
+.support-reference-compact .support-reference-details-success { position: absolute; width: 1px; height: 1px; max-width: none; overflow: hidden; clip: rect(0, 0, 0, 0); padding: 0; border: 0; background: transparent; box-shadow: none; white-space: nowrap; }
