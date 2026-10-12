@@ -35,6 +35,10 @@ export class GroupCallSurfaceComponent implements OnDestroy {
     public fullscreenStatus = '';
     @ViewChild('presentationStage') private presentationStage?: ElementRef<HTMLElement>;
 
+    public get endCallTooltipPosition(): 'above' | 'below' {
+        return window.matchMedia('(max-width: 760px)').matches ? 'below' : 'above';
+    }
+
     public get fullscreenSupported(): boolean {
         return typeof document.createElement('section').requestFullscreen === 'function'
             && typeof document.exitFullscreen === 'function';

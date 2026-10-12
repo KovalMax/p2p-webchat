@@ -1,7 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { AppModule } from '../../app.module';
 import { HomeModule } from '../home.module';
-import { GroupCallState } from '../group-call-facade.service';
+import { GroupCallFacade, GroupCallState } from '../group-call-facade.service';
 import { CallPresentationAction, CallPresentationControl, CallPresentationParticipants, CallPresentationProfile } from '../call-presentation.model';
 import { GroupCallSurfaceComponent } from './group-call-surface.component';
 
@@ -35,7 +35,10 @@ describe('GroupCallSurfaceComponent', () => {
     ];
 
     beforeEach(async () => {
-        await TestBed.configureTestingModule({ imports: [AppModule, HomeModule] }).compileComponents();
+        await TestBed.configureTestingModule({
+            imports: [AppModule, HomeModule],
+            providers: [{provide: GroupCallFacade, useValue: {registerRemoteAudio: vi.fn(), unregisterRemoteAudio: vi.fn(), playRemoteAudio: vi.fn()}}],
+        }).compileComponents();
         fixture = TestBed.createComponent(GroupCallSurfaceComponent);
         component = fixture.componentInstance;
         component.profile = profile;
@@ -99,6 +102,17 @@ describe('GroupCallSurfaceComponent', () => {
         ]);
     });
 
+    it('shows the server support reference on an active group surface and omits it for older servers', () => {
+        fixture.componentRef.setInput('state', {...activeState(), supportRef: 'group-ref-1'});
+        fixture.componentRef.setInput('ongoing', true);
+        fixture.detectChanges();
+        expect(fixture.nativeElement.querySelector('app-copy-support-reference button')?.textContent).toContain('Copy support reference');
+
+        fixture.componentRef.setInput('state', activeState());
+        fixture.detectChanges();
+        expect(fixture.nativeElement.querySelector('app-copy-support-reference button')).toBeNull();
+    });
+
     it('keeps Join and room End separate before a local participant joins', () => {
         component.state = { ...activeState(), phase: 'ringing', localStream: undefined };
         component.ongoing = false;
@@ -114,6 +128,40 @@ describe('GroupCallSurfaceComponent', () => {
         surface.querySelector<HTMLButtonElement>('.group-call-join')?.click();
         surface.querySelector<HTMLButtonElement>('.group-call-end-button-labeled')?.click();
         expect(intents).toEqual([{ type: 'join' }, { type: 'end' }]);
+    });
+
+    it('keeps each active remote audio sink mounted while minimized and removes it on terminal state', () => {
+        const remoteStream = new MediaStream();
+        component.state = {...activeState(), peers: [{userID: 'user-2', deviceID: 'device-2', stream: remoteStream}]};
+        component.minimized = false;
+        component.ongoing = true;
+        fixture.detectChanges();
+
+        const surface = fixture.nativeElement as HTMLElement;
+        const audio = surface.querySelector<HTMLAudioElement>('audio[groupRemoteAudio]');
+        expect(audio).not.toBeNull();
+        expect(audio?.srcObject).toBe(remoteStream);
+        expect(surface.querySelectorAll('audio[groupRemoteAudio]')).toHaveLength(1);
+
+        fixture.componentRef.setInput('minimized', true);
+        fixture.detectChanges();
+        expect(surface.querySelector('.group-call-panel')).toBeNull();
+        expect(surface.querySelector('.group-call-active-controls')).toBeNull();
+        expect(surface.querySelectorAll('audio[groupRemoteAudio]')).toHaveLength(1);
+        expect(surface.querySelector<HTMLAudioElement>('audio[groupRemoteAudio]')).toBe(audio);
+        expect(audio?.srcObject).toBe(remoteStream);
+
+        fixture.componentRef.setInput('minimized', false);
+        fixture.detectChanges();
+        expect(surface.querySelector('.group-call-panel')).not.toBeNull();
+        expect(surface.querySelector('.group-call-active-controls')).not.toBeNull();
+        expect(surface.querySelectorAll('audio[groupRemoteAudio]')).toHaveLength(1);
+        expect(surface.querySelector<HTMLAudioElement>('audio[groupRemoteAudio]')).toBe(audio);
+
+        fixture.componentRef.setInput('state', {...activeState(), phase: 'ended', peers: []});
+        fixture.detectChanges();
+        expect(surface.querySelector('.group-call-panel')).toBeNull();
+        expect(surface.querySelectorAll('audio[groupRemoteAudio]')).toHaveLength(0);
     });
 
     it('renders and reports when a group presentation video is ready', () => {

@@ -15,4 +15,11 @@ type Message struct {
 	Body            string    `json:"body"`
 	CreatedAt       time.Time `json:"created_at"`
 	Kind            string    `json:"kind"`
+	Mentions        []Mention `json:"mentions,omitempty"`
+}
+
+type Mention struct {
+	UserID uuid.UUID `json:"user_id"`
+	Start  int       `json:"start"`
+	End    int       `json:"end"`
 }

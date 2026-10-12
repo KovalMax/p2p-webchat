@@ -10,6 +10,7 @@ import {CallIconActionsComponent} from './call-presentation/call-icon-actions.co
 import {CallParticipantsComponent} from './call-presentation/call-participants.component';
 import {CallProfileComponent} from './call-presentation/call-profile.component';
 import {CallTerminalNoticeComponent} from './call-presentation/call-terminal-notice.component';
+import {CopySupportReferenceComponent} from './call-presentation/copy-support-reference.component';
 import {DirectCallSurfaceComponent} from './call-presentation/direct-call-surface.component';
 import {GroupCallSurfaceComponent} from './call-presentation/group-call-surface.component';
 import {GroupMemberListComponent} from './group-member-list.component';
@@ -24,6 +25,7 @@ const routes: Routes = [{path: '', component: HomeComponent}];
         CallProfileComponent,
         CallParticipantsComponent,
         CallTerminalNoticeComponent,
+        CopySupportReferenceComponent,
         CallDeviceControlsComponent,
         CallIconActionsComponent,
         DirectCallSurfaceComponent,

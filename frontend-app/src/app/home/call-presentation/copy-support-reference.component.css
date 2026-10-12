@@ -1,0 +1,6 @@
+.support-reference { display: inline-flex; box-sizing: border-box; width: 100%; min-width: 0; max-width: 100%; flex-wrap: wrap; }
+.support-reference button { min-height: 40px; padding: 0 10px; border: 1px solid var(--chat-line-strong); border-radius: var(--zwei-radius-control); background: var(--chat-surface-control); color: var(--chat-text); font: 700 12px 'DM Sans', sans-serif; white-space: nowrap; cursor: pointer; }
+.support-reference button:focus-visible { outline: 3px solid var(--zwei-focus); outline-offset: 2px; }
+.support-reference-feedback { flex-basis: 100%; max-width: 100%; padding-top: 4px; color: var(--chat-muted); font: 500 11px/1.35 'DM Sans', sans-serif; overflow-wrap: anywhere; }
+.support-reference-manual { flex-basis: 100%; max-width: 100%; margin-top: 4px; padding: 4px; color: var(--chat-text); background: var(--chat-surface-control); font: 500 12px/1.4 monospace; overflow-wrap: anywhere; user-select: text; }
+.support-reference-manual:focus-visible { outline: 3px solid var(--zwei-focus); outline-offset: 2px; }

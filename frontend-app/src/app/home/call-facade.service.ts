@@ -11,6 +11,7 @@ export interface CallState {
     readonly phase: CallPhase;
     readonly role?: CallRole;
     readonly callID?: string;
+    readonly supportRef?: string;
     readonly conversationID?: string;
     readonly peerID?: string;
     readonly muted: boolean;
@@ -113,7 +114,7 @@ export class CallFacade implements OnDestroy {
         if (!this.canStart()) return;
         const generation = this.beginCallGeneration();
         this.clearDismissTimer();
-        this.setState({...this.state, phase: 'requesting', role: 'caller', conversationID, peerID, muted: false, statusLabel: 'Requesting microphone access...'});
+        this.setState({...this.state, phase: 'requesting', role: 'caller', callID: undefined, supportRef: undefined, conversationID, peerID, muted: false, statusLabel: 'Requesting microphone access...'});
         const stream = await this.requestMicrophone(undefined, true, generation);
         if (!stream) return;
         if (!this.isCurrentGeneration(generation) || this.state.phase !== 'requesting') { this.stopStream(stream); return; }
@@ -379,7 +380,10 @@ export class CallFacade implements OnDestroy {
             this.prunePendingRequests();
             const request = event.request_id ? this.pendingRequestGenerations.get(event.request_id) : undefined;
             if (event.request_id) this.pendingRequestGenerations.delete(event.request_id);
-            if (request && this.isCurrentGeneration(request.generation)) this.setError(this.rejectionLabel(event.payload.error), request.generation);
+            if (request && this.isCurrentGeneration(request.generation)) {
+                if (event.payload.support_ref) this.setState({...this.state, supportRef: event.payload.support_ref});
+                this.setError(this.rejectionLabel(event.payload.error), request.generation);
+            }
             return;
         }
         if (event.type === 'call.incoming') {
@@ -394,7 +398,7 @@ export class CallFacade implements OnDestroy {
             // the v1 event contract; never adopt an accepted event outside it.
             if (this.state.callID === undefined && this.canAdoptEarlyAccepted(event.payload)) {
                 this.clearPendingRequests(this.callGeneration, 'call.start');
-                this.setState({...this.state, callID: event.payload.call_id, statusLabel: 'Connecting call...'});
+                this.setState({...this.state, callID: event.payload.call_id, supportRef: event.payload.support_ref, statusLabel: 'Connecting call...'});
             }
             if (this.state.callID !== event.payload.call_id) return;
             this.enqueueSignaling(() => this.handleAccepted(event)).catch(() => {
@@ -416,7 +420,7 @@ export class CallFacade implements OnDestroy {
         if (event.type === 'call.ringing' && this.state.callID === undefined && this.state.role === 'caller' && this.state.phase === 'outgoing' && this.state.conversationID === event.payload.conversation_id && !this.isRetiredCall(event.payload.call_id)) {
             this.orphanedStartConversations.delete(event.payload.conversation_id);
             this.clearPendingRequests(this.callGeneration, 'call.start');
-            this.setState({...this.state, callID: event.payload.call_id, statusLabel: 'Ringing...'});
+            this.setState({...this.state, callID: event.payload.call_id, supportRef: event.payload.support_ref, statusLabel: 'Ringing...'});
             return;
         }
         if (event.type === 'call.ringing' && this.orphanedStartConversations.delete(event.payload.conversation_id)) {
@@ -425,13 +429,15 @@ export class CallFacade implements OnDestroy {
         }
         if (this.isRetiredCall(event.payload.call_id)) return;
         if (!this.matches(event.payload.call_id)) return;
-        if (event.type === 'call.declined') this.terminal('Call declined.', this.callGeneration);
-        if (event.type === 'call.ended') this.terminal(this.state.phase === 'outgoing' ? 'No answer.' : 'Call ended.', this.callGeneration);
+        if (event.type === 'call.declined' || event.type === 'call.ended') {
+            if (event.payload.support_ref) this.setState({...this.state, supportRef: event.payload.support_ref});
+            this.terminal(event.type === 'call.declined' ? 'Call declined.' : this.state.phase === 'outgoing' ? 'No answer.' : 'Call ended.', this.callGeneration);
+        }
     }
     private handleIncoming(payload: CallPayload): void {
         if (!this.canStart()) { this.dataProvider.send({type: 'call.decline', request_id: createRandomID(), payload: {call_id: payload.call_id}}); return; }
         this.clearDismissTimer();
-        this.setState({...this.state, phase: 'incoming', role: 'recipient', callID: payload.call_id, conversationID: payload.conversation_id, peerID: payload.caller_id, muted: false, statusLabel: 'Incoming audio call.'});
+        this.setState({...this.state, phase: 'incoming', role: 'recipient', callID: payload.call_id, supportRef: payload.support_ref, conversationID: payload.conversation_id, peerID: payload.caller_id, muted: false, statusLabel: 'Incoming audio call.'});
     }
     private async handleAccepted(event: CallAcceptedSocketEvent): Promise<void> {
         const generation = this.callGeneration;
@@ -449,7 +455,7 @@ export class CallFacade implements OnDestroy {
             if (localStream && localStream !== state.localStream) this.stopStream(localStream);
             return;
         }
-        this.setState({...this.state, phase: 'connecting', callID: event.payload.call_id, conversationID: event.payload.conversation_id, peerID: this.peerFor(event.payload), localStream, statusLabel: 'Connecting call...'});
+        this.setState({...this.state, phase: 'connecting', callID: event.payload.call_id, supportRef: event.payload.support_ref || this.state.supportRef, conversationID: event.payload.conversation_id, peerID: this.peerFor(event.payload), localStream, statusLabel: 'Connecting call...'});
         for (const signal of this.pendingSignals.splice(0)) await this.applySignal(signal);
         if (this.state.role === 'caller') {
             await this.createAndSendOffer(generation, this.connection, event.payload.call_id);
@@ -638,7 +644,7 @@ export class CallFacade implements OnDestroy {
         this.retireCurrentCall();
         this.invalidateCallGeneration();
         this.cleanup();
-        this.setState({phase: 'ended', muted: false, screenShareQuality: this.state.screenShareQuality, screenShareAudioEnabled: this.state.screenShareAudioEnabled, screenShareAudioActive: false, screenShareTransition: false, statusLabel: label});
+        this.setState({phase: 'ended', supportRef: this.state.supportRef, muted: false, screenShareQuality: this.state.screenShareQuality, screenShareAudioEnabled: this.state.screenShareAudioEnabled, screenShareAudioActive: false, screenShareTransition: false, statusLabel: label});
         this.dismissNotice();
     }
     private setError(label: string, generation = this.callGeneration): void {
@@ -651,7 +657,7 @@ export class CallFacade implements OnDestroy {
         this.retireCurrentCall();
         this.invalidateCallGeneration();
         this.cleanup();
-        this.setState({phase: 'error', muted: false, screenShareQuality: this.state.screenShareQuality, screenShareAudioEnabled: this.state.screenShareAudioEnabled, screenShareAudioActive: false, screenShareTransition: false, statusLabel: label, errorLabel: label});
+        this.setState({phase: 'error', supportRef: this.state.supportRef, muted: false, screenShareQuality: this.state.screenShareQuality, screenShareAudioEnabled: this.state.screenShareAudioEnabled, screenShareAudioActive: false, screenShareTransition: false, statusLabel: label, errorLabel: label});
         this.dismissNotice();
     }
     private async tryPlayRemoteAudio(audio: HTMLAudioElement, generation: number): Promise<void> {
@@ -825,6 +831,6 @@ export class CallFacade implements OnDestroy {
         this.terminal(label, generation);
     }
     private peerFor(payload: CallPayload): string { return this.state.role === 'caller' ? payload.recipient_id : payload.caller_id; }
-    private rejectionLabel(error: string): string { const value = error.toLowerCase(); return value.includes('busy') ? 'The recipient is busy.' : value.includes('answer') || value.includes('timeout') ? 'No answer.' : `Call unavailable: ${error}`; }
+    private rejectionLabel(error: string): string { const value = error.toLowerCase(); return value.includes('busy') ? 'The recipient is busy.' : value.includes('answer') || value.includes('timeout') ? 'No answer.' : 'Call unavailable.'; }
     private setState(state: CallState): void { this.stateSubject.next(Object.freeze({...state})); }
 }

@@ -2,5 +2,13 @@
 .call-terminal-notice zwei-icon { width: 20px; height: 20px; flex: 0 0 20px; color: var(--chat-accent); }
 .call-terminal-notice button { min-height: 44px; margin-left: auto; padding: 0 12px; border: 1px solid var(--chat-line-strong); border-radius: var(--zwei-radius-control); background: var(--chat-surface-control); color: var(--chat-text); font: 700 13px 'DM Sans', sans-serif; cursor: pointer; }
 .call-terminal-notice button:focus-visible { outline: 3px solid var(--zwei-focus); outline-offset: 2px; }
+@media (max-width: 600px) {
+    .call-terminal-notice { display: grid; grid-template-columns: 20px minmax(0, 1fr); align-items: start; }
+    .call-terminal-notice .call-terminal-message { min-width: 0; overflow-wrap: anywhere; }
+    .call-terminal-notice app-copy-support-reference,
+    .call-terminal-notice > button { grid-column: 2; min-width: 0; width: 100%; }
+    .call-terminal-notice app-copy-support-reference { display: block; }
+    .call-terminal-notice > button { margin-left: 0; justify-self: start; }
+}
 :host-context(.light-theme) .call-terminal-notice.group-call-terminal { border-color: #cfd9e8; background: #e8f1fb; color: #172033; }
 :host-context(.light-theme) .call-terminal-notice.group-call-terminal zwei-icon { color: #2f6fae; }

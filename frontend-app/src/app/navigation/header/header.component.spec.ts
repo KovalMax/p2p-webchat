@@ -23,7 +23,7 @@ describe('HeaderComponent', () => {
         expect(component).toBeTruthy();
     });
 
-    it('repositions an open account menu on mobile and clears only its mobile positioning overrides on desktop', () => {
+    it('leaves account menu placement to the Material trigger in mobile and desktop viewports', () => {
         const overlay = document.createElement('div');
         overlay.className = 'cdk-overlay-container';
         const panel = document.createElement('div');
@@ -31,15 +31,11 @@ describe('HeaderComponent', () => {
         panel.style.setProperty('background-color', 'rgb(38, 53, 70)', 'important');
         overlay.append(panel);
         document.body.append(overlay);
-        const matchMedia = vi.spyOn(window, 'matchMedia')
-            .mockReturnValueOnce({matches: true} as unknown as MediaQueryList)
-            .mockReturnValueOnce({matches: false} as unknown as MediaQueryList);
-
         try {
             component.applyAccountMenuTheme();
-            expect(panel.style.getPropertyValue('position')).toBe('fixed');
-            expect(panel.style.getPropertyValue('right')).toBe('16px');
-            expect(panel.style.getPropertyValue('bottom')).toBe('16px');
+            for (const property of ['position', 'top', 'right', 'bottom', 'left', 'transform']) {
+                expect(panel.style.getPropertyValue(property), `${property} should remain controlled by Material`).toBe('');
+            }
 
             component.onWindowResize();
 
@@ -47,7 +43,6 @@ describe('HeaderComponent', () => {
                 expect(panel.style.getPropertyValue(property), `${property} override should be cleared`).toBe('');
             }
             expect(panel.style.getPropertyValue('background-color')).toBe('rgb(38, 53, 70)');
-            expect(matchMedia).toHaveBeenCalledTimes(2);
         } finally {
             overlay.remove();
         }

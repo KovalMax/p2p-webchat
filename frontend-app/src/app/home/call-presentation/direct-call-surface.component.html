@@ -30,6 +30,7 @@
             <p class="call-device-note" *ngIf="isOngoing(callState) && !outputSelectionSupported">Speaker selection is unavailable in this browser; use the system audio output.</p>
         </div>
         <div class="call-actions">
+            <app-copy-support-reference *ngIf="callState.supportRef && isOngoing(callState)" [reference]="callState.supportRef"></app-copy-support-reference>
             <button mat-flat-button color="primary" type="button" *ngIf="callState.phase === 'incoming'" (click)="emit({type: 'accept'})">Accept</button>
             <button mat-stroked-button type="button" *ngIf="callState.phase === 'incoming'" (click)="emit({type: 'decline'})">Decline</button>
             <button mat-stroked-button type="button" *ngIf="callState.phase === 'outgoing' || callState.phase === 'requesting'" (click)="emit({type: 'cancel'})">Cancel</button>

@@ -28,6 +28,11 @@ build: check_dist_files ## - build all docker containers from compose file
 exec: ## - Exec some docker container e.g. make exec auth sh
 	docker compose -p $(APP_NAME) exec $(RUN_ARGS)
 
+.PHONY: support-export
+support-export: ## - Export bounded realtime logs for one support UUID (SUPPORT_REF=... WINDOW=30m)
+	@test -n "$$SUPPORT_REF" || { echo 'Set SUPPORT_REF to the support UUID' >&2; exit 2; }
+	@python3 production/export-realtime-logs.py "$$SUPPORT_REF" --window "$${WINDOW:-30m}" --project-name messenger --compose-file docker-compose.yml --compose-file docker-compose.override.yml
+
 .PHONY: check_dist_files
 check_dist_files:
 	cp -n .env.dist .env || true

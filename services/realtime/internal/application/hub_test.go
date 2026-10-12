@@ -588,6 +588,243 @@ func TestHubStartsCallForOnlineConversationPeer(t *testing.T) {
 	if calls.started.CallerID != callerID || calls.started.RecipientID != recipientID || calls.started.ConversationID != conversationID {
 		t.Fatalf("started call = %+v", calls.started)
 	}
+	if calls.started.SupportRef == uuid.Nil {
+		t.Fatal("successful call start has no server-generated support_ref")
+	}
+}
+
+func TestHubGeneratesSupportRefBeforeDirectStartRejection(t *testing.T) {
+	callerID, conversationID := uuid.New(), uuid.New()
+	hub := NewHub(nil, authorizedPresence{recipientID: uuid.New()}, onlinePresence{}, nil, nil, nil, nil)
+	client := &recordingClient{identity: sharedauth.Identity{UserID: callerID, DeviceID: "device"}, connectionID: "socket-1"}
+	err := hub.Handle(context.Background(), client, []byte(`{"version":1,"type":"call.start","request_id":"start-rejected","payload":{"conversation_id":"`+conversationID.String()+`"}}`))
+	var requestError *RequestError
+	if !errors.As(err, &requestError) || requestError.SupportRef == uuid.Nil {
+		t.Fatalf("rejected start error = %#v, want support_ref", err)
+	}
+}
+
+func TestHubMalformedDirectCallStartsDoNotGenerateSupportRef(t *testing.T) {
+	tests := []struct {
+		name    string
+		command string
+	}{
+		{
+			name:    "invalid conversation UUID",
+			command: `{"version":1,"type":"call.start","request_id":"invalid-uuid","payload":{"conversation_id":"not-a-uuid"}}`,
+		},
+		{
+			name:    "missing conversation ID",
+			command: `{"version":1,"type":"call.start","request_id":"missing-conversation","payload":{}}`,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			hub := NewHub(nil, authorizedPresence{recipientID: uuid.New()}, onlinePresence{}, nil, nil, nil, nil)
+			client := &recordingClient{identity: sharedauth.Identity{UserID: uuid.New(), DeviceID: "device"}}
+			err := hub.Handle(context.Background(), client, []byte(test.command))
+			var requestError *RequestError
+			if !errors.As(err, &requestError) {
+				t.Fatalf("Handle() error = %#v, want rejected request", err)
+			}
+			if requestError.SupportRef != uuid.Nil {
+				t.Fatalf("malformed start support_ref = %s, want none", requestError.SupportRef)
+			}
+		})
+	}
+}
+
+func TestHubV2DirectCallStartSupportRef(t *testing.T) {
+	t.Run("successful start includes exact reference in call event", func(t *testing.T) {
+		callerID, recipientID, conversationID := uuid.New(), uuid.New(), uuid.New()
+		calls := &fakeCalls{}
+		hub := NewHub(nil, authorizedPresence{recipientID: recipientID}, onlinePresence{}, nil, nil, calls, nil)
+		caller := &recordingClient{identity: sharedauth.Identity{UserID: callerID, DeviceID: "caller"}}
+		recipient := &recordingClient{identity: sharedauth.Identity{UserID: recipientID, DeviceID: "recipient"}}
+		hub.Add(context.Background(), caller)
+		hub.Add(context.Background(), recipient)
+		caller.events, recipient.events = nil, nil
+
+		err := hub.HandleVersion(context.Background(), caller, 2, []byte(`{"version":2,"type":"call.start","request_id":"v2-start","payload":{"conversation_id":"`+conversationID.String()+`"}}`))
+		if err != nil {
+			t.Fatalf("HandleVersion() error = %v", err)
+		}
+		if calls.started.SupportRef == uuid.Nil {
+			t.Fatal("successful v2 direct call start has no support_ref")
+		}
+		var got struct {
+			SupportRef uuid.UUID `json:"support_ref"`
+		}
+		if len(caller.events) != 1 || caller.events[0].(serverEvent).Type != "call.ringing" {
+			t.Fatalf("caller events = %#v, want call.ringing", caller.events)
+		}
+		payload, err := json.Marshal(caller.events[0].(serverEvent).Payload)
+		if err != nil {
+			t.Fatalf("marshal call.ringing payload: %v", err)
+		}
+		if err := json.Unmarshal(payload, &got); err != nil || got.SupportRef != calls.started.SupportRef {
+			t.Fatalf("call.ringing support_ref = %s, want exact generated ref %s (err=%v)", got.SupportRef, calls.started.SupportRef, err)
+		}
+	})
+
+	t.Run("rejected start error includes exact reference", func(t *testing.T) {
+		callerID, conversationID := uuid.New(), uuid.New()
+		hub := NewHub(nil, authorizedPresence{recipientID: uuid.New()}, onlinePresence{}, nil, nil, nil, nil)
+		client := &recordingClient{identity: sharedauth.Identity{UserID: callerID, DeviceID: "device"}, connectionID: "socket-v2"}
+		err := hub.HandleVersion(context.Background(), client, 2, []byte(`{"version":2,"type":"call.start","request_id":"v2-rejected","payload":{"conversation_id":"`+conversationID.String()+`"}}`))
+		var requestError *RequestError
+		if !errors.As(err, &requestError) || requestError.SupportRef == uuid.Nil {
+			t.Fatalf("rejected v2 start error = %#v, want support_ref", err)
+		}
+		encoded, marshalErr := json.Marshal(struct {
+			SupportRef uuid.UUID `json:"support_ref"`
+		}{SupportRef: requestError.SupportRef})
+		if marshalErr != nil {
+			t.Fatalf("marshal rejected start error payload: %v", marshalErr)
+		}
+		var payload map[string]uuid.UUID
+		if err := json.Unmarshal(encoded, &payload); err != nil || payload["support_ref"] != requestError.SupportRef {
+			t.Fatalf("rejected error support_ref = %s, want exact generated ref %s (err=%v)", payload["support_ref"], requestError.SupportRef, err)
+		}
+	})
+}
+
+func TestHubCallStartLogsAreJSONStructuredAndContainNoSignalMaterial(t *testing.T) {
+	callerID, recipientID, conversationID := uuid.New(), uuid.New(), uuid.New()
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&logs, nil))
+	hub := NewHubWithLogger(nil, authorizedPresence{recipientID: recipientID}, onlinePresence{}, nil, nil, &fakeCalls{}, nil, logger)
+	client := &recordingClient{identity: sharedauth.Identity{UserID: callerID, DeviceID: "device"}, connectionID: "opaque-current-socket"}
+	request := `{"version":1,"type":"call.start","request_id":"json-start","payload":{"conversation_id":"` + conversationID.String() + `"}}`
+	if err := hub.Handle(context.Background(), client, []byte(request)); err != nil {
+		t.Fatalf("start call: %v", err)
+	}
+	lines := bytes.Split(bytes.TrimSpace(logs.Bytes()), []byte("\n"))
+	var entry map[string]any
+	if len(lines) == 0 || json.Unmarshal(lines[len(lines)-1], &entry) != nil {
+		t.Fatalf("call log is not JSON: %s", logs.String())
+	}
+	if entry["support_ref"] == nil || entry["request_id"] != "json-start" || entry["connection_id"] != "opaque-current-socket" || entry["outcome"] != "accepted" {
+		t.Fatalf("call log missing bounded correlation fields: %#v", entry)
+	}
+	for _, secret := range []string{"sdp-secret", "candidate-secret", "turn-secret"} {
+		if bytes.Contains(logs.Bytes(), []byte(secret)) {
+			t.Fatalf("call log leaked sensitive material %q: %s", secret, logs.String())
+		}
+	}
+}
+
+func TestHubRemoveLogsRoomCleanupWithoutClaimingEventDelivery(t *testing.T) {
+	for _, test := range []struct {
+		name    string
+		status  string
+		outcome string
+	}{
+		{name: "active participant departure", status: GroupRoomActive, outcome: "participant_removed"},
+		{name: "ended room", status: GroupRoomEnded, outcome: "room_ended"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			var logs bytes.Buffer
+			logger := slog.New(slog.NewJSONHandler(&logs, nil))
+			room := GroupRoom{ID: uuid.New(), ConversationID: uuid.New(), Status: test.status}
+			coord := &removeLogCoordinator{room: room}
+			hub := NewHubWithLogger(nil, nil, coord, nil, nil, nil, nil, logger)
+			client := &recordingClient{identity: sharedauth.Identity{UserID: uuid.New(), DeviceID: "device"}, connectionID: "socket"}
+			hub.Add(context.Background(), client)
+
+			ctx, cancel := context.WithCancel(context.Background())
+			cancel() // Cleanup succeeds, but notifyGroupRoom cannot acquire its lock.
+			hub.Remove(ctx, client)
+
+			var cleanup map[string]any
+			for _, line := range bytes.Split(bytes.TrimSpace(logs.Bytes()), []byte("\n")) {
+				var entry map[string]any
+				if err := json.Unmarshal(line, &entry); err != nil {
+					t.Fatalf("invalid structured log %q: %v", line, err)
+				}
+				if entry["msg"] == "group call room cleanup after websocket disconnect" {
+					cleanup = entry
+				}
+			}
+			if cleanup == nil {
+				t.Fatalf("cleanup log missing: %s", logs.String())
+			}
+			if cleanup["room_status"] != test.status || cleanup["outcome"] != test.outcome {
+				t.Fatalf("cleanup log = %#v, want room_status=%q outcome=%q", cleanup, test.status, test.outcome)
+			}
+			if _, claimsEvent := cleanup["event"]; claimsEvent || cleanup["outcome"] == "emitted" {
+				t.Fatalf("cleanup log claims event delivery: %#v", cleanup)
+			}
+			if !strings.Contains(logs.String(), `"msg":"group call event delivery failed"`) {
+				t.Fatalf("expected delivery failure to be reported separately: %s", logs.String())
+			}
+		})
+	}
+}
+
+type removeLogCoordinator struct {
+	GroupRoomCoordinator
+	room      GroupRoom
+	published []GroupRoomChange
+}
+
+func (*removeLogCoordinator) Connect(context.Context, uuid.UUID, string) (bool, error) {
+	return false, nil
+}
+func (*removeLogCoordinator) Disconnect(context.Context, uuid.UUID, string) (bool, error) {
+	return false, nil
+}
+func (*removeLogCoordinator) Online(context.Context, []uuid.UUID) (map[uuid.UUID]bool, error) {
+	return nil, nil
+}
+func (*removeLogCoordinator) Publish(context.Context, uuid.UUID, bool) error { return nil }
+func (c *removeLogCoordinator) RemoveGroupConnection(context.Context, uuid.UUID, string, string) ([]GroupRoom, error) {
+	return []GroupRoom{c.room}, nil
+}
+func (c *removeLogCoordinator) PublishGroupRoom(_ context.Context, change GroupRoomChange) error {
+	c.published = append(c.published, change)
+	return nil
+}
+
+func TestHubRemoveDeliversTerminalGroupRoomAndPreservesParticipantLeft(t *testing.T) {
+	for _, test := range []struct {
+		name       string
+		status     string
+		changeType string
+	}{
+		{name: "final participant disconnect", status: GroupRoomEnded, changeType: "ended"},
+		{name: "active participant departure", status: GroupRoomActive, changeType: "participant.left"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			userID, peerID := uuid.New(), uuid.New()
+			room := GroupRoom{ID: uuid.New(), ConversationID: uuid.New(), Generation: 1, MembershipRevision: 1, Status: test.status, Participants: []GroupParticipant{
+				{UserID: userID, DeviceID: "device", ConnectionID: "departing"},
+				{UserID: peerID, DeviceID: "peer-device", ConnectionID: "peer-socket"},
+			}}
+			coord := &removeLogCoordinator{room: room}
+			hub := NewHub(nil, nil, coord, nil, nil, nil, nil)
+			departing := &recordingClient{identity: sharedauth.Identity{UserID: userID, DeviceID: "device"}, connectionID: "departing"}
+			peer := &recordingClient{identity: sharedauth.Identity{UserID: peerID, DeviceID: "peer-device"}, connectionID: "peer-socket"}
+			hub.Add(context.Background(), departing)
+			hub.Add(context.Background(), peer)
+			hub.Remove(context.Background(), departing)
+
+			if len(coord.published) != 1 || coord.published[0].Type != test.changeType {
+				t.Fatalf("published room changes = %#v, want type %q", coord.published, test.changeType)
+			}
+			if test.status == GroupRoomEnded {
+				found := false
+				for _, raw := range peer.events {
+					if event, ok := raw.(serverEvent); ok && event.Type == "group.call.ended" {
+						found = true
+					}
+				}
+				if !found {
+					t.Fatalf("final disconnect did not deliver group.call.ended: %#v", peer.events)
+				}
+			}
+		})
+	}
 }
 
 func TestHubQueuesCallerRingingBeforeRecipientIncoming(t *testing.T) {
@@ -616,7 +853,8 @@ func TestHubRoutesSignalOnlyToAcceptedDevice(t *testing.T) {
 	recipientID := uuid.New()
 	call := Call{ID: uuid.New(), ConversationID: uuid.New(), CallerID: callerID, RecipientID: recipientID, CallerDeviceID: "caller-device", AcceptedDeviceID: "accepted-device", CallerConnectionID: "caller-connection", AcceptedConnectionID: "accepted-connection", Status: CallActive}
 	calls := &fakeCalls{call: call}
-	hub := NewHub(nil, authorizedPresence{recipientID: recipientID}, onlinePresence{}, nil, nil, calls, nil)
+	var logs bytes.Buffer
+	hub := NewHubWithLogger(nil, authorizedPresence{recipientID: recipientID}, onlinePresence{}, nil, nil, calls, nil, slog.New(slog.NewJSONHandler(&logs, nil)))
 	caller := &recordingClient{identity: sharedauth.Identity{UserID: callerID, DeviceID: call.CallerDeviceID}, connectionID: call.CallerConnectionID}
 	callerOtherTab := &recordingClient{identity: sharedauth.Identity{UserID: callerID, DeviceID: call.CallerDeviceID}, connectionID: "other-caller-connection"}
 	accepted := &recordingClient{identity: sharedauth.Identity{UserID: recipientID, DeviceID: call.AcceptedDeviceID}, connectionID: call.AcceptedConnectionID}
@@ -645,6 +883,9 @@ func TestHubRoutesSignalOnlyToAcceptedDevice(t *testing.T) {
 	}
 	if len(otherDevice.events) != 0 {
 		t.Fatalf("other device events = %#v", otherDevice.events)
+	}
+	if strings.Contains(logs.String(), "call command accepted") {
+		t.Fatalf("successful call.signal emitted lifecycle log: %s", logs.String())
 	}
 	if err := hub.Handle(context.Background(), callerOtherTab, []byte(`{"version":1,"type":"call.signal","request_id":"signal-2","payload":{"call_id":"`+call.ID.String()+`","signal":{"type":"offer","sdp":"forbidden"}}}`)); !errors.Is(err, ErrCallNotAllowed) {
 		t.Fatalf("other caller tab signal error = %v, want not allowed", err)

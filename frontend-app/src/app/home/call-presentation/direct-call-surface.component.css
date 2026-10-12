@@ -17,6 +17,9 @@
 :host(.call-panel-full) .call-devices { padding-top: 18px; }
 :host(.call-panel-full) .call-card-content > app-call-device-controls { width: 100%; min-width: 0; box-sizing: border-box; }
 :host(.call-panel-full) .call-actions { display: flex; width: 100%; flex: 0 0 auto; flex-direction: column; align-items: center; gap: 12px; margin-top: auto; padding-top: 28px; }
+:host(.call-panel-full) .call-actions:has(.direct-call-control-row) { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto; align-items: stretch; }
+:host(.call-panel-full) .call-actions:has(.direct-call-control-row) > app-copy-support-reference { grid-column: 1; grid-row: 1; justify-self: start; min-width: 0; width: min(100%, 340px); }
+:host(.call-panel-full) .call-actions:has(.direct-call-control-row) > .direct-call-control-row { grid-column: 1; grid-row: 2; justify-self: center; }
 :host(.call-panel-full) .call-actions button { width: 100%; min-height: 48px; border-radius: 12px; font-weight: 700; }
 :host(.call-panel-full) .call-actions button[mat-flat-button] { background-color: var(--chat-accent) !important; color: #fff !important; }
 :host(.call-panel-full) .call-actions button[color="warn"] { background-color: var(--zwei-danger) !important; }
@@ -74,7 +77,9 @@
     :host(.call-panel-full) .call-card { width: 100%; height: auto; min-height: 0; flex: 1; padding: 24px 20px; }
     :host(.call-panel-full) .call-collapse-button { top: 6px; right: 6px; left: auto; }
     :host(.call-panel-full) .call-card-content { padding-top: 16px; }
-    :host(.call-panel-full) .call-actions { box-sizing: border-box; margin-top: auto; padding: 16px 0 env(safe-area-inset-bottom); border-top: 1px solid var(--chat-line-strong); background: var(--chat-surface); box-shadow: 0 -10px 24px rgba(17, 28, 43, .1); }
+    :host(.call-panel-full) .call-actions { display: flex; box-sizing: border-box; margin-top: auto; padding: 16px 0 env(safe-area-inset-bottom); border-top: 1px solid var(--chat-line-strong); background: var(--chat-surface); box-shadow: 0 -10px 24px rgba(17, 28, 43, .1); }
+    :host(.call-panel-full) .call-actions:has(.direct-call-control-row) { gap: 12px; }
+    :host(.call-panel-full) .call-actions:has(.direct-call-control-row) > app-copy-support-reference { justify-self: stretch; width: 100%; }
     :host(.call-panel-full) .call-devices, :host(.call-panel-full) .call-actions { grid-template-columns: 1fr; }
     :host(.call-panel-full) .call-sharing-indicator { display: none; }
     .direct-call-control-row { width: min(100%, 280px); gap: 14px; }

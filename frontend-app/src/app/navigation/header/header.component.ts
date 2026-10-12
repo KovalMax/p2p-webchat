@@ -67,17 +67,7 @@ export class HeaderComponent implements OnInit, OnDestroy {
     public applyAccountMenuTheme(): void {
         const panel = document.querySelector<HTMLElement>('.cdk-overlay-container .mat-mdc-menu-panel');
         if (!panel) return;
-        if (window.matchMedia('(max-width: 600px)').matches) {
-            panel.style.setProperty('position', 'fixed', 'important');
-            panel.style.setProperty('top', 'auto', 'important');
-            panel.style.setProperty('right', '16px', 'important');
-            panel.style.setProperty('bottom', '16px', 'important');
-            panel.style.setProperty('left', 'auto', 'important');
-            panel.style.setProperty('transform', 'none', 'important');
-        } else {
-            ['position', 'top', 'right', 'bottom', 'left', 'transform'].forEach(property => panel.style.removeProperty(property));
-            this.accountMenuTrigger?.updatePosition();
-        }
+        this.accountMenuTrigger?.updatePosition();
         const foreground = this.isDarkTheme ? '#edf2fa' : '#172033';
         panel.classList.toggle('account-menu-panel-dark', this.isDarkTheme);
         panel.classList.toggle('account-menu-panel-light', !this.isDarkTheme);

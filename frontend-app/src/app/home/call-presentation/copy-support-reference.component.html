@@ -1,0 +1,5 @@
+<div class="support-reference" *ngIf="reference">
+    <button type="button" (click)="copy()">Copy support reference</button>
+    <span class="support-reference-feedback" *ngIf="feedback" role="status" aria-live="polite">{{ feedback }}</span>
+    <code *ngIf="copyFailed" class="support-reference-manual" tabindex="0" aria-label="Support reference, select and copy manually">{{ reference }}</code>
+</div>

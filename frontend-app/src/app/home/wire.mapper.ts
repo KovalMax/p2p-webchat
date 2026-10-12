@@ -1,5 +1,5 @@
 import {Conversation, DirectConversation, GroupConversation, GroupMember, GroupPeerReadCursor, GroupRole} from './conversation.model';
-import {Message, MessageHistory} from './message.model';
+import {isValidMessageMentions, Message, MessageHistory, MessageMention} from './message.model';
 
 export interface ConversationWire {
     kind?: 'direct';
@@ -92,8 +92,27 @@ export interface MessageWire {
     client_message_id: string;
     sequence: number;
     body: string;
+    mentions?: MessageMentionWire[];
     created_at: string;
     kind?: 'user' | 'system';
+}
+
+export interface MessageMentionWire { user_id: string; start: number; end: number; }
+
+export function toMessageMentionWires(mentions: readonly MessageMention[]): MessageMentionWire[] {
+    return mentions.map(({userId, start, end}) => ({user_id: userId, start, end}));
+}
+
+export function isValidMessageMentionWire(value: unknown, body: string): value is MessageMentionWire[] {
+    if (!Array.isArray(value)) return false;
+    const mentions: MessageMention[] = [];
+    for (const item of value) {
+        if (!item || typeof item !== 'object' || Array.isArray(item)) return false;
+        const wire = item as Record<string, unknown>;
+        if (Object.keys(wire).some(key => !['user_id', 'start', 'end'].includes(key)) || typeof wire['user_id'] !== 'string') return false;
+        mentions.push({userId: wire['user_id'], start: wire['start'] as number, end: wire['end'] as number});
+    }
+    return isValidMessageMentions(mentions, body);
 }
 
 export interface PeerReadCursorWire {
@@ -167,7 +186,7 @@ export function toGroup(value: unknown): GroupConversation | null {
 }
 
 export function toMessage(item: MessageWire): Message | null {
-    if (!item || typeof item !== 'object' || typeof item.id !== 'string' || !item.id.trim() || typeof item.conversation_id !== 'string' || !item.conversation_id.trim() || typeof item.sender_id !== 'string' || !item.sender_id.trim() || typeof item.client_message_id !== 'string' || !item.client_message_id.trim() || !Number.isSafeInteger(item.sequence) || item.sequence < 1 || typeof item.body !== 'string' || typeof item.created_at !== 'string' || !item.created_at.trim() || (item.kind !== undefined && item.kind !== 'user' && item.kind !== 'system')) return null;
+    if (!item || typeof item !== 'object' || typeof item.id !== 'string' || !item.id.trim() || typeof item.conversation_id !== 'string' || !item.conversation_id.trim() || typeof item.sender_id !== 'string' || !item.sender_id.trim() || typeof item.client_message_id !== 'string' || !item.client_message_id.trim() || !Number.isSafeInteger(item.sequence) || item.sequence < 1 || typeof item.body !== 'string' || typeof item.created_at !== 'string' || !item.created_at.trim() || (item.kind !== undefined && item.kind !== 'user' && item.kind !== 'system') || (item.mentions !== undefined && !isValidMessageMentionWire(item.mentions, item.body))) return null;
     return {
         id: item.id,
         conversationId: item.conversation_id,
@@ -177,6 +196,7 @@ export function toMessage(item: MessageWire): Message | null {
         body: item.body,
         createdAt: item.created_at,
         kind: item.kind === 'system' ? 'system' : 'user',
+        ...(item.mentions === undefined ? {} : {mentions: item.mentions.map(mention => ({userId: mention.user_id, start: mention.start, end: mention.end}))}),
     };
 }
 

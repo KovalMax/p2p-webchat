@@ -44,7 +44,12 @@ func TestReconciliationRepositoryReturnsAuthorizedForwardBoundedMessages(t *test
 
 	sender := messaging.NewSender(db, "reconciliation-test-key")
 	for index := 1; index <= 3; index++ {
-		if _, _, err := sender.Send(ctx, messaging.SendRequest{SenderID: ownerID, ConversationID: conversationID, ClientMessageID: fmt.Sprintf("reconcile-%d", index), Body: fmt.Sprintf("message %d", index)}); err != nil {
+		request := messaging.SendRequest{SenderID: ownerID, ConversationID: conversationID, ClientMessageID: fmt.Sprintf("reconcile-%d", index), Body: fmt.Sprintf("message %d", index)}
+		if index == 2 {
+			request.Body = "@message 2"
+			request.Mentions = []messaging.Mention{{UserID: peerID, Start: 0, End: 8}}
+		}
+		if _, _, err := sender.Send(ctx, request); err != nil {
 			t.Fatalf("send message %d: %v", index, err)
 		}
 	}
@@ -60,8 +65,11 @@ func TestReconciliationRepositoryReturnsAuthorizedForwardBoundedMessages(t *test
 	if result.HighWatermark != 3 || result.OwnReadSequence != 1 || result.PeerReadSequence != 2 || !result.HasMore || result.NextAfterSequence != 2 {
 		t.Fatalf("reconciliation metadata = %+v", result)
 	}
-	if len(result.Messages) != 1 || result.Messages[0].Sequence != 2 || result.Messages[0].Body != "message 2" {
+	if len(result.Messages) != 1 || result.Messages[0].Sequence != 2 || result.Messages[0].Body != "@message 2" {
 		t.Fatalf("reconciliation messages = %+v", result.Messages)
+	}
+	if len(result.Messages[0].Mentions) != 1 || result.Messages[0].Mentions[0].UserID != peerID {
+		t.Fatalf("reconciliation mentions = %+v, want persisted peer mention", result.Messages[0].Mentions)
 	}
 	if _, err := repository.Reconcile(ctx, outsiderID, conversationID, 0, 1); err == nil {
 		t.Fatal("unauthorized reconciliation succeeded")

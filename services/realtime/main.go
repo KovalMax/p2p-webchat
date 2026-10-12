@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 	"os"
 	"strings"
@@ -21,6 +22,8 @@ import (
 )
 
 func main() {
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	slog.SetDefault(logger)
 	ctx, cancel := runtime.SignalContext()
 	defer cancel()
 
@@ -57,7 +60,7 @@ func main() {
 	}
 	presence := postgresinfra.NewPresenceRepository(db)
 	groupCall := postgresinfra.NewGroupCallRepository(db)
-	hub := application.NewHubWithGroupCallAuthorizer(messaging.NewSender(db, encryptionSecret), presence, groupCall, coordination, messaging.NewDeliveryRepository(db, encryptionSecret), postgresinfra.NewReadCursorRepository(db), postgresinfra.NewReconciliationRepository(db, encryptionSecret), coordination, turnIssuer, runtime.NewLogger())
+	hub := application.NewHubWithGroupCallAuthorizer(messaging.NewSender(db, encryptionSecret), presence, groupCall, coordination, messaging.NewDeliveryRepository(db, encryptionSecret), postgresinfra.NewReadCursorRepository(db), postgresinfra.NewReconciliationRepository(db, encryptionSecret), coordination, turnIssuer, logger)
 	go coordination.StartHeartbeat(ctx)
 	go func() {
 		superviseRedisSubscription(ctx, func(subscriptionContext context.Context) error {
@@ -123,10 +126,7 @@ func main() {
 			case <-ticker.C:
 				calls, err := coordination.ExpireCalls(ctx)
 				if err == nil {
-					for _, call := range calls {
-						hub.DeliverCall(application.CallChange{Type: "ended", Call: call})
-						_ = coordination.PublishCall(ctx, application.CallChange{Type: "ended", Call: call})
-					}
+					hub.NotifyExpiredCalls(ctx, calls)
 				}
 				// This service-owned loop claims logical group-room expiries and
 				// stops with the process context. Redis TTL retains only a short
@@ -148,7 +148,7 @@ func main() {
 		Handler: mux,
 	}
 	runtime.ConfigureWebSocketServer(server)
-	if err := runtime.RunHTTP(ctx, runtime.NewLogger(), server); err != nil {
+	if err := runtime.RunHTTP(ctx, logger, server); err != nil {
 		panic(err)
 	}
 }

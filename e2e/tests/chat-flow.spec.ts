@@ -1369,7 +1369,7 @@ async function assertGroupCallAudioConnected(page: Page): Promise<void> {
     const connections = (window as Window & {__groupPeerConnections?: RTCPeerConnection[]}).__groupPeerConnections ?? [];
     const connectedPeers = connections.filter(connection => connection.connectionState === 'connected' && connection.remoteDescription !== null
       && connection.getReceivers().some(receiver => receiver.track.kind === 'audio' && receiver.track.readyState === 'live'));
-    const audios = Array.from(document.querySelectorAll<HTMLAudioElement>('.group-call-panel audio'));
+    const audios = Array.from(document.querySelectorAll<HTMLAudioElement>('audio[groupRemoteAudio]'));
     const playingRemoteAudio = audios.length > 0 && audios.every(audio => !audio.paused && audio.srcObject instanceof MediaStream
       && audio.srcObject.active && audio.srcObject.getAudioTracks().some(track => track.readyState === 'live'));
     return connectedPeers.length > 0 && audios.length > 0 && playingRemoteAudio;
@@ -1379,7 +1379,7 @@ async function assertGroupCallAudioConnected(page: Page): Promise<void> {
     return {
       connectedPeerCount: connections.filter(connection => connection.connectionState === 'connected' && connection.remoteDescription !== null
         && connection.getReceivers().some(receiver => receiver.track.kind === 'audio' && receiver.track.readyState === 'live')).length,
-      remoteAudioCount: Array.from(document.querySelectorAll<HTMLAudioElement>('.group-call-panel audio')).filter(audio => !audio.paused
+      remoteAudioCount: Array.from(document.querySelectorAll<HTMLAudioElement>('audio[groupRemoteAudio]')).filter(audio => !audio.paused
         && audio.srcObject instanceof MediaStream && audio.srcObject.active && audio.srcObject.getAudioTracks().some(track => track.readyState === 'live')).length,
     };
   });
@@ -1585,6 +1585,27 @@ async function assertAccountMenuContrast(page: Page, theme: 'light' | 'dark'): P
     expect(item.opacity, `${theme} menu text opacity ${JSON.stringify(item)}`).toBe(1);
     expect(item.contrast, `${theme} menu item contrast ${JSON.stringify(item)}`).toBeGreaterThanOrEqual(4.5);
   }
+  const geometry = await page.getByRole('button', {name: 'Account menu'}).evaluate(trigger => {
+    const panel = document.querySelector<HTMLElement>('.cdk-overlay-container .mat-mdc-menu-panel');
+    if (!panel) throw new Error('Account menu panel was not rendered');
+    const triggerRect = trigger.getBoundingClientRect();
+    const panelRect = panel.getBoundingClientRect();
+    return {
+      positioning: getComputedStyle(panel).position,
+      trigger: {left: triggerRect.left, right: triggerRect.right, top: triggerRect.top, bottom: triggerRect.bottom},
+      panel: {left: panelRect.left, right: panelRect.right, top: panelRect.top, bottom: panelRect.bottom},
+      viewport: {width: innerWidth, height: innerHeight},
+    };
+  });
+  expect(geometry.positioning, `${theme} account menu should remain in the Material overlay positioning context`).not.toBe('fixed');
+  expect(geometry.panel.left).toBeGreaterThanOrEqual(0);
+  expect(geometry.panel.right).toBeLessThanOrEqual(geometry.viewport.width + 1);
+  expect(geometry.panel.top).toBeGreaterThanOrEqual(0);
+  expect(geometry.panel.bottom).toBeLessThanOrEqual(geometry.viewport.height + 1);
+  const overlapsTriggerHorizontally = geometry.panel.left < geometry.trigger.right && geometry.panel.right > geometry.trigger.left;
+  const verticalGap = Math.min(Math.abs(geometry.panel.bottom - geometry.trigger.top), Math.abs(geometry.panel.top - geometry.trigger.bottom));
+  expect(overlapsTriggerHorizontally, `${theme} account menu must be horizontally anchored to its trigger: ${JSON.stringify(geometry)}`).toBeTruthy();
+  expect(verticalGap, `${theme} account menu must be positioned beside its trigger, not fixed to the viewport edge: ${JSON.stringify(geometry)}`).toBeLessThanOrEqual(24);
 }
 
 async function assertGroupCallLayout(page: Page, testInfo: import('@playwright/test').TestInfo, theme: 'light' | 'dark', viewport: {width: number; height: number}): Promise<{surface: string; text: string}> {
@@ -1840,7 +1861,7 @@ async function assertGroupCallLayout(page: Page, testInfo: import('@playwright/t
        expect(metrics.action.border).toBe('rgb(109, 137, 167)');
    }
   await page.screenshot({path: testInfo.outputPath(`group-call-${theme}-${viewport.width}.png`), fullPage: false, timeout: 15_000});
-  if (viewport.width === 1440) {
+   if (viewport.width === 1440 || viewport.width === 390) {
     await page.getByRole('button', {name: 'Account menu'}).click();
     const accountMenu = page.locator('.mat-mdc-menu-panel');
     await expect(accountMenu).toBeVisible();
@@ -1958,6 +1979,7 @@ test('direct call offers and answers connect in the browser UI', async ({browser
   const bobEmail = uniqueEmail('direct-call-bob');
   const aliceContext = await browser.newContext({viewport: {width: 1440, height: 900}});
   const bobContext = await browser.newContext({viewport: {width: 1440, height: 900}});
+  await aliceContext.grantPermissions(['microphone', 'clipboard-read', 'clipboard-write'], {origin: chatBase});
   const alice = await aliceContext.newPage();
   const bob = await bobContext.newPage();
   const aliceSignals: string[] = [];
@@ -1996,7 +2018,42 @@ test('direct call offers and answers connect in the browser UI', async ({browser
     await bob.getByRole('button', {name: 'Accept'}).click();
     await expect(alice.getByText('Audio call connected.')).toBeVisible({timeout: 10_000});
     await expect(bob.getByText('Audio call connected.')).toBeVisible({timeout: 10_000});
-      await expect(alice.getByLabel('Microphone input', {exact: true})).toBeVisible();
+    const supportReferenceButton = alice.getByRole('button', {name: 'Copy support reference'});
+    await expect(supportReferenceButton).toBeVisible();
+    const supportReferenceLayout = await supportReferenceButton.evaluate(button => {
+      const bounds = button.getBoundingClientRect();
+      const card = button.closest('.call-card')?.getBoundingClientRect();
+      return {left: bounds.left, right: bounds.right, cardLeft: card?.left, cardRight: card?.right, scrollWidth: document.documentElement.scrollWidth, clientWidth: document.documentElement.clientWidth};
+    });
+    expect(supportReferenceLayout.left).toBeGreaterThanOrEqual((supportReferenceLayout.cardLeft ?? 0) - 1);
+    expect(supportReferenceLayout.right).toBeLessThanOrEqual((supportReferenceLayout.cardRight ?? 0) + 1);
+    expect(supportReferenceLayout.scrollWidth).toBeLessThanOrEqual(supportReferenceLayout.clientWidth + 1);
+    await alice.evaluate(() => Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: {writeText: async (text: string) => { document.documentElement.dataset.clipboardWrittenText = text; }},
+    }));
+    await supportReferenceButton.click();
+    await expect(alice.getByRole('status').filter({hasText: 'Support reference copied.'})).toBeVisible();
+    const copiedSupportReference = await alice.evaluate(() => document.documentElement.dataset.clipboardWrittenText);
+    expect(copiedSupportReference).toMatch(/^[0-9a-f-]{36}$/i);
+    await alice.evaluate(() => Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: {writeText: async () => { throw new Error('clipboard denied'); }},
+    }));
+    await supportReferenceButton.click();
+    await expect(alice.getByRole('status').filter({hasText: 'Could not copy support reference'})).toBeVisible();
+    const manualSupportReference = alice.getByLabel('Support reference, select and copy manually', {exact: true});
+    await expect(manualSupportReference).toBeVisible();
+    await expect(manualSupportReference).toHaveText(copiedSupportReference);
+    await expect(manualSupportReference).toHaveAttribute('tabindex', '0');
+    expect(await manualSupportReference.evaluate(element => getComputedStyle(element).userSelect)).toBe('text');
+    await alice.setViewportSize({width: 390, height: 844});
+    await supportReferenceButton.focus();
+    await alice.keyboard.press('Tab');
+    await expect(manualSupportReference).toBeFocused();
+    expect(await manualSupportReference.evaluate(element => getComputedStyle(element).outlineStyle)).not.toBe('none');
+    // Acceptance matrix: active selected conversation in both themes at 2560/1440/1024/390x844.
+    await expect(alice.getByLabel('Microphone input', {exact: true})).toBeVisible();
       await expect(alice.getByLabel('Speaker output', {exact: true})).toBeVisible();
          await expect(alice.getByRole('combobox', {name: 'Screen share quality', exact: true})).toBeVisible();
       for (const deviceLabel of ['Microphone input', 'Speaker output', 'Screen share quality']) {
@@ -2004,11 +2061,60 @@ test('direct call offers and answers connect in the browser UI', async ({browser
       }
     await expect.poll(() => aliceSignals.includes('offer')).toBeTruthy();
     await expect.poll(() => bobSignals.includes('answer')).toBeTruthy();
+    // Support-reference acceptance matrix: active selected conversation in both themes at 2560/1440/1024/390x844.
     for (const theme of ['dark', 'light'] as const) {
       await setTheme(alice, theme);
       for (const viewport of [{width: 2560, height: 1440}, {width: 1440, height: 900}, {width: 1024, height: 900}, {width: 390, height: 844}]) {
         await alice.setViewportSize(viewport);
         await expect(alice.locator('.call-panel-full')).toBeVisible();
+        const copyBounds = await alice.getByRole('button', {name: 'Copy support reference'}).evaluate(button => {
+          const rect = button.getBoundingClientRect();
+          const card = button.closest('.call-card')?.getBoundingClientRect();
+          const actions = button.closest('.call-actions') as HTMLElement | null;
+          return {left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom, cardLeft: card?.left, cardRight: card?.right, actionsScrollWidth: actions?.scrollWidth, actionsClientWidth: actions?.clientWidth};
+        });
+        expect(copyBounds.left, `${theme}/${viewport.width}px copy control clips left: ${JSON.stringify(copyBounds)}`).toBeGreaterThanOrEqual((copyBounds.cardLeft ?? 0) - 1);
+        expect(copyBounds.right, `${theme}/${viewport.width}px copy control clips right: ${JSON.stringify(copyBounds)}`).toBeLessThanOrEqual((copyBounds.cardRight ?? 0) + 1);
+        expect(copyBounds.actionsScrollWidth).toBeLessThanOrEqual((copyBounds.actionsClientWidth ?? 0) + 1);
+        const supportFailureGeometry = await alice.locator('.call-actions').evaluate(actions => {
+          const rect = (selector: string): DOMRect | undefined => actions.querySelector<HTMLElement>(selector)?.getBoundingClientRect();
+          const copy = rect('app-copy-support-reference');
+          const status = rect('.support-reference-feedback');
+          const manual = rect('.support-reference-manual');
+          const controls = rect('.direct-call-control-row');
+          const copyButton = rect('app-copy-support-reference button');
+          const card = actions.closest('.call-card')?.getBoundingClientRect();
+          const documentElement = document.documentElement;
+          const describe = (bounds: DOMRect | undefined) => bounds ? {left: bounds.left, right: bounds.right, top: bounds.top, bottom: bounds.bottom, width: bounds.width, height: bounds.height} : undefined;
+          return {
+            copy: describe(copy), status: describe(status), manual: describe(manual), controls: describe(controls), copyButton: describe(copyButton),
+            card: describe(card), actions: describe(actions.getBoundingClientRect()),
+            actionDisplay: getComputedStyle(actions).display,
+            actionColumns: getComputedStyle(actions).gridTemplateColumns,
+            scrollWidth: documentElement.scrollWidth, clientWidth: documentElement.clientWidth,
+          };
+        });
+        console.info(`DIRECT_CALL_SUPPORT_FAILURE_GEOMETRY ${JSON.stringify({theme, viewport, supportFailureGeometry})}`);
+        expect(supportFailureGeometry.status, `${theme}/${viewport.width}px clipboard failure feedback missing`).toBeDefined();
+        expect(supportFailureGeometry.manual, `${theme}/${viewport.width}px manual support reference missing`).toBeDefined();
+        expect(supportFailureGeometry.controls).toBeDefined();
+        expect(supportFailureGeometry.copyButton).toBeDefined();
+        expect(supportFailureGeometry.card).toBeDefined();
+        expect(supportFailureGeometry.status?.left).toBeGreaterThanOrEqual((supportFailureGeometry.copy?.left ?? 0) - 1);
+        expect(supportFailureGeometry.status?.right).toBeLessThanOrEqual((supportFailureGeometry.copy?.right ?? 0) + 1);
+        expect(supportFailureGeometry.manual?.left).toBeGreaterThanOrEqual((supportFailureGeometry.copy?.left ?? 0) - 1);
+        expect(supportFailureGeometry.manual?.right).toBeLessThanOrEqual((supportFailureGeometry.copy?.right ?? 0) + 1);
+        expect(supportFailureGeometry.copyButton?.bottom).toBeLessThanOrEqual((supportFailureGeometry.status?.top ?? 0) + 1);
+        expect(supportFailureGeometry.status?.bottom).toBeLessThanOrEqual((supportFailureGeometry.manual?.top ?? 0) + 1);
+        expect(supportFailureGeometry.status?.bottom).toBeLessThanOrEqual((supportFailureGeometry.controls?.top ?? 0) - 1);
+        expect(supportFailureGeometry.manual?.bottom).toBeLessThanOrEqual((supportFailureGeometry.controls?.top ?? 0) - 1);
+        for (const element of [supportFailureGeometry.copyButton, supportFailureGeometry.copy, supportFailureGeometry.status, supportFailureGeometry.manual, supportFailureGeometry.controls]) {
+          expect(element?.left).toBeGreaterThanOrEqual((supportFailureGeometry.card?.left ?? 0) - 1);
+          expect(element?.right).toBeLessThanOrEqual((supportFailureGeometry.card?.right ?? 0) + 1);
+          expect(element?.top).toBeGreaterThanOrEqual((supportFailureGeometry.actions?.top ?? 0) - 1);
+          expect(element?.bottom).toBeLessThanOrEqual((supportFailureGeometry.actions?.bottom ?? 0) + 1);
+        }
+        expect(supportFailureGeometry.scrollWidth).toBeLessThanOrEqual(supportFailureGeometry.clientWidth + 1);
         const deviceRowWidths = await measureCallDeviceRowAlignment(alice.locator('.call-panel-full .call-presentation-devices'));
         console.info(`DIRECT_CALL_DEVICE_ROW_WIDTHS ${JSON.stringify({theme, viewport, deviceRowWidths})}`);
         expect(Math.abs((deviceRowWidths.deviceRowSpan?.width ?? 0) - (deviceRowWidths.qualityAudioControls?.width ?? 0)), `${theme}/${viewport.width}px direct device rows must have matching spans: ${JSON.stringify(deviceRowWidths)}`).toBeLessThanOrEqual(1);
@@ -2244,7 +2350,16 @@ test('direct call offers and answers connect in the browser UI', async ({browser
     await register(unsupportedPage, uniqueEmail('no-screen-capture'), 'No Screen Capture');
     await unsupportedPage.evaluate(() => Object.defineProperty(navigator.mediaDevices, 'getDisplayMedia', {configurable: true, value: undefined}));
     await endCall.click();
-    await expect(bob.getByText('Call ended.')).toBeVisible();
+    await expect(bob.getByRole('status', {name: 'Call status', exact: true})).toContainText('Call ended.');
+    const terminalSupportReference = alice.locator('.call-terminal-notice').getByRole('button', {name: 'Copy support reference'});
+    await expect(terminalSupportReference).toBeVisible();
+    await terminalSupportReference.click();
+    const terminalManualReference = alice.locator('.call-terminal-notice').getByLabel('Support reference, select and copy manually', {exact: true});
+    await expect(terminalManualReference).toBeVisible();
+    await expect(terminalManualReference).toHaveText(copiedSupportReference);
+    await expect(terminalManualReference).toHaveAttribute('tabindex', '0');
+    await alice.screenshot({path: testInfo.outputPath('direct-call-terminal-support-reference-light-390.png'), fullPage: false});
+    await expect(terminalSupportReference).toBeHidden({timeout: 6_000});
     await unsupportedPage.getByPlaceholder('Name or email').fill(aliceEmail);
     await unsupportedPage.locator('.search-result').filter({hasText: aliceEmail}).click();
     await unsupportedPage.getByRole('button', {name: 'Start audio call'}).click();
@@ -2282,12 +2397,75 @@ test('direct call offers and answers connect in the browser UI', async ({browser
       }
     }
     await unsupportedPage.getByRole('button', {name: 'End call'}).click();
-    await expect(alice.getByText('Call ended.')).toBeVisible();
+    await expect(alice.getByRole('status', {name: 'Call status', exact: true})).toContainText('Call ended.');
     await unsupportedContext.close();
 
     await expect(alice.getByRole('button', {name: 'Start audio call'})).toBeVisible();
   } finally {
     await Promise.allSettled([aliceContext.close(), bobContext.close()]);
+  }
+});
+
+test('direct no-answer timeout converges to terminal call UI', async ({browser}, testInfo) => {
+  // The production ringing lease is 30 seconds; retain a passing artifact of the terminal state.
+  test.setTimeout(90_000);
+  const callerEmail = uniqueEmail('no-answer-caller');
+  const recipientEmail = uniqueEmail('no-answer-recipient');
+  const callerContext = await browser.newContext({viewport: {width: 390, height: 844}});
+  const recipientContext = await browser.newContext({viewport: {width: 390, height: 844}});
+  const caller = await callerContext.newPage();
+  const recipient = await recipientContext.newPage();
+
+  try {
+    await register(caller, callerEmail, 'No Answer Caller');
+    await register(recipient, recipientEmail, 'No Answer Recipient');
+    await Promise.all([waitForLiveConnection(caller), waitForLiveConnection(recipient)]);
+    await caller.getByPlaceholder('Name or email').fill(recipientEmail);
+    await caller.locator('.search-result').filter({hasText: recipientEmail}).click();
+    await recipient.getByPlaceholder('Name or email').fill(callerEmail);
+    await recipient.locator('.search-result').filter({hasText: callerEmail}).click();
+
+    await caller.getByRole('button', {name: 'Start audio call'}).click();
+    await expect(caller.getByText('Ringing...')).toBeVisible();
+    await expect(recipient.getByText('Incoming audio call.')).toBeVisible();
+    await expect.poll(() => caller.locator('.call-terminal-notice').getByText('No answer.', {exact: true}).isVisible(), {timeout: 45_000}).toBe(true);
+
+    // The direct-call surface intentionally retains its accessible terminal status
+    // for callNoticeDuration before returning fully to the chat UI.
+    await expect(caller.locator('.call-panel')).toBeVisible();
+    await expect(caller.locator('.call-terminal-notice')).toContainText('No answer.');
+    const noAnswerSupportCopy = caller.locator('.call-terminal-notice').getByRole('button', {name: 'Copy support reference'});
+    await expect(noAnswerSupportCopy).toBeVisible();
+    // Capture the terminal message before its five-second auto-dismissal. The
+    // screenshots below deliberately retain the separate post-dismissal matrix.
+    await caller.screenshot({path: testInfo.outputPath('direct-call-no-answer-terminal-visible-mobile.png'), fullPage: false});
+    await expect(caller.getByText('Ringing...')).not.toBeVisible();
+    await expect(caller.getByRole('button', {name: 'Cancel'})).toHaveCount(0);
+    await expect(caller.getByRole('button', {name: 'End call'})).toHaveCount(0);
+    await expect(caller.getByRole('button', {name: 'Start audio call'})).toBeEnabled();
+    await expect(caller.getByPlaceholder('Write a message…')).toBeEnabled();
+    await expect(recipient.getByRole('status', {name: 'Call status', exact: true}).getByText('Call ended.', {exact: true})).toBeVisible();
+    await expect(recipient.getByText('Incoming audio call.')).not.toBeVisible();
+    await expect(recipient.getByRole('button', {name: 'Start audio call'})).toBeEnabled();
+    await expect(recipient.getByPlaceholder('Write a message…')).toBeEnabled();
+
+    await expect(caller.locator('.call-panel')).toBeHidden({timeout: 10_000});
+    // Terminal-state acceptance matrix: light/dark at desktop and mobile widths.
+    for (const theme of ['light', 'dark'] as const) {
+      await setTheme(caller, theme);
+      for (const viewport of [{width: 1440, height: 900}, {width: 390, height: 844}]) {
+        await caller.setViewportSize(viewport);
+        await expect(caller.locator('.call-panel')).not.toBeVisible();
+        await expect(caller.getByText('Ringing...')).not.toBeVisible();
+        await expect(caller.getByRole('button', {name: 'Start audio call'})).toBeEnabled();
+        await expect(caller.getByPlaceholder('Write a message…')).toBeEnabled();
+        const containment = await caller.evaluate(() => ({scrollWidth: document.documentElement.scrollWidth, clientWidth: document.documentElement.clientWidth}));
+        expect(containment.scrollWidth, `${theme}/${viewport.width}px terminal call viewport overflow`).toBeLessThanOrEqual(containment.clientWidth + 1);
+        await caller.screenshot({path: testInfo.outputPath(`direct-call-no-answer-terminal-${theme}-${viewport.width}.png`), fullPage: false});
+      }
+    }
+  } finally {
+    await Promise.allSettled([callerContext.close(), recipientContext.close()]);
   }
 });
 
@@ -2371,7 +2549,7 @@ test('shows group members who are typing by name and tracks each member independ
 });
 
 test('register, create conversation, and deliver a message', async ({ browser }, testInfo) => {
-  // Active-call acceptance matrix: light/dark at 2560, 1440, 1024, and 390x844; assert mobile picker containment and end-of-content device access.
+  // Active-call acceptance matrix: light/dark at 2560, 1440, 1024, and 390x844; screen-share content is checked at top/end on desktop/mobile, with no horizontal overflow, all device/share controls above stable sticky actions, and screenshots of both scroll positions.
   test.setTimeout(240_000);
   const aliceEmail = uniqueEmail('alice');
   const bobEmail = uniqueEmail('bob');
@@ -3003,8 +3181,43 @@ test('register, create conversation, and deliver a message', async ({ browser },
           if (label.select) expect(label.select.scrollWidth, `${desktopContentMetrics.viewport} select overflow: ${JSON.stringify(label.select)}`).toBeLessThanOrEqual(label.select.clientWidth + 1);
           if (label.arrow) expect(label.arrow.scrollWidth, `${desktopContentMetrics.viewport} select-arrow overflow: ${JSON.stringify(label.arrow)}`).toBeLessThanOrEqual(label.arrow.clientWidth + 1);
         }
-            const desktopAudioOption = alice.getByRole('checkbox', {name: 'Share audio'});
-            await expect(desktopAudioOption).toBeVisible();
+             const desktopAudioOption = alice.getByRole('checkbox', {name: 'Share audio'});
+             await expect(desktopAudioOption).toBeVisible();
+            const desktopFirstContent = desktopContent.locator('.call-screen-stage');
+            await expect(desktopFirstContent).toBeVisible();
+            const desktopTopState = await desktopContent.evaluate(element => {
+              const content = element as HTMLElement;
+              const first = content.querySelector<HTMLElement>('.call-screen-stage')?.getBoundingClientRect();
+              const bounds = content.getBoundingClientRect();
+              return {
+                scrollTop: content.scrollTop,
+                firstVisible: !!first && first.top >= bounds.top - 1 && first.bottom <= bounds.bottom + 1,
+                scrollWidth: content.scrollWidth,
+                clientWidth: content.clientWidth,
+                actionsTop: content.closest('.call-card')?.querySelector<HTMLElement>('.call-actions')?.getBoundingClientRect().top,
+              };
+            });
+            expect(desktopTopState.scrollTop).toBeLessThanOrEqual(1);
+            expect(desktopTopState.firstVisible).toBeTruthy();
+            expect(desktopTopState.scrollWidth).toBeLessThanOrEqual(desktopTopState.clientWidth + 1);
+            await alice.screenshot({path: testInfo.outputPath('call-screen-share-desktop-dark-top.png'), fullPage: false});
+            await desktopContent.evaluate(element => {
+              const content = element as HTMLElement;
+              content.scrollTop = content.scrollHeight;
+            });
+            const desktopEndState = await desktopContent.evaluate(element => {
+              const content = element as HTMLElement;
+              return {
+                scrollTop: content.scrollTop,
+                scrollHeight: content.scrollHeight,
+                clientHeight: content.clientHeight,
+                scrollWidth: content.scrollWidth,
+                clientWidth: content.clientWidth,
+              };
+            });
+            expect(desktopEndState.scrollTop + desktopEndState.clientHeight).toBeGreaterThanOrEqual(desktopEndState.scrollHeight - 1);
+            expect(desktopEndState.scrollWidth).toBeLessThanOrEqual(desktopEndState.clientWidth + 1);
+            await alice.screenshot({path: testInfo.outputPath('call-screen-share-desktop-dark-end.png'), fullPage: false});
             const desktopAudioBox = await alice.locator('.share-audio-toggle').boundingBox();
             const desktopContentBox = await desktopContent.boundingBox();
             const desktopActionsBox = await alice.locator('.call-panel-full .call-actions').boundingBox();
@@ -3014,8 +3227,13 @@ test('register, create conversation, and deliver a message', async ({ browser },
             expect(Math.abs(desktopAudioBox.y - desktopQualityBox.y)).toBeLessThanOrEqual(2);
             await expect(alice.locator('.share-audio-label')).toHaveText('Share audio');
             expect(desktopAudioBox.y).toBeGreaterThanOrEqual(desktopContentBox.y - 1);
-            expect(desktopAudioBox.y + desktopAudioBox.height).toBeLessThanOrEqual(desktopContentBox.y + desktopContentBox.height + 16);
-            expect(desktopAudioBox.y + desktopAudioBox.height).toBeLessThanOrEqual(desktopActionsBox.y + 16);
+            expect(desktopAudioBox.y + desktopAudioBox.height).toBeLessThanOrEqual(desktopContentBox.y + desktopContentBox.height + 1);
+            expect(desktopAudioBox.y + desktopAudioBox.height).toBeLessThanOrEqual(desktopActionsBox.y - 1);
+            expect(desktopQualityBox.y).toBeGreaterThanOrEqual(desktopContentBox.y - 1);
+            expect(desktopQualityBox.y + desktopQualityBox.height).toBeLessThanOrEqual(desktopContentBox.y + desktopContentBox.height + 1);
+            expect(desktopQualityBox.y + desktopQualityBox.height).toBeLessThanOrEqual(desktopActionsBox.y - 1);
+            expect(Math.abs(desktopActionsBox.y - (desktopTopState.actionsTop ?? desktopActionsBox.y))).toBeLessThanOrEqual(1);
+            expect(desktopActionsBox.y + desktopActionsBox.height).toBeLessThanOrEqual(1440);
           for (const control of desktopCallControls.slice(2, 3)) {
             await control.scrollIntoViewIfNeeded();
             const controlBox = await control.boundingBox();
@@ -3050,17 +3268,84 @@ test('register, create conversation, and deliver a message', async ({ browser },
         await expect(alice.locator('.chat-presence')).toContainText('Online');
         await expect(alice.getByPlaceholder('Write a message…')).toBeVisible();
         await alice.getByPlaceholder('Write a message…').fill('');
-        await alice.screenshot({path: testInfo.outputPath('call-minimized-other-chat.png'), fullPage: false});
-        await expect(alice.locator('.call-minimized-banner-chat .call-minimized-sharing-label')).toHaveText('Sharing screen · ');
+         await alice.screenshot({path: testInfo.outputPath('call-minimized-other-chat.png'), fullPage: false});
+         await expect(alice.locator('.call-minimized-banner-chat .call-minimized-sharing-label')).toHaveText('Sharing screen · ');
+        // Minimized call while browsing Charlie: verify copy/action containment across the same theme/viewport matrix.
+        for (const theme of ['dark', 'light'] as const) {
+          await setTheme(alice, theme);
+          for (const viewport of [{width: 2560, height: 1440}, {width: 1440, height: 900}, {width: 1024, height: 900}, {width: 390, height: 844}]) {
+            await alice.setViewportSize(viewport);
+            const minimizedBanner = alice.locator(viewport.width <= 760 ? '.call-minimized-banner-chat' : '.call-minimized-banner-rail');
+            await expect(minimizedBanner).toBeVisible();
+            const copy = minimizedBanner.getByRole('button', {name: 'Copy support reference'});
+            await expect(copy).toBeVisible();
+            const layout = await minimizedBanner.evaluate(banner => {
+              const rect = banner.getBoundingClientRect();
+              const controls = Array.from(banner.querySelectorAll<HTMLElement>('button')).map(control => control.getBoundingClientRect());
+              const status = Array.from(banner.querySelectorAll<HTMLElement>('.call-minimized-summary strong, .call-minimized-summary small')).map(element => ({text: element.innerText, scrollWidth: element.scrollWidth, clientWidth: element.clientWidth, scrollHeight: element.scrollHeight, clientHeight: element.clientHeight, rect: element.getBoundingClientRect().toJSON()}));
+              return {left: rect.left, right: rect.right, width: rect.width, scrollWidth: banner.scrollWidth, controls: controls.map(control => ({left: control.left, right: control.right, top: control.top, bottom: control.bottom})), status};
+            });
+            expect(layout.scrollWidth, `${theme}/${viewport.width}px minimized support action overflows: ${JSON.stringify(layout)}`).toBeLessThanOrEqual(layout.width + 1);
+            expect(layout.status.map(item => item.text).join(' ')).toContain('Call with Bob');
+            expect(layout.status.map(item => item.text).join(' ')).toContain('Sharing screen');
+            expect(layout.status.map(item => item.text).join(' ')).toMatch(/00:[0-5]\d/);
+            for (const item of layout.status) {
+              expect(item.scrollWidth, `${theme}/${viewport.width}px clipped minimized status: ${JSON.stringify(item)}`).toBeLessThanOrEqual(item.clientWidth + 1);
+              expect(item.scrollHeight, `${theme}/${viewport.width}px vertically clipped minimized status: ${JSON.stringify(item)}`).toBeLessThanOrEqual(item.clientHeight + 1);
+              expect(item.rect.left).toBeGreaterThanOrEqual(layout.left - 1);
+              expect(item.rect.right).toBeLessThanOrEqual(layout.right + 1);
+            }
+            for (let index = 1; index < layout.controls.length; index++) {
+              const previous = layout.controls[index - 1];
+              const current = layout.controls[index];
+              expect(current.left >= previous.right - 1 || current.top >= previous.bottom - 1 || current.bottom <= previous.top + 1, `${theme}/${viewport.width}px minimized controls overlap: ${JSON.stringify(layout)}`).toBeTruthy();
+            }
+            for (const control of layout.controls) {
+              expect(control.left).toBeGreaterThanOrEqual(layout.left - 1);
+              expect(control.right).toBeLessThanOrEqual(layout.right + 1);
+            }
+            for (const status of layout.status) {
+              for (const control of layout.controls.slice(1)) {
+                const overlaps = status.rect.left < control.right && status.rect.right > control.left && status.rect.top < control.bottom && status.rect.bottom > control.top;
+                expect(overlaps, `${theme}/${viewport.width}px minimized status overlaps an action: ${JSON.stringify({status, control})}`).toBeFalsy();
+              }
+            }
+            await alice.screenshot({path: testInfo.outputPath(`direct-call-minimized-support-${theme}-${viewport.width}.png`), fullPage: false});
+          }
+        }
+        await alice.setViewportSize({width: 1440, height: 900});
+        await setTheme(alice, 'dark');
       await expect(alice.locator('.person-option').filter({hasText: 'Bob'}).locator('.unread-count')).not.toBeVisible();
       await expect(bob.getByText(incomingDuringCall).locator('xpath=ancestor::article').getByRole('img', {name: 'Read by peer'})).toBeVisible({timeout: 5_000});
       await alice.getByRole('button', {name: 'Return to call with Bob'}).click();
       await bob.getByRole('button', {name: 'Return to call with Alice'}).click();
       await alice.setViewportSize({width: 390, height: 844});
-      await expect(alice.locator('.call-duration')).not.toHaveText('00:00', {timeout: 3_000});
-      await alice.getByRole('button', {name: 'Minimize call'}).click();
-      await expect(alice.locator('.call-panel-full')).not.toBeVisible();
-      await expect(alice.getByPlaceholder('Write a message…')).toBeVisible();
+       await expect(alice.locator('.call-duration')).not.toHaveText('00:00', {timeout: 3_000});
+        await alice.getByRole('button', {name: 'Minimize call'}).click();
+        await expect(alice.locator('.call-panel-full')).not.toBeVisible();
+         const minimizedCallStatus = alice.locator('.call-minimized-banner-chat');
+         await expect(minimizedCallStatus).toContainText('Call with Bob');
+         const minimizedCopy = minimizedCallStatus.getByRole('button', {name: 'Copy support reference'});
+         await expect(minimizedCopy).toBeVisible();
+         const minimizedLayout = await minimizedCallStatus.evaluate(banner => {
+           const bannerRect = banner.getBoundingClientRect();
+           const controls = Array.from(banner.querySelectorAll<HTMLElement>('button')).map(control => control.getBoundingClientRect());
+           return {width: bannerRect.width, scrollWidth: banner.scrollWidth, controls: controls.map(rect => ({left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom}))};
+         });
+         expect(minimizedLayout.scrollWidth).toBeLessThanOrEqual(minimizedLayout.width + 1);
+          for (let index = 1; index < minimizedLayout.controls.length; index++) {
+            const previous = minimizedLayout.controls[index - 1];
+            const current = minimizedLayout.controls[index];
+            expect(current.left >= previous.right - 1 || current.top >= previous.bottom - 1 || current.bottom <= previous.top + 1, `Mobile minimized call controls overlap: ${JSON.stringify(minimizedLayout)}`).toBeTruthy();
+          }
+        await expect(minimizedCallStatus).toContainText(/00:[0-5]\d/);
+        await alice.mouse.move(12, 12);
+        await expect(alice.locator('.mat-mdc-tooltip-panel .mat-mdc-tooltip-surface:visible'), 'minimizing a call must dismiss its detached control tooltip').toHaveCount(0);
+        await expect(alice.locator('audio')).toHaveJSProperty('paused', false);
+       await expect.poll(() => alice.locator('audio').evaluate(audio => audio.srcObject instanceof MediaStream
+         && audio.srcObject.active && audio.srcObject.getAudioTracks().some(track => track.readyState === 'live'))).toBe(true);
+       await alice.screenshot({path: testInfo.outputPath('direct-call-minimized-audio-playing-mobile.png'), fullPage: false});
+       await expect(alice.getByPlaceholder('Write a message…')).toBeVisible();
       await expect(alice.getByRole('button', {name: 'Return to call with Bob'})).toBeVisible();
       const duringCallMessage = `during-call-${Date.now()}`;
       await alice.getByPlaceholder('Write a message…').fill(duringCallMessage);
@@ -3230,13 +3515,31 @@ test('register, create conversation, and deliver a message', async ({ browser },
           if (!mobileStopShareBox) throw new Error('Mobile stop-sharing bounds were not available');
            await expect(screenAudioCheckbox).toBeVisible();
            const mobileAudioCheckboxBox = await alice.locator('.share-audio-toggle').boundingBox();
-           if (!mobileAudioCheckboxBox) throw new Error('Mobile system-audio checkbox bounds were not available');
-           const mobileQualityBox = await alice.locator('.call-quality-trigger').boundingBox();
-           if (!mobileQualityBox) throw new Error('Mobile screen-quality bounds were not available');
-           expect(Math.abs(mobileAudioCheckboxBox.y - mobileQualityBox.y)).toBeLessThanOrEqual(4);
-          expect(mobileAudioCheckboxBox.x + mobileAudioCheckboxBox.width).toBeLessThanOrEqual(mobilePanelBox.x + mobilePanelBox.width + 1);
+            if (!mobileAudioCheckboxBox) throw new Error('Mobile system-audio checkbox bounds were not available');
+            const mobileQualityBox = await alice.locator('.call-quality-trigger').boundingBox();
+            if (!mobileQualityBox) throw new Error('Mobile screen-quality bounds were not available');
+            expect(Math.abs(mobileAudioCheckboxBox.y - mobileQualityBox.y)).toBeLessThanOrEqual(4);
+           expect(mobileAudioCheckboxBox.x + mobileAudioCheckboxBox.width).toBeLessThanOrEqual(mobilePanelBox.x + mobilePanelBox.width + 1);
+          const mobileFirstContent = alice.locator('.call-panel-full .call-card-content .call-screen-stage');
+          await expect(mobileFirstContent).toBeVisible();
+          await mobileContent.evaluate(element => { (element as HTMLElement).scrollTop = 0; });
+          const mobileTopState = await mobileContent.evaluate(element => {
+            const content = element as HTMLElement;
+            const first = content.querySelector<HTMLElement>('.call-screen-stage')?.getBoundingClientRect();
+            const bounds = content.getBoundingClientRect();
+            return {
+              scrollTop: content.scrollTop,
+              firstVisible: !!first && first.top >= bounds.top - 1 && first.bottom <= bounds.bottom + 1,
+              scrollWidth: content.scrollWidth,
+              clientWidth: content.clientWidth,
+              actionsTop: content.closest('.call-card')?.querySelector<HTMLElement>('.call-actions')?.getBoundingClientRect().top,
+            };
+          });
+          expect(mobileTopState.scrollTop).toBeLessThanOrEqual(1);
+          expect(mobileTopState.firstVisible).toBeTruthy();
+          expect(mobileTopState.scrollWidth).toBeLessThanOrEqual(mobileTopState.clientWidth + 1);
           await expect(alice.getByRole('button', {name: 'Expand shared screen'})).toBeVisible();
-         await alice.screenshot({path: testInfo.outputPath('call-active-mobile-light-top.png'), fullPage: false});
+          await alice.screenshot({path: testInfo.outputPath('call-active-mobile-light-top.png'), fullPage: false});
          const mobileStickyGeometry = await alice.locator('.call-panel-full .call-card-content').evaluate(element => {
             const content = element as HTMLElement;
             const profile = document.querySelector<HTMLElement>('.call-panel-full .call-profile');
@@ -3248,29 +3551,40 @@ test('register, create conversation, and deliver a message', async ({ browser },
             const profileAtEnd = profile?.getBoundingClientRect();
             const devicesAtEnd = devices?.getBoundingClientRect();
             const screenToolsAtEnd = screenTools?.getBoundingClientRect();
-            return {scrollTop: content.scrollTop, scrollHeight: content.scrollHeight, clientHeight: content.clientHeight, contentTop: contentBox.top, contentBottom: contentBox.bottom, profileAtTop, profileAtEnd, devicesAtEnd, screenToolsAtEnd};
-          });
-          expect(mobileStickyGeometry.scrollTop).toBeGreaterThan(0);
-          expect(mobileStickyGeometry.scrollTop + mobileStickyGeometry.clientHeight).toBeGreaterThanOrEqual(mobileStickyGeometry.scrollHeight - 1);
+           return {scrollTop: content.scrollTop, scrollHeight: content.scrollHeight, clientHeight: content.clientHeight, scrollWidth: content.scrollWidth, clientWidth: content.clientWidth, contentTop: contentBox.top, contentBottom: contentBox.bottom, profileAtTop, profileAtEnd, devicesAtEnd, screenToolsAtEnd};
+         });
+           expect(mobileStickyGeometry.scrollTop).toBeGreaterThan(0);
+           expect(mobileStickyGeometry.scrollTop + mobileStickyGeometry.clientHeight).toBeGreaterThanOrEqual(mobileStickyGeometry.scrollHeight - 1);
+           expect(mobileStickyGeometry.scrollWidth).toBeLessThanOrEqual(mobileStickyGeometry.clientWidth + 1);
           expect(Math.abs((mobileStickyGeometry.profileAtTop?.top || 0) - (mobileStickyGeometry.profileAtEnd?.top || 0))).toBeLessThanOrEqual(1);
           expect(mobileStickyGeometry.profileAtEnd?.bottom).toBeLessThanOrEqual(mobileStickyGeometry.contentTop + 1);
            expect(mobileStickyGeometry.devicesAtEnd?.bottom).toBeLessThanOrEqual(mobileStickyGeometry.contentBottom + 1);
             const mobileActionBox = await alice.locator('.call-panel-full .call-actions').boundingBox();
-            const mobileFinalControlBoxes = await Promise.all(mobileCallControls.slice(0, 3).map(control => control.boundingBox()));
+             const mobileFinalControlBoxes = await Promise.all(mobileCallControls.slice(0, 3).map(control => control.boundingBox()));
+             const mobileAudioEndBox = await alice.locator('.share-audio-toggle').boundingBox();
+             const mobileQualityEndBox = await alice.locator('.call-quality-trigger').boundingBox();
             const mobileShareActionBox = await alice.getByRole('button', {name: 'Stop sharing'}).boundingBox();
-           const mobileMuteActionBox = await alice.getByRole('button', {name: 'Mute microphone'}).boundingBox();
-           if (!mobileShareActionBox || !mobileMuteActionBox || !mobileActionBox) throw new Error('Mobile sticky call actions were not visible');
+            const mobileMuteActionBox = await alice.getByRole('button', {name: 'Mute microphone'}).boundingBox();
+            if (!mobileShareActionBox || !mobileMuteActionBox || !mobileActionBox || !mobileAudioEndBox || !mobileQualityEndBox) throw new Error('Mobile sticky call actions or end-of-content controls were not visible');
+            expect(Math.abs(mobileActionBox.y - (mobileTopState.actionsTop ?? mobileActionBox.y))).toBeLessThanOrEqual(1);
+            expect(mobileActionBox.y + mobileActionBox.height).toBeLessThanOrEqual(844);
            expect(mobileMuteActionBox.y).toBeGreaterThanOrEqual(mobileActionBox.y - 1);
            expect(mobileShareActionBox.y).toBeGreaterThanOrEqual(mobileActionBox.y - 1);
            expect(mobileMuteActionBox.y + mobileMuteActionBox.height).toBeLessThanOrEqual(mobileActionBox.y + mobileActionBox.height + 1);
             expect(mobileShareActionBox.y + mobileShareActionBox.height).toBeLessThanOrEqual(mobileActionBox.y + mobileActionBox.height + 1);
             expect(mobileShareActionBox.y + mobileShareActionBox.height).toBeLessThanOrEqual(844);
             expect(mobileFinalControlBoxes.length).toBe(3);
-            for (const [index, controlBox] of mobileFinalControlBoxes.entries()) {
-              if (!controlBox) throw new Error(`Mobile device control ${index} bounds missing at end of call-content scroll`);
-              expect(controlBox.y).toBeGreaterThanOrEqual(mobileStickyGeometry.contentTop - 1);
-              expect(controlBox.y + controlBox.height).toBeLessThanOrEqual(mobileActionBox.y - 1);
-            }
+             for (const [index, controlBox] of mobileFinalControlBoxes.entries()) {
+               if (!controlBox) throw new Error(`Mobile device control ${index} bounds missing at end of call-content scroll`);
+               expect(controlBox.y).toBeGreaterThanOrEqual(mobileStickyGeometry.contentTop - 1);
+               expect(controlBox.y + controlBox.height).toBeLessThanOrEqual(mobileActionBox.y - 1);
+             }
+             for (const [name, controlBox] of [['share audio', mobileAudioEndBox], ['screen quality', mobileQualityEndBox]] as const) {
+               expect(controlBox.y, `Mobile ${name} control escaped the call content at scroll end`).toBeGreaterThanOrEqual(mobileStickyGeometry.contentTop - 1);
+               expect(controlBox.y + controlBox.height, `Mobile ${name} control overlaps sticky actions`).toBeLessThanOrEqual(mobileActionBox.y - 1);
+               expect(controlBox.y + controlBox.height, `Mobile ${name} control is clipped by the content surface`).toBeLessThanOrEqual(mobileStickyGeometry.contentBottom + 1);
+             }
+           await alice.screenshot({path: testInfo.outputPath('call-active-mobile-light-end.png'), fullPage: false});
           await alice.screenshot({path: testInfo.outputPath('call-active-mobile-light.png'), fullPage: false});
        await alice.getByRole('button', {name: 'Expand shared screen'}).click();
        await expect(alice.getByRole('button', {name: 'Exit fullscreen'})).toBeVisible();
@@ -3281,7 +3595,7 @@ test('register, create conversation, and deliver a message', async ({ browser },
      await expect(alice.getByRole('button', {name: 'Unmute microphone'})).toBeVisible();
     await alice.getByRole('button', {name: 'End call'}).click();
     await expect(alice.locator('.person-option').filter({hasText: 'Bob'}).locator('.unread-count')).not.toBeVisible();
-    await expect(bob.getByText('Call ended.')).toBeVisible();
+    await expect(bob.getByRole('status', {name: 'Call status', exact: true}).getByText('Call ended.', {exact: true})).toBeVisible();
       await expect(bob.locator('.call-diagnostics')).not.toBeAttached();
    await bob.locator('.person-option').filter({hasText: 'Alice'}).click();
 
@@ -3291,12 +3605,87 @@ test('register, create conversation, and deliver a message', async ({ browser },
   const startOfflineCall = alice.getByRole('button', {name: 'Start audio call'});
   await expect(startOfflineCall).toBeEnabled();
   await startOfflineCall.click();
-  const offlineCallNotice = alice.getByText('Call unavailable: recipient is offline', {exact: true});
+   const offlineCallNotice = alice.getByText('Call unavailable.', {exact: true});
+  const offlineCallStatus = alice.getByRole('alert', {name: 'Call status', exact: true});
   // The notice auto-dismisses at 5 seconds; observe it before its expiry rather
   // than using an assertion timeout equal to the notice's lifetime.
   await expect(offlineCallNotice).toHaveCount(1, {timeout: 4_000});
-  await expect(offlineCallNotice).toBeVisible({timeout: 4_000});
+   await expect(offlineCallNotice).toBeVisible({timeout: 4_000});
+   await expect(offlineCallStatus).toBeVisible();
+   await expect(alice.getByText('Call unavailable: recipient is offline', {exact: true})).toBeVisible();
+  const offlineCopyButton = offlineCallStatus.getByRole('button', {name: 'Copy support reference'});
+  await expect(offlineCopyButton).toBeVisible();
+  await alice.evaluate(() => Object.defineProperty(navigator, 'clipboard', {
+    configurable: true,
+    value: {writeText: async () => { throw new Error('clipboard denied'); }},
+  }));
+  await offlineCopyButton.click();
+  const offlineCopyFailure = offlineCallStatus.getByRole('status').filter({hasText: 'Could not copy support reference'});
+  await expect(offlineCopyFailure).toBeVisible();
+  const offlineManualReference = offlineCallStatus.getByLabel('Support reference, select and copy manually', {exact: true});
+  await expect(offlineManualReference).toBeVisible();
+  await expect(offlineManualReference).toHaveText(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
+  await expect(offlineManualReference).toHaveAttribute('tabindex', '0');
+  expect(await offlineManualReference.evaluate(element => getComputedStyle(element).userSelect)).toBe('text');
+  // Acceptance matrix: server rejection/manual-copy fallback at desktop 1440px and mobile 390x844.
+  for (const theme of ['light', 'dark'] as const) {
+    await setTheme(alice, theme);
+    for (const viewport of [{width: 1440, height: 900}, {width: 390, height: 844}]) {
+      await alice.setViewportSize(viewport);
+    const noticeGeometry = await offlineCallStatus.evaluate(status => {
+      const bounds = (selector: string): DOMRect | undefined => status.querySelector<HTMLElement>(selector)?.getBoundingClientRect();
+      const notice = status.getBoundingClientRect();
+      const messageElement = status.querySelector<HTMLElement>('.call-terminal-message');
+      const copy = bounds('app-copy-support-reference');
+      const copyButton = bounds('app-copy-support-reference button');
+      const failure = bounds('.support-reference-feedback');
+      const reference = bounds('.support-reference-manual');
+      return {
+        notice: {left: notice.left, right: notice.right, top: notice.top, bottom: notice.bottom},
+        message: messageElement && {left: messageElement.getBoundingClientRect().left, right: messageElement.getBoundingClientRect().right, top: messageElement.getBoundingClientRect().top, bottom: messageElement.getBoundingClientRect().bottom, scrollWidth: messageElement.scrollWidth, clientWidth: messageElement.clientWidth, scrollHeight: messageElement.scrollHeight, clientHeight: messageElement.clientHeight},
+        copy: copy && {left: copy.left, right: copy.right, top: copy.top, bottom: copy.bottom},
+        copyButton: copyButton && {left: copyButton.left, right: copyButton.right, top: copyButton.top, bottom: copyButton.bottom, width: copyButton.width, scrollWidth: (status.querySelector<HTMLElement>('app-copy-support-reference button'))?.scrollWidth, clientWidth: (status.querySelector<HTMLElement>('app-copy-support-reference button'))?.clientWidth},
+        failure: failure && {left: failure.left, right: failure.right, top: failure.top, bottom: failure.bottom},
+        reference: reference && {left: reference.left, right: reference.right, top: reference.top, bottom: reference.bottom, scrollWidth: status.querySelector<HTMLElement>('.support-reference-manual')?.scrollWidth, clientWidth: status.querySelector<HTMLElement>('.support-reference-manual')?.clientWidth},
+        scrollWidth: document.documentElement.scrollWidth,
+        clientWidth: document.documentElement.clientWidth,
+      };
+    });
+    expect(noticeGeometry.scrollWidth, `Offline notice overflows at ${viewport.width}px`).toBeLessThanOrEqual(noticeGeometry.clientWidth + 1);
+    expect(noticeGeometry.copy).toBeDefined();
+    expect(noticeGeometry.message).toBeDefined();
+    expect(noticeGeometry.copyButton).toBeDefined();
+    expect(noticeGeometry.failure).toBeDefined();
+    expect(noticeGeometry.reference).toBeDefined();
+    expect(noticeGeometry.message?.left).toBeGreaterThanOrEqual((noticeGeometry.notice.left ?? 0) - 1);
+    expect(noticeGeometry.message?.right).toBeLessThanOrEqual((noticeGeometry.notice.right ?? 0) + 1);
+    expect(noticeGeometry.message?.scrollWidth).toBeLessThanOrEqual((noticeGeometry.message?.clientWidth ?? 0) + 1);
+    expect(noticeGeometry.message?.scrollHeight).toBeLessThanOrEqual((noticeGeometry.message?.clientHeight ?? 0) + 1);
+    if (viewport.width <= 600) {
+      expect(noticeGeometry.message?.bottom, `Mobile offline message must occupy its own readable row: ${JSON.stringify(noticeGeometry)}`).toBeLessThanOrEqual((noticeGeometry.copy?.top ?? 0) + 1);
+    } else {
+      expect(noticeGeometry.message?.right, `Desktop offline message must not overlap copy control: ${JSON.stringify(noticeGeometry)}`).toBeLessThanOrEqual((noticeGeometry.copy?.left ?? 0) + 1);
+    }
+    expect(noticeGeometry.copyButton?.width).toBeGreaterThanOrEqual(160);
+    expect(noticeGeometry.copyButton?.scrollWidth).toBeLessThanOrEqual((noticeGeometry.copyButton?.clientWidth ?? 0) + 1);
+    expect(noticeGeometry.copyButton?.left).toBeGreaterThanOrEqual((noticeGeometry.notice.left ?? 0) - 1);
+    expect(noticeGeometry.copyButton?.right).toBeLessThanOrEqual((noticeGeometry.notice.right ?? 0) + 1);
+    expect(noticeGeometry.failure?.left).toBeGreaterThanOrEqual((noticeGeometry.copy?.left ?? 0) - 1);
+    expect(noticeGeometry.failure?.right).toBeLessThanOrEqual((noticeGeometry.copy?.right ?? 0) + 1);
+    expect(noticeGeometry.reference?.left).toBeGreaterThanOrEqual((noticeGeometry.copy?.left ?? 0) - 1);
+    expect(noticeGeometry.reference?.right).toBeLessThanOrEqual((noticeGeometry.copy?.right ?? 0) + 1);
+    expect((noticeGeometry.reference?.right ?? 0) - (noticeGeometry.reference?.left ?? 0)).toBeGreaterThanOrEqual(160);
+    expect(noticeGeometry.reference?.scrollWidth).toBeLessThanOrEqual((noticeGeometry.reference?.clientWidth ?? 0) + 1);
+    expect(noticeGeometry.failure?.bottom).toBeLessThanOrEqual((noticeGeometry.reference?.top ?? 0) + 1);
+    expect(noticeGeometry.reference?.bottom).toBeLessThanOrEqual((noticeGeometry.notice.bottom ?? 0) + 1);
+      await alice.screenshot({path: testInfo.outputPath(`direct-call-recipient-offline-support-reference-${theme}-${viewport.width}.png`), fullPage: false});
+      if (theme === 'dark' && viewport.width === 390) await alice.screenshot({path: testInfo.outputPath('direct-call-recipient-offline-support-reference-mobile.png'), fullPage: false});
+    }
+  }
+  await alice.setViewportSize(desktop.viewport);
   await alice.screenshot({path: testInfo.outputPath('direct-call-recipient-offline-notice.png'), fullPage: false});
+  // The manual-copy checks consume part of the fixed five-second lifetime, so
+  // retain the original bounded auto-dismiss wait rather than restarting it.
   await expect(offlineCallNotice).not.toBeVisible({timeout: 7_000});
   await bob.goto('/home');
   await expect(bob.getByRole('heading', {name: 'Chats'})).toBeVisible();
@@ -3812,11 +4201,14 @@ test('a departed member quarantines private group UI after a newer revision and 
       await expect(page.locator('.group-call-panel')).toContainText('2 participants in the group call.', {timeout: 10_000});
       await expect(page.getByRole('button', {name: 'Leave call'})).toBeVisible();
       await expect(page.getByRole('button', {name: 'End group call for everyone'})).toBeVisible();
+      await expect(page.getByRole('button', {name: 'Copy support reference'})).toBeVisible();
     }));
     await owner.waitForTimeout(2_000);
     await owner.getByRole('button', {name: 'End group call for everyone'}).click({force: true});
-    await expect(owner.locator('.group-call-terminal')).toContainText('Group call ended.');
-    await expect(member.locator('.group-call-terminal')).toContainText('Group call ended.');
+    await expect(owner.locator('.group-call-terminal .call-terminal-message')).toHaveText('Group call ended.');
+    await expect(member.locator('.group-call-terminal .call-terminal-message')).toHaveText('Group call ended.');
+    await expect(owner.locator('.group-call-terminal').getByRole('button', {name: 'Copy support reference'})).toBeVisible();
+    await expect(member.locator('.group-call-terminal').getByRole('button', {name: 'Copy support reference'})).toBeVisible();
     const endedActiveCallTracks = await Promise.all([owner, member].map(page => page.evaluate(() => {
       const tracks = (window as Window & {__groupLocalTracks?: MediaStreamTrack[]}).__groupLocalTracks ?? [];
       return tracks.length > 0 && tracks.every(track => track.readyState === 'ended');
@@ -5065,6 +5457,7 @@ test('removing a member from an active group call stops only that member media a
   const remaining = await remainingContext.newPage();
   let captureTerminalProjection = false;
   const removedTerminalPayloadKeys: string[][] = [];
+  const removedTerminalSupportReferences: unknown[] = [];
 
   try {
     await Promise.all([
@@ -5080,6 +5473,7 @@ test('removing a member from an active group call stops only that member media a
             const event = JSON.parse(message) as {type?: string; payload?: unknown};
             if (captureTerminalProjection && event.type === 'group.call.ended' && typeof event.payload === 'object' && event.payload !== null) {
               removedTerminalPayloadKeys.push(Object.keys(event.payload).sort());
+              removedTerminalSupportReferences.push((event.payload as Record<string, unknown>)['support_ref']);
             }
           } catch { /* Preserve malformed or non-JSON frames without recording them. */ }
         }
@@ -5118,7 +5512,15 @@ test('removing a member from an active group call stops only that member media a
     });
     expect(deletion.status()).toBe(200);
     await expect.poll(() => removedTerminalPayloadKeys.length, {timeout: 10_000}).toBeGreaterThan(0);
-    expect(removedTerminalPayloadKeys).toEqual(removedTerminalPayloadKeys.map(() => ['generation', 'room_id', 'state_revision', 'status']));
+    expect(removedTerminalPayloadKeys).toEqual(removedTerminalPayloadKeys.map(keys => {
+      expect(keys).toEqual(expect.arrayContaining(['generation', 'room_id', 'state_revision', 'status', 'support_ref']));
+      expect(keys).toHaveLength(5);
+      return keys;
+    }));
+    expect(removedTerminalSupportReferences.length).toBeGreaterThan(0);
+    for (const supportReference of removedTerminalSupportReferences) {
+      expect(supportReference).toEqual(expect.stringMatching(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i));
+    }
     await expect(removed.locator('.group-call-terminal')).toContainText('Group call ended.', {timeout: 10_000});
     await expect(removed.locator('.group-call-devices')).not.toBeVisible();
     await expect(removed.locator('.group-call-actions')).not.toBeVisible();
@@ -5198,7 +5600,7 @@ test('hands a three-person group call from A to B to C and lets C leave and rejo
     await Promise.all([a, b, c].map(assertGroupCallAudioConnected));
     await a.waitForTimeout(2_000);
     await a.getByRole('button', {name: 'End group call for everyone'}).click();
-    await Promise.all([a, b, c].map(page => expect(page.locator('.group-call-terminal')).toHaveText('Group call ended.', {timeout: 10_000})));
+     await Promise.all([a, b, c].map(page => expect(page.locator('.group-call-terminal .call-terminal-message')).toHaveText('Group call ended.', {timeout: 10_000})));
     const firstEndPresentation = await Promise.all([a, b, c].map(page => page.evaluate(() => {
       const host = document.querySelector('app-home');
       const component = host && window.ng ? window.ng.getComponent(host) as {
@@ -5210,7 +5612,7 @@ test('hands a three-person group call from A to B to C and lets C leave and rejo
         callPhase: component?.groupCall?.state?.phase,
         callOrigin: component?.groupCall?.state?.conversationID,
         roomConversationID: component?.groupCall?.state?.room?.conversation_id,
-        terminalNotice: document.querySelector('.group-call-terminal')?.textContent?.trim(),
+        terminalNotice: document.querySelector('.group-call-terminal .call-terminal-message')?.textContent?.trim(),
       };
     })));
     expect(firstEndPresentation.map(state => state.selectedConversationID)).toEqual([handoffGroupID, handoffGroupID, handoffGroupID]);
@@ -5686,28 +6088,49 @@ test('runs a deterministic three-member group media lifecycle', async ({browser}
     await expect(owner.locator('.group-presentation')).toBeHidden({timeout: 10_000});
     await expect(observer.locator('.group-presentation')).toBeHidden({timeout: 10_000});
     await expect(owner.locator('audio[groupRemoteAudio]')).toHaveCount(1);
+    const remoteAudio = await owner.locator('audio[groupRemoteAudio]').elementHandle();
+    expect(remoteAudio).not.toBeNull();
     await owner.getByRole('button', {name: 'Minimize group call'}).click();
     const minimizedGroupCall = owner.locator('.group-call-minimized');
     const minimizedEndCall = owner.getByRole('button', {name: 'End group call for everyone'});
     await expect(minimizedGroupCall).toBeVisible();
     await expect(minimizedEndCall).toHaveText('End group call');
-    await expect(owner.locator('audio[groupRemoteAudio]')).toHaveCount(0);
+    await expect(owner.locator('audio[groupRemoteAudio]')).toHaveCount(1);
+    await expect.poll(async () => remoteAudio?.evaluate(audio => audio.isConnected && !audio.paused), {timeout: 10_000}).toBe(true);
     for (const theme of ['light', 'dark'] as const) {
       for (const viewport of [{width: 2560, height: 1440}, {width: 1440, height: 900}, {width: 1024, height: 900}, {width: 390, height: 844}]) {
         await owner.setViewportSize(viewport);
         await setTheme(owner, theme);
-        const bounds = await minimizedGroupCall.evaluate(element => {
-          const rect = element.getBoundingClientRect();
-          const restore = element.querySelector<HTMLElement>('.call-minimized-summary')?.getBoundingClientRect();
-          const end = element.querySelector<HTMLElement>('.call-minimized-end')?.getBoundingClientRect();
-          return {rect: {left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom}, restore: restore && {left: restore.left, right: restore.right, top: restore.top, bottom: restore.bottom}, end: end && {left: end.left, right: end.right, top: end.top, bottom: end.bottom}, documentScrollWidth: document.documentElement.scrollWidth, documentClientWidth: document.documentElement.clientWidth, viewportHeight: window.innerHeight};
-        });
+        const minimizedCopy = minimizedGroupCall.getByRole('button', {name: 'Copy support reference'});
+        await expect(minimizedCopy).toBeVisible();
+         const bounds = await minimizedGroupCall.evaluate(element => {
+           const rect = element.getBoundingClientRect();
+           const restore = element.querySelector<HTMLElement>('.call-minimized-summary')?.getBoundingClientRect();
+           const end = element.querySelector<HTMLElement>('.call-minimized-end')?.getBoundingClientRect();
+           const copy = element.querySelector<HTMLElement>('app-copy-support-reference button')?.getBoundingClientRect();
+           const status = Array.from(element.querySelectorAll<HTMLElement>('.call-minimized-summary strong, .call-minimized-summary small')).map(node => ({text: node.innerText, scrollWidth: node.scrollWidth, clientWidth: node.clientWidth, scrollHeight: node.scrollHeight, clientHeight: node.clientHeight, rect: node.getBoundingClientRect().toJSON()}));
+           return {rect: {left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom}, restore: restore && {left: restore.left, right: restore.right, top: restore.top, bottom: restore.bottom}, end: end && {left: end.left, right: end.right, top: end.top, bottom: end.bottom}, copy: copy && {left: copy.left, right: copy.right, top: copy.top, bottom: copy.bottom}, status, scrollWidth: element.scrollWidth, clientWidth: element.clientWidth, documentScrollWidth: document.documentElement.scrollWidth, documentClientWidth: document.documentElement.clientWidth, viewportHeight: window.innerHeight};
+         });
         expect(bounds.documentScrollWidth).toBeLessThanOrEqual(bounds.documentClientWidth + 1);
+         expect(bounds.scrollWidth).toBeLessThanOrEqual(bounds.clientWidth + 1);
+         expect(bounds.status.map(item => item.text).join(' ')).toContain('Group call in progress');
+         expect(bounds.status.map(item => item.text).join(' ')).toContain('2 participants in the group call.');
+         for (const item of bounds.status) {
+           expect(item.scrollWidth, `${theme}/${viewport.width}px clipped group-call status: ${JSON.stringify(item)}`).toBeLessThanOrEqual(item.clientWidth + 1);
+           expect(item.scrollHeight, `${theme}/${viewport.width}px vertically clipped group-call status: ${JSON.stringify(item)}`).toBeLessThanOrEqual(item.clientHeight + 1);
+           expect(item.rect.left).toBeGreaterThanOrEqual(bounds.rect.left - 1);
+           expect(item.rect.right).toBeLessThanOrEqual(bounds.rect.right + 1);
+           for (const control of [bounds.copy, bounds.end]) {
+             expect(control).toBeDefined();
+             const overlaps = item.rect.left < (control?.right ?? 0) && item.rect.right > (control?.left ?? 0) && item.rect.top < (control?.bottom ?? 0) && item.rect.bottom > (control?.top ?? 0);
+             expect(overlaps, `${theme}/${viewport.width}px group-call status overlaps an action: ${JSON.stringify({item, control})}`).toBeFalsy();
+           }
+         }
         expect(bounds.rect.left).toBeGreaterThanOrEqual(0);
         expect(bounds.rect.right).toBeLessThanOrEqual(viewport.width);
         expect(bounds.rect.top).toBeGreaterThanOrEqual(0);
         expect(bounds.rect.bottom).toBeLessThanOrEqual(bounds.viewportHeight);
-        for (const control of [bounds.restore, bounds.end]) {
+        for (const control of [bounds.restore, bounds.copy, bounds.end]) {
           expect(control).toBeDefined();
           expect(control?.left).toBeGreaterThanOrEqual(bounds.rect.left - 1);
           expect(control?.right).toBeLessThanOrEqual(bounds.rect.right + 1);
@@ -5732,20 +6155,22 @@ test('runs a deterministic three-member group media lifecycle', async ({browser}
         expect(minimizedTooltipBounds?.y).toBeGreaterThanOrEqual((bounds.rect.bottom) - 1);
         const tooltipOverlapsRestore = !!minimizedTooltipBounds && !!restoreBounds && minimizedTooltipBounds.x < restoreBounds.x + restoreBounds.width && minimizedTooltipBounds.x + minimizedTooltipBounds.width > restoreBounds.x && minimizedTooltipBounds.y < restoreBounds.y + restoreBounds.height && minimizedTooltipBounds.y + minimizedTooltipBounds.height > restoreBounds.y;
         expect(tooltipOverlapsRestore, `${theme}/${viewport.width}px minimized tooltip overlaps restore control: ${JSON.stringify({minimizedTooltipBounds, restoreBounds})}`).toBeFalsy();
-        await owner.screenshot({path: testInfo.outputPath(`group-call-minimized-end-tooltip-${theme}-${viewport.width}.png`), fullPage: false, timeout: 15_000});
-        await owner.mouse.move(0, 0);
+         await owner.screenshot({path: testInfo.outputPath(`group-call-minimized-end-tooltip-${theme}-${viewport.width}.png`), fullPage: false, timeout: 15_000});
+         await owner.mouse.move(0, 0);
+         await expect(minimizedEndTooltip, `${theme}/${viewport.width}px minimized End tooltip should dismiss when the pointer leaves`).not.toBeVisible();
         if (viewport.width === 390) {
-          for (const control of [owner.getByRole('button', {name: 'Return to group call'}), minimizedEndCall]) {
+         for (const control of [owner.getByRole('button', {name: 'Return to group call'}), minimizedEndCall]) {
             await control.focus();
             await owner.keyboard.press('Tab');
             await owner.keyboard.press('Shift+Tab');
             await expect(control).toBeFocused();
             const focus = await control.evaluate(element => ({visible: element.matches(':focus-visible'), outline: getComputedStyle(element).outlineStyle, width: Number.parseFloat(getComputedStyle(element).outlineWidth)}));
             expect(focus.visible && focus.outline !== 'none' && focus.width >= 2, `${theme}/390px minimized control focus: ${JSON.stringify(focus)}`).toBeTruthy();
-            await control.evaluate(element => element.blur());
-          }
-        }
-        await owner.screenshot({path: testInfo.outputPath(`group-call-minimized-${theme}-${viewport.width}.png`), fullPage: false, timeout: 15_000});
+             await control.evaluate(element => element.blur());
+           }
+         }
+         await expect(minimizedEndTooltip, `${theme}/${viewport.width}px minimized screenshot must not retain the End tooltip`).not.toBeVisible();
+         await owner.screenshot({path: testInfo.outputPath(`group-call-minimized-${theme}-${viewport.width}.png`), fullPage: false, timeout: 15_000});
       }
     }
     await owner.setViewportSize({width: 1440, height: 900});
@@ -5753,6 +6178,8 @@ test('runs a deterministic three-member group media lifecycle', async ({browser}
     await owner.getByRole('button', {name: 'Return to group call'}).click();
     await expect(owner.locator('.group-call-panel')).toBeVisible();
     await expect(owner.locator('audio[groupRemoteAudio]')).toHaveCount(1);
+    expect(await owner.locator('audio[groupRemoteAudio]').evaluate(audio => audio.isSameNode(document.querySelector('audio[groupRemoteAudio]')))).toBeTruthy();
+    expect(await remoteAudio?.evaluate(audio => audio.isConnected)).toBe(true);
     await expect.poll(async () => owner.locator('audio[groupRemoteAudio]').evaluateAll(audios => audios.length === 1 && audios.every(audio => !audio.paused)), {timeout: 10_000}).toBeTruthy();
     await owner.screenshot({path: testInfo.outputPath('group-call-restored-dark.png'), fullPage: false, timeout: 15_000});
 
@@ -5840,5 +6267,350 @@ test('runs a deterministic three-member group media lifecycle', async ({browser}
     await owner.screenshot({path: testInfo.outputPath('group-call-error-light-390.png'), fullPage: false, timeout: 15_000});
   } finally {
     await Promise.allSettled([ownerContext.close(), memberContext.close(), observerContext.close()]);
+  }
+});
+
+test('offers chat-scoped @mentions and renders only selected mentions in direct and group messages', async ({browser}, testInfo) => {
+  test.setTimeout(180_000);
+  const users = [
+    {name: 'Mention owner', email: uniqueEmail('mention-owner')},
+    {name: 'Mention Bob', email: uniqueEmail('mention-bob')},
+    {name: 'Mention Charlie', email: uniqueEmail('mention-charlie')},
+  ];
+  const contexts = await Promise.all(users.map(() => browser.newContext({viewport: {width: 1440, height: 900}})));
+  const pages = await Promise.all(contexts.map(context => context.newPage()));
+  const [owner, bob, charlie] = pages;
+  if (!owner || !bob || !charlie) throw new Error('Mention browser pages were not created');
+  await installNotificationStubs(charlie);
+
+  try {
+    for (const [index, page] of pages.entries()) await register(page, users[index].email, users[index].name);
+    await Promise.all(pages.map(waitForLiveConnection));
+    const token = await authenticatedToken(contexts[0], users[0].email, 'mention-owner');
+    const [bobID, charlieID] = await Promise.all(users.slice(1).map(user => userID(contexts[0], token, user.email)));
+    const created = await contexts[0].request.post(`${chatBase}/api/chat/groups`, {
+      headers: {Authorization: `${token.token_type} ${token.access_token}`},
+      data: {name: 'Mention acceptance group', member_ids: [bobID, charlieID]},
+    });
+    expect(created.status()).toBe(201);
+    for (const page of pages) {
+      await page.reload();
+      const group = page.locator('.person-option').filter({hasText: 'Mention acceptance group'});
+      await expect(group).toBeVisible({timeout: 10_000});
+    }
+
+    // The direct chat offers its peer only: the sender and a user from another
+    // conversation are never candidates. Exercise keyboard navigation/selection.
+    const peopleSearch = owner.getByPlaceholder('Name or email');
+    await peopleSearch.fill(users[1].email);
+    await owner.locator('.search-result').filter({hasText: users[1].email}).click();
+    await expect(bob.locator('.person-option').filter({hasText: users[0].name})).toBeVisible();
+    await bob.locator('.person-option').filter({hasText: users[0].name}).click();
+    const composer = owner.getByLabel('Message composer').getByRole('textbox', {name: 'Message'});
+    await expect(composer).toBeEnabled();
+    await composer.fill('@');
+    const picker = owner.getByRole('listbox', {name: 'Mention a chat member'});
+    await expect(picker.getByRole('option')).toHaveText([users[1].name]);
+    await composer.fill('@Bo');
+
+    // Keep passing visual artifacts for each theme and requested viewport while
+    // the live picker and message controls are visible.
+    for (const theme of ['light', 'dark'] as const) {
+      await setTheme(owner, theme);
+      for (const viewport of [{width: 2560, height: 1440}, {width: 1440, height: 900}, {width: 1024, height: 900}, {width: 390, height: 844}]) {
+        await owner.setViewportSize(viewport);
+        await expect(picker).toBeVisible();
+        const geometry = await owner.evaluate(() => {
+          const rect = (element: Element | null) => {
+            const box = element?.getBoundingClientRect();
+            return box ? {left: box.left, right: box.right, top: box.top, bottom: box.bottom} : undefined;
+          };
+          const form = document.querySelector('.composer');
+          const panel = document.querySelector('.chat-panel');
+          const list = form?.querySelector('.mention-picker') ?? null;
+          const input = form?.querySelector('textarea') ?? null;
+          const send = form?.querySelector('button[type="submit"]') ?? null;
+          return {
+            form: rect(form ?? null), panel: rect(panel), picker: rect(list), input: rect(input), send: rect(send),
+            pickerWidth: (list as HTMLElement | null)?.scrollWidth, pickerClientWidth: (list as HTMLElement | null)?.clientWidth,
+            documentWidth: document.documentElement.scrollWidth, viewportWidth: document.documentElement.clientWidth,
+          };
+        });
+        const context = `${theme}/${viewport.width}px direct mention picker: ${JSON.stringify(geometry)}`;
+        expect(geometry.form, context).toBeDefined();
+        expect(geometry.picker, context).toBeDefined();
+        expect(geometry.input, context).toBeDefined();
+        expect(geometry.send, context).toBeDefined();
+        expect(geometry.picker!.left, context).toBeGreaterThanOrEqual(geometry.form!.left - 1);
+        expect(geometry.picker!.right, context).toBeLessThanOrEqual(geometry.form!.right + 1);
+        expect(geometry.picker!.top, context).toBeGreaterThanOrEqual(geometry.panel!.top - 1);
+        expect(geometry.picker!.bottom, context).toBeLessThanOrEqual(geometry.form!.top + 1);
+        expect(geometry.input!.left, context).toBeGreaterThanOrEqual(geometry.form!.left - 1);
+        expect(geometry.input!.right, context).toBeLessThanOrEqual(geometry.form!.right + 1);
+        expect(geometry.input!.top, context).toBeGreaterThanOrEqual(geometry.form!.top - 1);
+        expect(geometry.input!.bottom, context).toBeLessThanOrEqual(geometry.form!.bottom + 1);
+        expect(geometry.send!.left, context).toBeGreaterThanOrEqual(geometry.form!.left - 1);
+        expect(geometry.send!.right, context).toBeLessThanOrEqual(geometry.form!.right + 1);
+        expect(geometry.send!.top, context).toBeGreaterThanOrEqual(geometry.form!.top - 1);
+        expect(geometry.send!.bottom, context).toBeLessThanOrEqual(geometry.form!.bottom + 1);
+        expect(geometry.pickerWidth, context).toBeLessThanOrEqual((geometry.pickerClientWidth ?? 0) + 1);
+        expect(geometry.documentWidth, context).toBeLessThanOrEqual(geometry.viewportWidth + 1);
+        await owner.screenshot({path: testInfo.outputPath(`mention-direct-picker-${theme}-${viewport.width}.png`), fullPage: false});
+      }
+    }
+    await owner.setViewportSize({width: 1440, height: 900});
+    await setTheme(owner, 'dark');
+    await composer.press('ArrowDown');
+    await expect(picker.getByRole('option')).toHaveAttribute('aria-selected', 'true');
+    await expect(composer).toBeFocused();
+    await expect(composer).toHaveAttribute('aria-activedescendant', await picker.getByRole('option').first().getAttribute('id') || '');
+    await composer.press('Enter');
+    await expect(owner.locator('.composer-mentions')).toContainText(users[1].name);
+    await expect(composer).toHaveValue(`@${users[1].name} `);
+    for (const theme of ['light', 'dark'] as const) {
+      await setTheme(owner, theme);
+      for (const viewport of [{width: 1440, height: 900}, {width: 390, height: 844}]) {
+        await owner.setViewportSize(viewport);
+        const chipGeometry = await owner.evaluate(() => {
+          const form = document.querySelector<HTMLElement>('.composer');
+          const chip = document.querySelector<HTMLElement>('.composer-mentions');
+          const input = form?.querySelector<HTMLElement>('textarea');
+          const send = form?.querySelector<HTMLElement>('button[type="submit"]');
+          const formBox = form?.getBoundingClientRect();
+          const chipBox = chip?.getBoundingClientRect();
+          const inputBox = input?.getBoundingClientRect();
+          const sendBox = send?.getBoundingClientRect();
+          return {form: formBox && {left: formBox.left, right: formBox.right, top: formBox.top, bottom: formBox.bottom}, chip: chipBox && {left: chipBox.left, right: chipBox.right, top: chipBox.top, bottom: chipBox.bottom}, inputCenterY: inputBox ? inputBox.top + inputBox.height / 2 : undefined, sendCenterY: sendBox ? sendBox.top + sendBox.height / 2 : undefined, scrollWidth: document.documentElement.scrollWidth, clientWidth: document.documentElement.clientWidth};
+        });
+        expect(chipGeometry.chip?.left).toBeGreaterThanOrEqual((chipGeometry.form?.left ?? 0) - 1);
+        expect(chipGeometry.chip?.right).toBeLessThanOrEqual((chipGeometry.form?.right ?? 0) + 1);
+        expect(chipGeometry.chip?.top).toBeGreaterThanOrEqual((chipGeometry.form?.top ?? 0) - 1);
+        expect(chipGeometry.chip?.bottom).toBeLessThanOrEqual((chipGeometry.form?.bottom ?? 0) + 1);
+        expect(Math.abs((chipGeometry.inputCenterY ?? 0) - (chipGeometry.sendCenterY ?? 0))).toBeLessThanOrEqual(10);
+        expect(chipGeometry.scrollWidth).toBeLessThanOrEqual(chipGeometry.clientWidth + 1);
+        await owner.screenshot({path: testInfo.outputPath(`mention-composer-selected-${theme}-${viewport.width}.png`), fullPage: false});
+      }
+    }
+    await owner.setViewportSize({width: 1440, height: 900});
+    await setTheme(owner, 'dark');
+    await composer.fill(`${await composer.inputValue()}hello from a selected mention`);
+    await owner.getByRole('button', {name: 'Send message'}).click();
+    const directMessage = owner.locator('.message-bubble').filter({hasText: 'hello from a selected mention'}).last();
+    await expect(directMessage.locator('.message-mention')).toHaveText(`@${users[1].name}`);
+    const bobDirectMessage = bob.locator('.message-bubble').filter({hasText: 'hello from a selected mention'}).last();
+    await expect(bobDirectMessage.locator('.message-mention')).toHaveText(`@${users[1].name}`);
+    await bob.reload();
+    await expect(bob.locator('.chat-presence')).toHaveText('Online', {timeout: 10_000});
+    await bob.locator('.person-option').filter({hasText: users[0].name}).click();
+    await expect(bob.locator('.message-bubble').filter({hasText: 'hello from a selected mention'}).last().locator('.message-mention')).toHaveText(`@${users[1].name}`);
+    // Bob's reload and conversation selection can cause Angular to re-render
+    // message lists. Re-query the owner's current DOM before inspecting styles
+    // rather than relying on the locator chain captured before those updates.
+    const renderedDirectMessage = owner.locator('.message-bubble').filter({hasText: 'hello from a selected mention'}).last();
+    await expect(renderedDirectMessage).toContainText(`@${users[1].name} hello from a selected mention`);
+    const renderedDirectMention = renderedDirectMessage.locator('.message-mention');
+    await expect(renderedDirectMention).toHaveText(`@${users[1].name}`);
+    const directMentionStyle = await renderedDirectMention.evaluate(element => {
+      const style = element.ownerDocument.defaultView?.getComputedStyle(element);
+      return {color: style?.getPropertyValue('color') ?? '', weight: style?.getPropertyValue('font-weight') ?? '', connected: element.isConnected, className: element.className};
+    });
+    const directBodyStyle = await renderedDirectMessage.locator('p').evaluate(element => {
+      const style = element.ownerDocument.defaultView?.getComputedStyle(element);
+      return {color: style?.getPropertyValue('color') ?? '', weight: style?.getPropertyValue('font-weight') ?? ''};
+    });
+    expect(directMentionStyle.connected, JSON.stringify(directMentionStyle)).toBe(true);
+    expect(directMentionStyle.className).toContain('message-mention');
+    expect(directMentionStyle.color).not.toBe(directBodyStyle.color);
+    const mentionWeight = directMentionStyle.weight === 'bold' ? 700 : Number.parseInt(directMentionStyle.weight, 10);
+    const bodyWeight = directBodyStyle.weight === 'bold' ? 700 : Number.parseInt(directBodyStyle.weight, 10);
+    expect(mentionWeight, JSON.stringify({directMentionStyle, directBodyStyle})).toBeGreaterThan(bodyWeight);
+    for (const theme of ['light', 'dark'] as const) {
+      await setTheme(owner, theme);
+      for (const viewport of [{width: 2560, height: 1440}, {width: 1440, height: 900}, {width: 1024, height: 900}, {width: 390, height: 844}]) {
+        await owner.setViewportSize(viewport);
+        const visibleMessage = owner.locator('.message-bubble').filter({hasText: 'hello from a selected mention'}).last();
+        await visibleMessage.scrollIntoViewIfNeeded();
+        const mentionContrast = await measureRenderedTextContrast(visibleMessage.locator('.message-mention'));
+        expect(mentionContrast.ratio, `${theme}/${viewport.width} direct mention contrast: ${JSON.stringify(mentionContrast)}`).toBeGreaterThanOrEqual(4.5);
+        const layout = await owner.evaluate(() => ({scrollWidth: document.documentElement.scrollWidth, clientWidth: document.documentElement.clientWidth}));
+        expect(layout.scrollWidth, `${theme}/${viewport.width} direct mention viewport containment`).toBeLessThanOrEqual(layout.clientWidth + 1);
+        await owner.screenshot({path: testInfo.outputPath(`mention-direct-message-${theme}-${viewport.width}.png`), fullPage: false});
+      }
+    }
+
+    // Literal @text without selecting a suggestion remains ordinary text.
+    await composer.fill('plain @not-a-member text');
+    await owner.getByRole('button', {name: 'Send message'}).click();
+    const plainDirect = owner.locator('.message-bubble').filter({hasText: 'plain @not-a-member text'}).last();
+    await expect(plainDirect).toContainText('plain @not-a-member text');
+    await expect(plainDirect.locator('.message-mention')).toHaveCount(0);
+    await expect(bob.locator('.message-bubble').filter({hasText: 'plain @not-a-member text'}).last().locator('.message-mention')).toHaveCount(0);
+
+    // A mentioned recipient disconnected before send receives the persisted
+    // message on reconnect, with the normal unread cursor behavior.
+    await bob.setViewportSize({width: 390, height: 844});
+    await bob.getByRole('button', {name: 'Back to chats'}).click();
+    await bob.goto('/profile');
+    await expect(bob.getByRole('heading', {name: 'Profile'})).toBeVisible();
+    await owner.setViewportSize({width: 1440, height: 900});
+    await composer.fill('@Bo');
+    await expect(picker.getByRole('option')).toHaveText([users[1].name]);
+    await composer.press('ArrowDown');
+    await composer.press('Enter');
+    await expect(composer).toHaveValue(`@${users[1].name} `);
+    await composer.fill(`${await composer.inputValue()}offline mention replay`);
+    await owner.getByRole('button', {name: 'Send message'}).click();
+    await bob.goto('/home');
+    await waitForLiveConnection(bob);
+    const bobDirectRow = bob.locator('.person-option').filter({hasText: users[0].name});
+    await expect(bobDirectRow.locator('.unread-count')).toBeVisible({timeout: 10_000});
+    expect(Number(await bobDirectRow.locator('.unread-count').textContent())).toBeGreaterThan(0);
+    await bobDirectRow.click();
+    await expect(bob.locator('.message-bubble').filter({hasText: 'offline mention replay'}).last().locator('.message-mention')).toHaveText(`@${users[1].name}`);
+
+    // In the group, candidates are exactly the other members; keyboard selection
+    // and recipient-side rendering are checked again on the group protocol path.
+    await owner.reload();
+    const ownerGroup = owner.locator('.person-option').filter({hasText: 'Mention acceptance group'});
+    await expect(ownerGroup).toBeVisible({timeout: 10_000});
+    await ownerGroup.click();
+    await bob.getByRole('button', {name: 'Back to chats'}).click();
+    for (const page of [bob, charlie]) {
+      const group = page.locator('.person-option').filter({hasText: 'Mention acceptance group'});
+      await group.click();
+    }
+    const groupComposer = owner.getByLabel('Message composer').getByRole('textbox', {name: 'Message'});
+    await groupComposer.fill('@');
+    const groupPicker = owner.getByRole('listbox', {name: 'Mention a chat member'});
+    await expect(groupPicker.getByRole('option')).toHaveCount(2);
+    await expect(groupPicker.getByRole('option').filter({hasText: users[1].name})).toBeVisible();
+    await expect(groupPicker.getByRole('option').filter({hasText: users[2].name})).toBeVisible();
+    await groupComposer.press('ArrowDown');
+    await expect(groupPicker.getByRole('option').nth(1)).toHaveAttribute('aria-selected', 'true');
+    await groupComposer.press('Escape');
+    await groupComposer.fill('@Ch');
+    await expect(groupPicker.getByRole('option')).toHaveText([users[2].name]);
+    await owner.setViewportSize({width: 390, height: 844});
+    await setTheme(owner, 'light');
+    const groupPickerGeometry = await owner.evaluate(() => {
+      const form = document.querySelector<HTMLElement>('.composer');
+      const picker = form?.querySelector<HTMLElement>('.mention-picker');
+      const rect = (element?: HTMLElement | null) => {
+        const box = element?.getBoundingClientRect();
+        return box && {left: box.left, right: box.right, top: box.top, bottom: box.bottom};
+      };
+       const panel = document.querySelector<HTMLElement>('.chat-panel');
+       return {form: rect(form), panel: rect(panel), picker: rect(picker), documentWidth: document.documentElement.scrollWidth, viewportWidth: document.documentElement.clientWidth, pickerWidth: picker?.scrollWidth, pickerClientWidth: picker?.clientWidth};
+    });
+    expect(groupPickerGeometry.picker?.left).toBeGreaterThanOrEqual((groupPickerGeometry.form?.left ?? 0) - 1);
+    expect(groupPickerGeometry.picker?.right).toBeLessThanOrEqual((groupPickerGeometry.form?.right ?? 0) + 1);
+    expect(groupPickerGeometry.picker?.top).toBeGreaterThanOrEqual((groupPickerGeometry.panel?.top ?? 0) - 1);
+    expect(groupPickerGeometry.picker?.bottom).toBeLessThanOrEqual((groupPickerGeometry.form?.top ?? 0) + 1);
+    expect(groupPickerGeometry.pickerWidth).toBeLessThanOrEqual((groupPickerGeometry.pickerClientWidth ?? 0) + 1);
+    expect(groupPickerGeometry.documentWidth).toBeLessThanOrEqual(groupPickerGeometry.viewportWidth + 1);
+    await owner.screenshot({path: testInfo.outputPath('mention-group-picker-light-390.png'), fullPage: false});
+    await setTheme(owner, 'dark');
+    await expect(groupPicker).toBeVisible();
+    const darkGroupPickerLayout = await owner.evaluate(() => ({scrollWidth: document.documentElement.scrollWidth, clientWidth: document.documentElement.clientWidth}));
+    expect(darkGroupPickerLayout.scrollWidth).toBeLessThanOrEqual(darkGroupPickerLayout.clientWidth + 1);
+    await owner.screenshot({path: testInfo.outputPath('mention-group-picker-dark-390.png'), fullPage: false});
+    await groupComposer.press('ArrowDown');
+    await groupComposer.press('Enter');
+    await expect(groupComposer).toHaveValue(`@${users[2].name} `);
+
+    await charlie.getByRole('button', {name: 'Account menu'}).click();
+    await charlie.getByRole('menuitem', {name: 'Profile'}).click();
+    const charlieNotificationMode = charlie.getByRole('radio', {name: /Notifications and sounds/});
+    await charlieNotificationMode.click();
+    await expect(charlieNotificationMode).toHaveAttribute('aria-checked', 'true');
+    await charlie.getByRole('link', {name: 'Back to chats'}).click();
+    await expect(charlie.locator('.chat-presence')).toHaveText(/members online/, {timeout: 10_000});
+    await charlie.evaluate(() => Object.defineProperty(document, 'hasFocus', {configurable: true, value: () => false}));
+
+    await groupComposer.fill(`${await groupComposer.inputValue()}group mention delivery`);
+    await owner.getByRole('button', {name: 'Send message'}).click();
+    await expect(owner.locator('.message-bubble').filter({hasText: 'group mention delivery'}).last().locator('.message-mention')).toHaveText(`@${users[2].name}`);
+    const charlieMessage = charlie.locator('.message-bubble').filter({hasText: 'group mention delivery'}).last();
+    await expect(charlieMessage.locator('.message-mention')).toHaveText(`@${users[2].name}`);
+    await expect.poll(async () => charlie.evaluate(() => (window as Window & {__zweiNotificationRecords: BrowserNotificationRecord[]}).__zweiNotificationRecords.length)).toBe(1);
+    expect(await charlie.evaluate(() => (window as Window & {__zweiNotificationRecords: BrowserNotificationRecord[]}).__zweiNotificationRecords[0])).toEqual({title: 'New message', body: 'You have a new message.', tag: expect.stringMatching(/^zwei-message-/)});
+    const groupMentionStyle = await charlieMessage.locator('.message-mention').evaluate(element => {
+      const style = getComputedStyle(element);
+      const matchedRules: Array<{selector: string; color: string; fontWeight: string}> = [];
+      const visitRules = (rules: CSSRuleList): void => {
+        for (const rule of Array.from(rules)) {
+          if (rule instanceof CSSStyleRule) {
+            try {
+              if (element.matches(rule.selectorText)) {
+                matchedRules.push({selector: rule.selectorText, color: rule.style.color, fontWeight: rule.style.fontWeight});
+              }
+            } catch {
+              // Ignore selectors that are not valid for Element.matches().
+            }
+          } else if ('cssRules' in rule) {
+            visitRules((rule as CSSGroupingRule).cssRules);
+          }
+        }
+      };
+      for (const sheet of Array.from(document.styleSheets)) {
+        try {
+          visitRules(sheet.cssRules);
+        } catch {
+          // Cross-origin stylesheets do not expose their rules to CSSOM.
+        }
+      }
+      return {color: style.color, weight: style.fontWeight, matchedRules};
+    });
+    const groupBodyStyle = await charlieMessage.locator('p').evaluate(element => {
+      const style = getComputedStyle(element);
+      return {color: style.color, weight: style.fontWeight};
+    });
+    console.info('Group mention computed styles:', JSON.stringify({groupMentionStyle, groupBodyStyle}));
+    expect(groupMentionStyle.color).not.toBe(groupBodyStyle.color);
+    const fontWeightValue = (weight: string): number => weight === 'bold' ? 700 : weight === 'normal' ? 400 : Number.parseInt(weight, 10);
+    expect(fontWeightValue(groupMentionStyle.weight), JSON.stringify({groupMentionStyle, groupBodyStyle})).toBeGreaterThan(fontWeightValue(groupBodyStyle.weight));
+    for (const theme of ['light', 'dark'] as const) {
+      await setTheme(charlie, theme);
+      await charlieMessage.scrollIntoViewIfNeeded();
+      await charlie.screenshot({path: testInfo.outputPath(`mention-group-message-${theme}.png`), fullPage: false});
+    }
+    const bobMessage = bob.locator('.message-bubble').filter({hasText: 'group mention delivery'}).last();
+    await expect(bobMessage.locator('.message-mention')).toHaveText(`@${users[2].name}`);
+    await expect(bobMessage).toContainText(`@${users[2].name} group mention delivery`);
+
+    await bob.setViewportSize({width: 390, height: 844});
+    await bob.getByRole('button', {name: 'Back to chats'}).click();
+    await bob.goto('/profile');
+    await expect(bob.getByRole('heading', {name: 'Profile'})).toBeVisible();
+    await groupComposer.fill('@Bob');
+    await expect(groupPicker.getByRole('option')).toHaveText([users[1].name]);
+    await groupComposer.press('ArrowDown');
+    await groupComposer.press('Enter');
+    await expect(groupComposer).toHaveValue(`@${users[1].name} `);
+    await groupComposer.fill(`${await groupComposer.inputValue()}offline group mention replay`);
+    await owner.getByRole('button', {name: 'Send message'}).click();
+    await bob.goto('/home');
+    await waitForLiveConnection(bob);
+    const bobGroupRow = bob.locator('.person-option').filter({hasText: 'Mention acceptance group'});
+    await expect(bobGroupRow.locator('.unread-count')).toBeVisible({timeout: 10_000});
+    expect(Number(await bobGroupRow.locator('.unread-count').textContent())).toBeGreaterThan(0);
+    await bobGroupRow.click();
+    await expect(bob.locator('.message-bubble').filter({hasText: 'offline group mention replay'}).last().locator('.message-mention')).toHaveText(`@${users[1].name}`);
+
+    await owner.setViewportSize({width: 390, height: 844});
+    await owner.getByRole('button', {name: 'Back to chats'}).click();
+    for (const theme of ['light', 'dark'] as const) {
+      await setTheme(owner, theme);
+      for (const viewport of [{width: 1440, height: 900}, {width: 390, height: 844}]) {
+        await owner.setViewportSize(viewport);
+        await expect(owner.locator('.composer textarea')).toBeDisabled();
+        await expect(owner.getByRole('listbox', {name: 'Mention a chat member'})).toHaveCount(0);
+        const emptyLayout = await owner.evaluate(() => ({scrollWidth: document.documentElement.scrollWidth, clientWidth: document.documentElement.clientWidth}));
+        expect(emptyLayout.scrollWidth, `${theme}/${viewport.width} empty workspace containment`).toBeLessThanOrEqual(emptyLayout.clientWidth + 1);
+        await owner.screenshot({path: testInfo.outputPath(`mention-empty-workspace-${theme}-${viewport.width}.png`), fullPage: false});
+      }
+    }
+  } finally {
+    await Promise.allSettled(contexts.map(context => context.close()));
   }
 });

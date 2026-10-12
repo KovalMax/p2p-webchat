@@ -57,6 +57,42 @@ describe('CallFacade', () => {
         expect(facade.state.errorLabel).toBe('Microphone permission was denied. Allow microphone access for this site and try again.');
     });
 
+    it('retains a server-provided support reference through a terminal notice and tolerates omission', () => {
+        const payload = {...callPayload('ringing'), support_ref: 'server-ref-1'};
+        events.next({version: WEBSOCKET_PROTOCOL_VERSION, type: 'call.incoming', payload});
+        expect(facade.state.supportRef).toBe('server-ref-1');
+        events.next({version: WEBSOCKET_PROTOCOL_VERSION, type: 'call.ended', payload: {...payload, status: 'ended'}});
+        expect(facade.state.phase).toBe('ended');
+        expect(facade.state.supportRef).toBe('server-ref-1');
+
+        facade.close();
+        facade = new CallFacade({getObservable: () => events.asObservable(), readyChanges: readyChanges.asObservable(), send} as unknown as DataProviderService);
+        events.next(incoming());
+        expect(facade.state.supportRef).toBeUndefined();
+    });
+
+    it('clears the previous support reference when a new call attempt fails before receiving one', async () => {
+        const payload = {...callPayload('ringing'), support_ref: 'previous-ref'};
+        events.next({version: WEBSOCKET_PROTOCOL_VERSION, type: 'call.incoming', payload});
+        events.next({version: WEBSOCKET_PROTOCOL_VERSION, type: 'call.ended', payload: {...payload, status: 'ended'}});
+        expect(facade.state.supportRef).toBe('previous-ref');
+
+        (navigator.mediaDevices.getUserMedia as Mock).mockRejectedValue(new DOMException('denied', 'NotAllowedError'));
+        await facade.start('conversation-2', 'peer-2');
+
+        expect(facade.state.phase).toBe('error');
+        expect(facade.state.supportRef).toBeUndefined();
+    });
+
+    it('retains a support reference from a correlated call rejection notice', async () => {
+        await facade.start('conversation-1', 'peer-1');
+        const request = vi.mocked(send).mock.calls.find(([event]) => event.type === 'call.start')?.[0];
+        if (!request || request.type !== 'call.start') throw new Error('Expected a call.start request.');
+        events.next({version: WEBSOCKET_PROTOCOL_VERSION, type: 'call.rejected', request_id: request.request_id, payload: {error: 'unavailable', support_ref: 'rejected-ref-1'}});
+        expect(facade.state.phase).toBe('error');
+        expect(facade.state.supportRef).toBe('rejected-ref-1');
+    });
+
     it('cleans up microphone state when call.start cannot be queued', async () => {
         send.mockReturnValue(false);
 
@@ -317,10 +353,20 @@ describe('CallFacade', () => {
 
         events.next({ version: WEBSOCKET_PROTOCOL_VERSION, type: 'call.rejected', request_id: requestID, payload: { error: 'recipient is offline' } });
 
-        expect(facade.state.statusLabel).toBe('Call unavailable: recipient is offline');
+        expect(facade.state.statusLabel).toBe('Call unavailable.');
         vi.advanceTimersByTime(5000);
         expect(facade.state.phase).toBe('idle');
         vi.useRealTimers();
+    });
+
+    it('uses a safe, non-duplicated label for generic server rejection reasons', async () => {
+        await facade.start('conversation-1', 'peer-1');
+        const requestID = (lastArgument(send) as {request_id: string}).request_id;
+
+        events.next({ version: WEBSOCKET_PROTOCOL_VERSION, type: 'call.rejected', request_id: requestID, payload: { error: 'call unavailable' } });
+
+        expect(facade.state.statusLabel).toBe('Call unavailable.');
+        expect(facade.state.errorLabel).toBe('Call unavailable.');
     });
 
     it('mutes tracks and closes the peer connection and local tracks when ended', async () => {

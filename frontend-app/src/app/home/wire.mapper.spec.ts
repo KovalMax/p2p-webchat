@@ -1,4 +1,4 @@
-import { messageSenderDisplayName, toConversation, toGroup, toGroupPage, toGroupPeerReadCursor, toMessage, toMessageHistory } from './wire.mapper';
+import { isValidMessageMentionWire, messageSenderDisplayName, toConversation, toGroup, toGroupPage, toGroupPeerReadCursor, toMessage, toMessageHistory, toMessageMentionWires } from './wire.mapper';
 
 describe('wire mapper', () => {
     it('falls back to conversation creation time when last activity is omitted', () => {
@@ -94,6 +94,15 @@ describe('wire mapper', () => {
         const base = { id: 'message-1', conversation_id: 'group-1', sender_id: 'owner', client_message_id: 'client-1', sequence: 1, body: 'Owner added Member to the group.', created_at: '2026-01-01T00:00:00Z' };
 
         expect(toMessage({ ...base, kind: 'system' })?.kind).toBe('system');
+    });
+
+    it('maps optional stable mention IDs and UTF-16 ranges and rejects malformed metadata', () => {
+        const base = {id: 'message-1', conversation_id: 'group-1', sender_id: 'sender', client_message_id: 'client-1', sequence: 1, body: '😀 @Alice', created_at: '2026-01-01T00:00:00Z'};
+        expect(toMessageMentionWires([{userId: 'alice', start: 3, end: 9}])).toEqual([{user_id: 'alice', start: 3, end: 9}]);
+        expect(toMessage({...base, mentions: [{user_id: 'alice', start: 3, end: 9}]})?.mentions).toEqual([{userId: 'alice', start: 3, end: 9}]);
+        expect(toMessage({...base, mentions: [{user_id: 'alice', start: 1, end: 3}]})).toBeNull();
+        expect(isValidMessageMentionWire([{userId: 'alice', start: 3, end: 9}], base.body)).toBe(false);
+        expect(toMessage({...base, mentions: Array.from({length: 17}, (_, index) => ({user_id: `user-${index}`, start: 0, end: 1}))})).toBeNull();
     });
 
     it('maps group peer cursors and rejects malformed identifiers or sequences', () => {

@@ -43,6 +43,46 @@ describe('HomeComponent', () => {
         expect(component).toBeTruthy();
     });
 
+    it('offers only other members in the selected chat and creates an ID-backed keyboard mention', () => {
+        component.profile = {id: 'user-1'} as Profile;
+        component.selectedConversation = {...groupConversation('group-mention'), members: [
+            {...groupMember('user-1', 1), displayName: 'Sender'},
+            {...groupMember('alice-id', 1), displayName: 'Alice'},
+            {...groupMember('alicia-id', 1), displayName: 'Alicia'},
+            {...groupMember('bob-id', 1), displayName: 'Bob'},
+        ]};
+        component.draft = '@Ali';
+        component.onDraftChange();
+        expect(component.mentionSuggestions.map(member => member.userId)).toEqual(['alice-id', 'alicia-id']);
+        component.handleMentionKeydown(new KeyboardEvent('keydown', {key: 'ArrowDown'}));
+        component.onComposerEnter(new KeyboardEvent('keydown', {key: 'Enter'}));
+        expect(component.draft).toBe('@Alicia ');
+        expect(component.messageSegments({id: 'm', conversationId: 'group-mention', senderId: 'user-1', clientMessageId: 'c', sequence: 1, body: component.draft, createdAt: '', mentions: [{userId: 'alicia-id', start: 0, end: 7}]})).toEqual([
+            {text: '@Alicia', mentioned: true}, {text: ' ', mentioned: false},
+        ]);
+        component.ngOnDestroy();
+    });
+
+    it('sends selected mention identity and UTF-16 offsets with the correlated message request', () => {
+        const send = vi.fn().mockName('send').mockReturnValue(true);
+        const historyComponent = createHomeComponent({} as ConversationService, {} as AuthService, {markForCheck: vi.fn().mockName('markForCheck')} as unknown as ChangeDetectorRef, {send, close: () => undefined} as unknown as DataProviderService, {close: () => undefined} as CallFacade);
+        historyComponent.selectedConversation = {...groupConversation('mention-group'), members: [groupMember('user-1', 1), {...groupMember('alice-id', 1), displayName: 'Alice'}]};
+        historyComponent.profile = {id: 'user-1'} as Profile;
+        historyComponent.socketReady = true;
+        historyComponent.draft = '😀 @Ali';
+        historyComponent.onDraftChange();
+        historyComponent.selectMention();
+        historyComponent.sendMessage();
+
+        const request = vi.mocked(send).mock.calls.map(([event]) => event).find(event => event.type === 'message.send');
+        expect(request?.type).toBe('message.send');
+        if (request?.type !== 'message.send') throw new Error('Expected a message send command');
+        expect(request.payload.body).toBe('😀 @Alice');
+        expect(request.payload.mentions).toEqual([{user_id: 'alice-id', start: 3, end: 9}]);
+        expect(historyComponent.messages[0].mentions).toEqual([{userId: 'alice-id', start: 3, end: 9}]);
+        historyComponent.ngOnDestroy();
+    });
+
     it('renders singular result wording in the Home people-search template', () => {
         component.searchState = 'results';
         component.searchResults = [{ id: 'one', display_name: 'One Person', email: 'one@example.test' }];
@@ -106,7 +146,7 @@ describe('HomeComponent', () => {
     });
 
     it('renders the recipient-offline explanation from authoritative absence in presence', () => {
-        const call = { state: { phase: 'error', statusLabel: 'Call unavailable: call unavailable', errorLabel: 'Call unavailable: call unavailable' }, close: () => undefined } as unknown as CallFacade;
+        const call = { state: { phase: 'error', statusLabel: 'Call unavailable.', errorLabel: 'Call unavailable.' }, close: () => undefined } as unknown as CallFacade;
         const home = createHomeComponent({} as ConversationService, {} as AuthService, { markForCheck: vi.fn().mockName('markForCheck') } as unknown as ChangeDetectorRef, { close: () => undefined } as DataProviderService, call);
         const selected: Conversation = { ...conversation('offline-peer'), kind: 'direct' };
         home.selectedConversation = selected;
@@ -115,7 +155,7 @@ describe('HomeComponent', () => {
 
         expect(home.directCallProfile().status).toBe('Call unavailable: recipient is offline');
         home.presenceReady = false;
-        expect(home.directCallProfile().status).toBe('Call unavailable: call unavailable');
+        expect(home.directCallProfile().status).toBe('Call unavailable.');
         home.ngOnDestroy();
     });
 
@@ -2087,51 +2127,46 @@ describe('HomeComponent', () => {
         const send = vi.fn().mockName('send').mockReturnValue(true);
         const historyComponent = createHomeComponent({ list: () => of([]) } as unknown as ConversationService, { profile: () => of({ id: 'user-1' } as Profile) } as unknown as AuthService, { markForCheck: vi.fn().mockName('markForCheck') } as unknown as ChangeDetectorRef, { getObservable: () => EMPTY, connectionStateChanges, send, close: () => undefined } as unknown as DataProviderService, { state$: of({ phase: 'idle' }), close: () => undefined } as unknown as CallFacade);
         historyComponent.ngOnInit();
-        historyComponent.selectedConversation = conversation('selected');
+        historyComponent.selectedConversation = {...conversation('selected'), otherUserId: 'user-2', otherDisplayName: 'Alice'};
         historyComponent.profile = { id: 'user-1' } as Profile;
         historyComponent.socketReady = true;
-        historyComponent.draft = 'First';
+        historyComponent.draft = '@Al';
+        historyComponent.onDraftChange();
+        expect(historyComponent.mentionSuggestions).toEqual([{userId: 'user-2', displayName: 'Alice'}]);
+        historyComponent.selectMention();
+        historyComponent.draft += 'First';
+        historyComponent.onDraftChange();
         historyComponent.sendMessage();
         historyComponent.draft = 'Second';
         historyComponent.sendMessage();
-        const firstSend = vi.mocked(send).mock.calls[0][0] as {
+        const messageRequests = () => vi.mocked(send).mock.calls
+            .map(([event]) => event as {type?: string})
+            .filter(event => event.type === 'message.send') as Array<{
             request_id: string;
             payload: {
                 client_message_id: string;
                 body: string;
+                mentions?: {user_id: string; start: number; end: number}[];
             };
-        };
-        const secondSend = vi.mocked(send).mock.calls[1][0] as {
-            request_id: string;
-            payload: {
-                client_message_id: string;
-                body: string;
-            };
-        };
+        }>;
+        const [firstSend, secondSend] = messageRequests();
+        expect(firstSend?.payload.mentions).toEqual([{user_id: 'user-2', start: 0, end: 6}]);
 
         await tick(10000);
         connectionStateChanges.next('ready');
-        const firstReplay = vi.mocked(send).mock.calls[2][0] as {
-            request_id: string;
-            payload: {
-                client_message_id: string;
-                body: string;
-            };
-        };
-        const secondReplay = vi.mocked(send).mock.calls[3][0] as {
-            request_id: string;
-            payload: {
-                client_message_id: string;
-                body: string;
-            };
-        };
+        const [, , firstReplay, secondReplay] = messageRequests();
+        expect(firstSend).toBeDefined();
+        expect(secondSend).toBeDefined();
+        expect(firstReplay).toBeDefined();
+        expect(secondReplay).toBeDefined();
+        if (!firstSend || !secondSend || !firstReplay || !secondReplay) throw new Error('Expected both initial sends and retries.');
         expect(firstReplay.request_id).not.toBe(firstSend.request_id);
         expect(secondReplay.request_id).not.toBe(secondSend.request_id);
-        expect(firstReplay.payload).toEqual(expect.objectContaining({ client_message_id: firstSend.payload.client_message_id, body: 'First' }));
+        expect(firstReplay.payload).toEqual(expect.objectContaining({ client_message_id: firstSend.payload.client_message_id, body: '@Alice First', mentions: [{user_id: 'user-2', start: 0, end: 6}] }));
         expect(secondReplay.payload).toEqual(expect.objectContaining({ client_message_id: secondSend.payload.client_message_id, body: 'Second' }));
 
         historyComponent.handleSocketEvent({ version: WEBSOCKET_PROTOCOL_VERSION, type: 'message.accepted', request_id: secondReplay.request_id, payload: socketMessage('second-durable', secondReplay.payload.client_message_id, 'Second') });
-        historyComponent.handleSocketEvent({ version: WEBSOCKET_PROTOCOL_VERSION, type: 'message.accepted', request_id: firstReplay.request_id, payload: socketMessage('first-durable', firstReplay.payload.client_message_id, 'First') });
+        historyComponent.handleSocketEvent({ version: WEBSOCKET_PROTOCOL_VERSION, type: 'message.accepted', request_id: firstReplay.request_id, payload: socketMessage('first-durable', firstReplay.payload.client_message_id, '@Alice First') });
         expect(historyComponent.messages.map(message => message.id)).toEqual(['first-durable', 'second-durable']);
         expect(historyComponent.messages.some(message => message.pending || message.uncertain)).toBe(false);
         historyComponent.ngOnDestroy();

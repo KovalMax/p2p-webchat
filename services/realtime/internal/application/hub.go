@@ -177,8 +177,9 @@ type Hub struct {
 
 // RequestError preserves client correlation data when a command is rejected.
 type RequestError struct {
-	RequestID string
-	Err       error
+	RequestID  string
+	SupportRef uuid.UUID
+	Err        error
 }
 
 func (e *RequestError) Error() string { return e.Err.Error() }
@@ -283,7 +284,7 @@ func (h *Hub) Remove(ctx context.Context, client Client) {
 		calls, err := h.calls.EndByDevice(ctx, client.Identity().UserID, client.Identity().DeviceID, clientConnectionID(client))
 		if err == nil {
 			for _, call := range calls {
-				h.logCallLifecycle(ctx, "call ended after websocket disconnect", call, "user_id", client.Identity().UserID, "device_id", client.Identity().DeviceID)
+				h.logCallLifecycle(ctx, "call ended after websocket disconnect", call, "event", "call.ended", "source", "disconnect", "outcome", "ended", "connection_id", clientConnectionID(client), "user_id", client.Identity().UserID, "device_id", client.Identity().DeviceID)
 				h.publishCall(ctx, CallChange{Type: "ended", Call: call})
 			}
 		} else {
@@ -294,7 +295,15 @@ func (h *Hub) Remove(ctx context.Context, client Client) {
 		changed, err := rooms.RemoveGroupConnection(ctx, client.Identity().UserID, client.Identity().DeviceID, clientConnectionID(client))
 		if err == nil {
 			for _, room := range changed {
-				h.notifyGroupRoom(ctx, GroupRoomChange{Type: "participant.left", Room: room, FromUserID: client.Identity().UserID, FromDeviceID: client.Identity().DeviceID})
+				call := Call{ID: room.ID, SupportRef: room.SupportRef, ConversationID: room.ConversationID, Status: room.Status}
+				eventType := "participant.left"
+				outcome := "participant_removed"
+				if room.Status == GroupRoomEnded {
+					eventType = "ended"
+					outcome = "room_ended"
+				}
+				h.logCallLifecycle(ctx, "group call room cleanup after websocket disconnect", call, "room_status", room.Status, "source", "disconnect", "outcome", outcome, "connection_id", clientConnectionID(client), "actor_user_id", client.Identity().UserID, "actor_device_id", client.Identity().DeviceID)
+				h.notifyGroupRoom(ctx, GroupRoomChange{Type: eventType, Room: room, FromUserID: client.Identity().UserID, FromDeviceID: client.Identity().DeviceID})
 			}
 		} else {
 			h.logCallWarning(ctx, "could not remove group room participant after websocket disconnect", err, "actor_user_id", client.Identity().UserID, "actor_device_id", client.Identity().DeviceID)
@@ -439,7 +448,24 @@ func (h *Hub) NotifyExpiredGroupRooms(ctx context.Context, rooms []GroupRoom) {
 	for _, room := range rooms {
 		room.Status = GroupRoomEnded
 		room.Presenter = nil
-		h.notifyGroupRoom(ctx, GroupRoomChange{Type: "ended", Room: room})
+		h.logCallLifecycle(ctx, "group call expiry room claimed", Call{ID: room.ID, SupportRef: room.SupportRef, ConversationID: room.ConversationID, Status: room.Status}, "event", "group.call.ended", "source", "expiry_sweep", "outcome", "claimed")
+		h.notifyGroupRoom(ctx, GroupRoomChange{Type: "ended", Source: "expiry_sweep", Room: room})
+	}
+}
+
+// NotifyExpiredCalls emits terminal projections for call reservations claimed
+// by the expiry sweep while preserving their support reference through fan-out.
+func (h *Hub) NotifyExpiredCalls(ctx context.Context, calls []Call) {
+	for _, call := range calls {
+		call.Status = CallEnded
+		h.logCallLifecycle(ctx, "call expiry reservation claimed", call, "event", "call.ended", "source", "expiry_sweep", "outcome", "claimed")
+		change := CallChange{Type: "ended", Source: "expiry_sweep", Call: call}
+		h.DeliverCall(change)
+		if h.calls != nil {
+			if err := h.calls.PublishCall(ctx, change); err != nil {
+				h.logCallWarning(ctx, "call expiry event fanout failed", err, "event", "call.ended", "source", "expiry_sweep", "support_ref", call.SupportRef, "call_id", call.ID, "conversation_id", call.ConversationID, "outcome", "failed")
+			}
+		}
 	}
 }
 
@@ -480,23 +506,24 @@ func (h *Hub) Handle(ctx context.Context, client Client, payload []byte) error {
 	return h.HandleVersion(ctx, client, ProtocolVersion, payload)
 }
 
-func (h *Hub) HandleVersion(ctx context.Context, client Client, protocolVersion int, payload []byte) error {
+func (h *Hub) HandleVersion(ctx context.Context, client Client, protocolVersion int, payload []byte) (result error) {
 	var request struct {
 		Version   int    `json:"version"`
 		Type      string `json:"type"`
 		RequestID string `json:"request_id,omitempty"`
 		Payload   struct {
-			ConversationID  uuid.UUID       `json:"conversation_id"`
-			ClientMessageID string          `json:"client_message_id"`
-			Body            string          `json:"body"`
-			Sequence        int64           `json:"sequence"`
-			AfterSequence   int64           `json:"after_sequence"`
-			CallID          uuid.UUID       `json:"call_id"`
-			RoomID          uuid.UUID       `json:"room_id"`
-			Generation      int64           `json:"generation"`
-			TargetUserID    uuid.UUID       `json:"target_user_id"`
-			TargetDeviceID  string          `json:"target_device_id"`
-			Signal          json.RawMessage `json:"signal"`
+			ConversationID  uuid.UUID           `json:"conversation_id"`
+			ClientMessageID string              `json:"client_message_id"`
+			Body            string              `json:"body"`
+			Mentions        []messaging.Mention `json:"mentions,omitempty"`
+			Sequence        int64               `json:"sequence"`
+			AfterSequence   int64               `json:"after_sequence"`
+			CallID          uuid.UUID           `json:"call_id"`
+			RoomID          uuid.UUID           `json:"room_id"`
+			Generation      int64               `json:"generation"`
+			TargetUserID    uuid.UUID           `json:"target_user_id"`
+			TargetDeviceID  string              `json:"target_device_id"`
+			Signal          json.RawMessage     `json:"signal"`
 		} `json:"payload"`
 	}
 	if err := json.Unmarshal(payload, &request); err != nil {
@@ -504,6 +531,20 @@ func (h *Hub) HandleVersion(ctx context.Context, client Client, protocolVersion 
 	}
 	if request.Version != protocolVersion {
 		return &RequestError{RequestID: request.RequestID, Err: errors.New("unsupported protocol version")}
+	}
+	var supportRef uuid.UUID
+	if (request.Type == "call.start" && (protocolVersion == 1 || protocolVersion == 2) || request.Type == "group.call.start" && protocolVersion == 2) && request.RequestID != "" && request.Payload.ConversationID != uuid.Nil {
+		supportRef = uuid.New()
+		defer func() {
+			if result == nil {
+				return
+			}
+			var requestError *RequestError
+			if errors.As(result, &requestError) {
+				requestError.SupportRef = supportRef
+				h.logCallWarning(ctx, "call start rejected", requestError, "command", request.Type, "request_id", request.RequestID, "support_ref", supportRef, "connection_id", clientConnectionID(client), "outcome", "rejected", "source", "command", "conversation_id", request.Payload.ConversationID, "actor_user_id", client.Identity().UserID, "actor_device_id", client.Identity().DeviceID)
+			}
+		}()
 	}
 	if protocolVersion == 2 && request.Type == "conversation.reconcile" {
 		return h.handleReconcile(ctx, client, request.RequestID, request.Payload.ConversationID, request.Payload.AfterSequence)
@@ -541,7 +582,7 @@ func (h *Hub) HandleVersion(ctx context.Context, client Client, protocolVersion 
 		if request.Type == "group.call.discover" {
 			return h.handleGroupRoomDiscovery(operationCtx, client, request.RequestID, request.Payload.ConversationID)
 		}
-		return h.handleGroupRoom(operationCtx, client, request.RequestID, request.Type, request.Payload.ConversationID, request.Payload.RoomID, request.Payload.Generation, request.Payload.TargetUserID, request.Payload.TargetDeviceID, request.Payload.Signal)
+		return h.handleGroupRoom(operationCtx, client, request.RequestID, request.Type, request.Payload.ConversationID, request.Payload.RoomID, request.Payload.Generation, request.Payload.TargetUserID, request.Payload.TargetDeviceID, request.Payload.Signal, supportRef)
 	}
 	if request.Type == "presence.refresh" {
 		limiter, ok := h.coord.(RealtimeRateCoordinator)
@@ -582,7 +623,7 @@ func (h *Hub) HandleVersion(ctx context.Context, client Client, protocolVersion 
 		if err != nil || !allowed {
 			return &RequestError{RequestID: request.RequestID, Err: errors.New("call rate limit exceeded")}
 		}
-		return h.handleCall(ctx, client, request.RequestID, request.Type, request.Payload.ConversationID, request.Payload.CallID, request.Payload.Signal)
+		return h.handleCall(ctx, client, request.RequestID, request.Type, request.Payload.ConversationID, request.Payload.CallID, request.Payload.Signal, supportRef)
 	}
 	if request.Type == "conversation.read" {
 		limiter, ok := h.coord.(RealtimeRateCoordinator)
@@ -645,7 +686,7 @@ func (h *Hub) HandleVersion(ctx context.Context, client Client, protocolVersion 
 	if err != nil || !allowed {
 		return &RequestError{RequestID: request.RequestID, Err: errors.New("message rate limit exceeded")}
 	}
-	message, created, err := h.sender.Send(ctx, messaging.SendRequest{SenderID: client.Identity().UserID, ConversationID: request.Payload.ConversationID, ClientMessageID: request.Payload.ClientMessageID, Body: request.Payload.Body})
+	message, created, err := h.sender.Send(ctx, messaging.SendRequest{SenderID: client.Identity().UserID, ConversationID: request.Payload.ConversationID, ClientMessageID: request.Payload.ClientMessageID, Body: request.Payload.Body, Mentions: request.Payload.Mentions})
 	if err != nil {
 		return &RequestError{RequestID: request.RequestID, Err: err}
 	}
@@ -732,7 +773,7 @@ func (h *Hub) handleGroupRoomDiscovery(ctx context.Context, client Client, reque
 		ConversationID uuid.UUID  `json:"conversation_id"`
 		Room           *GroupRoom `json:"room"`
 	}{ConversationID: conversationID, Room: discoveredRoom}})
-	h.logCallLifecycle(ctx, "group call discovered", Call{ID: room.ID, ConversationID: conversationID, Status: room.Status}, "command", "group.call.discover", "request_id", requestID, "actor_user_id", identity.UserID, "actor_device_id", identity.DeviceID)
+	h.logCallLifecycle(ctx, "group call discovered", Call{ID: room.ID, SupportRef: room.SupportRef, ConversationID: conversationID, Status: room.Status}, "command", "group.call.discover", "request_id", requestID, "support_ref", room.SupportRef, "connection_id", clientConnectionID(client), "outcome", "accepted", "source", "command", "actor_user_id", identity.UserID, "actor_device_id", identity.DeviceID)
 	return nil
 }
 
@@ -751,12 +792,14 @@ func (h *Hub) handleGroupRoomSync(ctx context.Context, client Client, requestID 
 	}
 	identity := client.Identity()
 	participant := GroupParticipant{UserID: identity.UserID, DeviceID: identity.DeviceID, ConnectionID: clientConnectionID(client)}
+	var supportRef uuid.UUID
 	ended := func() {
 		client.SendJSON(serverEvent{Version: 2, Type: "group.call.synced", RequestID: requestID, Payload: struct {
 			RoomID     uuid.UUID `json:"room_id"`
 			Generation int64     `json:"generation"`
 			Status     string    `json:"status"`
-		}{roomID, generation, GroupRoomEnded}})
+			SupportRef uuid.UUID `json:"support_ref,omitzero"`
+		}{roomID, generation, GroupRoomEnded, supportRef}})
 	}
 	lease, err := h.groupCallAuth.BeginGroupCall(ctx, conversationID, identity.UserID)
 	if errors.Is(err, ErrCallNotAllowed) {
@@ -775,6 +818,7 @@ func (h *Hub) handleGroupRoomSync(ctx context.Context, client Client, requestID 
 	if err != nil {
 		return &RequestError{RequestID: requestID, Err: ErrCallUnavailable}
 	}
+	supportRef = room.SupportRef
 	if !active || room.ConversationID != conversationID || room.MembershipRevision != lease.MembershipRevision() {
 		if active && room.MembershipRevision < lease.MembershipRevision() {
 			// Projection fan-out may have been missed; the sync itself deliberately
@@ -787,7 +831,7 @@ func (h *Hub) handleGroupRoomSync(ctx context.Context, client Client, requestID 
 		return nil
 	}
 	client.SendJSON(serverEvent{Version: 2, Type: "group.call.synced", RequestID: requestID, Payload: room})
-	h.logCallLifecycle(ctx, "group call synchronized", Call{ID: room.ID, ConversationID: room.ConversationID, Status: room.Status}, "command", "group.call.sync", "request_id", requestID, "actor_user_id", identity.UserID, "actor_device_id", identity.DeviceID)
+	h.logCallLifecycle(ctx, "group call synchronized", Call{ID: room.ID, SupportRef: room.SupportRef, ConversationID: room.ConversationID, Status: room.Status}, "command", "group.call.sync", "request_id", requestID, "support_ref", room.SupportRef, "connection_id", clientConnectionID(client), "outcome", "accepted", "source", "command", "actor_user_id", identity.UserID, "actor_device_id", identity.DeviceID)
 	return nil
 }
 
@@ -852,7 +896,7 @@ func (h *Hub) DeliverReadCursor(readerID uuid.UUID, recipientIDs []uuid.UUID, co
 	}
 }
 
-func (h *Hub) handleGroupRoom(ctx context.Context, client Client, requestID, eventType string, conversationID, roomID uuid.UUID, generation int64, targetUserID uuid.UUID, targetDeviceID string, signal json.RawMessage) error {
+func (h *Hub) handleGroupRoom(ctx context.Context, client Client, requestID, eventType string, conversationID, roomID uuid.UUID, generation int64, targetUserID uuid.UUID, targetDeviceID string, signal json.RawMessage, supportRef uuid.UUID) error {
 	unlock, err := h.lockGroupConversation(ctx, conversationID)
 	if err != nil {
 		return &RequestError{RequestID: requestID, Err: err}
@@ -947,7 +991,7 @@ func (h *Hub) handleGroupRoom(ctx context.Context, client Client, requestID, eve
 		}()
 		revision = lease.MembershipRevision()
 		memberIDs := lease.ActiveMemberIDs()
-		attemptedRoom := GroupRoom{ID: uuid.New(), ConversationID: conversationID, MembershipRevision: revision, Generation: 1, Participants: []GroupParticipant{participant}}
+		attemptedRoom := GroupRoom{ID: uuid.New(), SupportRef: supportRef, ConversationID: conversationID, MembershipRevision: revision, Generation: 1, Participants: []GroupParticipant{participant}}
 		cleanupAttempt := func(operation string) {
 			cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second)
 			cleanupErr := rooms.AbortGroupRoomStart(cleanupCtx, attemptedRoom.ID, attemptedRoom.Generation, participant)
@@ -962,6 +1006,7 @@ func (h *Hub) handleGroupRoom(ctx context.Context, client Client, requestID, eve
 		if err != nil {
 			cleanupAttempt("start failure")
 		} else {
+			room.SupportRef = supportRef
 			err = ctx.Err()
 			if err == nil && ctx.Err() == nil {
 				change := GroupRoomChange{Type: "started", Room: room, FromUserID: identity.UserID, FromDeviceID: identity.DeviceID, RecipientUserIDs: memberIDs}
@@ -1122,11 +1167,20 @@ func (h *Hub) handleGroupRoom(ctx context.Context, client Client, requestID, eve
 	if err == nil && localDelivery != nil {
 		h.deliverGroupRoomLockedContext(ctx, *localDelivery)
 	}
-	if err != nil {
-		h.logCallWarning(ctx, "group call command rejected", err, "command", eventType, "request_id", requestID, "room_id", roomID, "actor_user_id", identity.UserID, "actor_device_id", identity.DeviceID)
-		return &RequestError{RequestID: requestID, Err: err}
+	operationSupportRef := supportRef
+	if operationSupportRef == uuid.Nil {
+		operationSupportRef = room.SupportRef
 	}
-	h.logCallLifecycle(ctx, "group call command accepted", Call{ID: room.ID, ConversationID: room.ConversationID, Status: room.Status}, "command", eventType, "request_id", requestID, "actor_user_id", identity.UserID, "actor_device_id", identity.DeviceID)
+	if err != nil {
+		h.logCallWarning(ctx, "group call command rejected", err, "command", eventType, "request_id", requestID, "support_ref", operationSupportRef, "connection_id", clientConnectionID(client), "room_id", roomID, "outcome", "rejected", "source", "command", "actor_user_id", identity.UserID, "actor_device_id", identity.DeviceID)
+		return &RequestError{RequestID: requestID, SupportRef: supportRef, Err: err}
+	}
+	if room.SupportRef == uuid.Nil {
+		room.SupportRef = supportRef
+	}
+	if eventType != "group.call.signal" {
+		h.logCallLifecycle(ctx, "group call command accepted", Call{ID: room.ID, SupportRef: room.SupportRef, ConversationID: room.ConversationID, Status: room.Status}, "command", eventType, "request_id", requestID, "support_ref", room.SupportRef, "connection_id", clientConnectionID(client), "outcome", "accepted", "source", "command", "actor_user_id", identity.UserID, "actor_device_id", identity.DeviceID)
+	}
 	return nil
 }
 
@@ -1164,7 +1218,7 @@ func (h *Hub) publishGroupRoom(ctx context.Context, change GroupRoomChange) erro
 	change.ParticipantConnectionIDs = groupParticipantConnectionIDs(change.Room)
 	if rooms, ok := h.coord.(GroupRoomCoordinator); ok && ctx.Err() == nil {
 		if err := rooms.PublishGroupRoom(ctx, change); err != nil {
-			h.logCallWarning(ctx, "group call event fanout failed", err, "event", change.Type, "room_id", change.Room.ID)
+			h.logCallWarning(ctx, "group call event fanout failed", err, "event", change.Type, "source", change.Source, "support_ref", change.Room.SupportRef, "room_id", change.Room.ID, "conversation_id", change.Room.ConversationID, "outcome", "failed", "stage", "fanout")
 			return err
 		}
 	}
@@ -1188,10 +1242,18 @@ func (h *Hub) publishGroupRoomAfterMutation(ctx context.Context, change GroupRoo
 func (h *Hub) notifyGroupRoom(ctx context.Context, change GroupRoomChange) {
 	unlock, err := h.lockGroupConversation(ctx, change.Room.ConversationID)
 	if err != nil {
+		h.logCallWarning(ctx, "group call event delivery failed", err,
+			"event", change.Type, "source", change.Source,
+			"room_id", change.Room.ID, "conversation_id", change.Room.ConversationID,
+			"stage", "lock")
 		return
 	}
 	defer unlock()
 	change.ParticipantConnectionIDs = groupParticipantConnectionIDs(change.Room)
+	if change.Source == "expiry_sweep" {
+		h.logCallLifecycle(ctx, "group call expiry terminal event fan-out attempted", Call{ID: change.Room.ID, SupportRef: change.Room.SupportRef, ConversationID: change.Room.ConversationID, Status: change.Room.Status},
+			"event", "group.call.ended", "source", change.Source, "outcome", "attempted")
+	}
 	h.deliverGroupRoomLockedContext(ctx, change)
 	_ = h.publishGroupRoom(ctx, change)
 }
@@ -1310,7 +1372,8 @@ func (h *Hub) deliverGroupRoomLockedContext(ctx context.Context, change GroupRoo
 					Generation    int64     `json:"generation"`
 					Status        string    `json:"status"`
 					StateRevision int64     `json:"state_revision"`
-				}{change.Room.ID, change.Room.Generation, GroupRoomEnded, change.Room.StateRevision}})
+					SupportRef    uuid.UUID `json:"support_ref,omitzero"`
+				}{change.Room.ID, change.Room.Generation, GroupRoomEnded, change.Room.StateRevision, change.Room.SupportRef}})
 				if lease != nil {
 					h.finishGroupDeliveryLease(lease, leaseCtx, cancel)
 				} else {
@@ -1327,7 +1390,8 @@ func (h *Hub) deliverGroupRoomLockedContext(ctx context.Context, change GroupRoo
 					Generation    int64     `json:"generation"`
 					Status        string    `json:"status"`
 					StateRevision int64     `json:"state_revision"`
-				}{change.Room.ID, change.Room.Generation, GroupRoomEnded, change.Room.StateRevision}})
+					SupportRef    uuid.UUID `json:"support_ref,omitzero"`
+				}{change.Room.ID, change.Room.Generation, GroupRoomEnded, change.Room.StateRevision, change.Room.SupportRef}})
 			}
 			h.finishGroupDeliveryLease(lease, leaseCtx, cancel)
 			continue
@@ -1521,7 +1585,7 @@ func groupParticipantKey(userID uuid.UUID, deviceID string) string {
 	return userID.String() + ":" + deviceID
 }
 
-func (h *Hub) handleCall(ctx context.Context, client Client, requestID, eventType string, conversationID, callID uuid.UUID, signal json.RawMessage) error {
+func (h *Hub) handleCall(ctx context.Context, client Client, requestID, eventType string, conversationID, callID uuid.UUID, signal json.RawMessage, supportRef uuid.UUID) error {
 	if h.calls == nil || h.presence == nil || h.coord == nil {
 		return &RequestError{RequestID: requestID, Err: ErrCallUnavailable}
 	}
@@ -1559,7 +1623,7 @@ func (h *Hub) handleCall(ctx context.Context, client Client, requestID, eventTyp
 			}()
 		}
 		if err == nil {
-			call, err = h.calls.Start(ctx, Call{ID: uuid.New(), ConversationID: conversationID, CallerID: identity.UserID, RecipientID: recipientID, CallerDeviceID: identity.DeviceID, CallerConnectionID: clientConnectionID(client)}, token)
+			call, err = h.calls.Start(ctx, Call{ID: uuid.New(), SupportRef: supportRef, ConversationID: conversationID, CallerID: identity.UserID, RecipientID: recipientID, CallerDeviceID: identity.DeviceID, CallerConnectionID: clientConnectionID(client)}, token)
 		}
 		if err == nil {
 			h.publishCall(ctx, CallChange{Type: "started", Call: call})
@@ -1623,13 +1687,11 @@ func (h *Hub) handleCall(ctx context.Context, client Client, requestID, eventTyp
 		return &RequestError{RequestID: requestID, Err: errors.New("unsupported event")}
 	}
 	if err != nil {
-		if eventType != "call.signal" {
-			h.logCallWarning(ctx, "call command rejected", err, "command", eventType, "request_id", requestID, "call_id", callID, "actor_user_id", identity.UserID, "actor_device_id", identity.DeviceID)
-		}
-		return &RequestError{RequestID: requestID, Err: err}
+		h.logCallWarning(ctx, "call command rejected", err, "command", eventType, "request_id", requestID, "support_ref", call.SupportRef, "connection_id", clientConnectionID(client), "call_id", callID, "outcome", "rejected", "source", "command", "actor_user_id", identity.UserID, "actor_device_id", identity.DeviceID)
+		return &RequestError{RequestID: requestID, SupportRef: supportRef, Err: err}
 	}
 	if eventType != "call.signal" {
-		h.logCallLifecycle(ctx, "call command accepted", call, "command", eventType, "request_id", requestID, "actor_user_id", identity.UserID, "actor_device_id", identity.DeviceID)
+		h.logCallLifecycle(ctx, "call command accepted", call, "command", eventType, "request_id", requestID, "support_ref", call.SupportRef, "connection_id", clientConnectionID(client), "outcome", "accepted", "source", "command", "actor_user_id", identity.UserID, "actor_device_id", identity.DeviceID)
 	}
 	return nil
 }
@@ -1638,12 +1700,16 @@ func (h *Hub) publishCall(ctx context.Context, change CallChange) {
 	change.CallerConnectionID = change.Call.CallerConnectionID
 	change.AcceptedConnectionID = change.Call.AcceptedConnectionID
 	if change.Type != "signal" {
-		h.logCallLifecycle(ctx, "call event emitted", change.Call, "event", change.Type, "source", change.Source)
+		source := change.Source
+		if source == "" {
+			source = "command"
+		}
+		h.logCallLifecycle(ctx, "call event emitted", change.Call, "event", change.Type, "source", source, "outcome", "emitted")
 	}
 	h.DeliverCall(change)
 	if h.calls != nil {
 		if err := h.calls.PublishCall(ctx, change); err != nil {
-			h.logCallWarning(ctx, "call event fanout failed", err, "event", change.Type, "source", change.Source)
+			h.logCallWarning(ctx, "call event fanout failed", err, "event", change.Type, "source", change.Source, "support_ref", change.Call.SupportRef, "call_id", change.Call.ID, "conversation_id", change.Call.ConversationID, "outcome", "failed")
 		}
 	}
 }
@@ -1652,8 +1718,8 @@ func (h *Hub) logCallLifecycle(ctx context.Context, message string, call Call, a
 	if h.logger == nil {
 		return
 	}
-	fields := []any{"call_id", call.ID, "conversation_id", call.ConversationID, "caller_id", call.CallerID, "recipient_id", call.RecipientID, "status", call.Status}
-	h.logger.InfoContext(ctx, message, append(fields, args...)...)
+	fields := []any{"call_id", call.ID, "support_ref", call.SupportRef, "conversation_id", call.ConversationID, "caller_id", call.CallerID, "recipient_id", call.RecipientID, "status", call.Status}
+	h.logger.InfoContext(ctx, message, boundedCallLogArgs(append(fields, args...)...)...)
 }
 
 func (h *Hub) logCallWarning(ctx context.Context, message string, err error, args ...any) {
@@ -1661,7 +1727,19 @@ func (h *Hub) logCallWarning(ctx context.Context, message string, err error, arg
 		return
 	}
 	fields := append([]any{"reason", callErrorReason(err)}, args...)
-	h.logger.WarnContext(ctx, message, fields...)
+	h.logger.WarnContext(ctx, message, boundedCallLogArgs(fields...)...)
+}
+
+func boundedCallLogArgs(args ...any) []any {
+	bounded := make([]any, len(args))
+	copy(bounded, args)
+	for index := 1; index < len(bounded); index += 2 {
+		value, ok := bounded[index].(string)
+		if ok && len(value) > 128 {
+			bounded[index] = value[:128]
+		}
+	}
+	return bounded
 }
 
 func callErrorReason(err error) string {
@@ -1676,6 +1754,12 @@ func callErrorReason(err error) string {
 		return "not_allowed"
 	case errors.Is(err, ErrCallTaken):
 		return "already_taken"
+	case errors.Is(err, ErrGroupRoomFull):
+		return "group_full"
+	case err != nil && err.Error() == "call rate limit exceeded":
+		return "rate_limited"
+	case err != nil && err.Error() == "recipient is offline":
+		return "recipient_offline"
 	default:
 		return "internal"
 	}

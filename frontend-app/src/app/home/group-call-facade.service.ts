@@ -10,6 +10,7 @@ export interface GroupCallState {
     readonly phase: GroupCallPhase;
     /** Conversation owning a short-lived terminal notice, even after room teardown. */
     readonly conversationID?: string;
+    readonly supportRef?: string;
     readonly room?: GroupCallRoomPayload;
     readonly localStream?: MediaStream;
     readonly peers: readonly GroupCallPeer[];
@@ -199,7 +200,7 @@ export class GroupCallFacade implements OnDestroy {
         if (room.participants.length > 1) {
             this.rejoinableRoom = room;
             this.rejoinableStateRevision = revision;
-            this.setState({...idleState, phase: 'left', conversationID: room.conversation_id, statusLabel: 'You left the group call.'});
+            this.setState({...idleState, phase: 'left', conversationID: room.conversation_id, supportRef: room.support_ref || this.state.supportRef, statusLabel: 'You left the group call.'});
         }
         this.dismissTerminalNoticeSoon();
     }
@@ -415,7 +416,7 @@ export class GroupCallFacade implements OnDestroy {
                 this.pendingDiscovery = undefined;
                 window.clearTimeout(this.discoveryTimeout);
                 this.discoveryTimeout = undefined;
-                this.fail(`Group call discovery failed: ${event.payload.error}. Try again.`);
+                this.fail(`Group call discovery failed: ${event.payload.error}. Try again.`, event.payload.support_ref);
                 return;
             }
             const pending = this.pendingStartOrJoin;
@@ -426,11 +427,12 @@ export class GroupCallFacade implements OnDestroy {
                     this.rejoinableRoom = undefined;
                     this.rejoinableStateRevision = -1;
                 }
-                this.fail(label);
+                this.fail(label, event.payload.support_ref);
                 return;
             }
             const reconciliation = this.pendingControlReconciliation;
             if (reconciliation && event.request_id === reconciliation.syncRequestID) {
+                if (event.payload.support_ref) this.setState({...this.state, supportRef: event.payload.support_ref});
                 window.clearTimeout(this.controlSyncTimeout);
                 this.controlSyncTimeout = undefined;
                 this.setControlReconciliationError(reconciliation);
@@ -438,6 +440,7 @@ export class GroupCallFacade implements OnDestroy {
             }
             const control = this.pendingControl;
             if (control && event.request_id === control.requestID) {
+                if (event.payload.support_ref) this.setState({...this.state, supportRef: event.payload.support_ref});
                 this.pendingControl = undefined;
                 if (this.generation === control.localGeneration && this.state.phase === (control.type === 'group.call.leave' ? 'left' : 'ended')) {
                     this.reconcileRejectedControl(control);
@@ -466,12 +469,14 @@ export class GroupCallFacade implements OnDestroy {
         }
         if (!this.isRoomEvent(event)) return;
         if (event.type === 'group.call.ended' && !isGroupRoomEventPayload(event.payload)) {
+            if (event.payload.support_ref) this.setState({...this.state, supportRef: event.payload.support_ref});
             if (!this.handleTerminalRoom(event.payload.room_id, event.payload.generation, event.payload.state_revision)) this.handleRejectedControlTerminal(event.payload.room_id, event.payload.generation, event.payload.state_revision);
             return;
         }
         if (!isGroupRoomEventPayload(event.payload)) return;
         const room = event.payload;
         if (room.status === 'ended' || event.type === 'group.call.ended') {
+            if (room.support_ref) this.setState({...this.state, room, supportRef: room.support_ref});
             if (!this.handleTerminalRoom(room.room_id, room.generation, room.state_revision)) this.handleRejectedControlTerminal(room.room_id, room.generation, room.state_revision);
             return;
         }
@@ -528,7 +533,7 @@ export class GroupCallFacade implements OnDestroy {
             if (snapshot.status === 'ended') {
                 this.retireRoom(snapshot.room_id);
                 this.controlStateUncertain = false;
-                this.setState({...idleState, phase: 'ended', conversationID: controlReconciliation.room.conversation_id, statusLabel: 'The group call has ended.', errorLabel: controlRejectionLabel(controlReconciliation.type)});
+                this.setState({...idleState, phase: 'ended', conversationID: controlReconciliation.room.conversation_id, supportRef: controlReconciliation.room.support_ref || this.state.supportRef, statusLabel: 'The group call has ended.', errorLabel: controlRejectionLabel(controlReconciliation.type)});
                 return;
             }
             if (snapshot.conversation_id !== controlReconciliation.room.conversation_id || snapshot.state_revision < controlReconciliation.baselineRevision) {
@@ -538,7 +543,7 @@ export class GroupCallFacade implements OnDestroy {
             if (!snapshot.participants.some(participant => participant.user_id === controlReconciliation.userID && participant.device_id === controlReconciliation.deviceID)) {
                 this.retireRoom(snapshot.room_id);
                 this.controlStateUncertain = false;
-                this.setState({...idleState, phase: 'ended', conversationID: controlReconciliation.room.conversation_id, statusLabel: 'You are no longer in the group call.', errorLabel: controlRejectionLabel(controlReconciliation.type)});
+                this.setState({...idleState, phase: 'ended', conversationID: controlReconciliation.room.conversation_id, supportRef: controlReconciliation.room.support_ref || this.state.supportRef, statusLabel: 'You are no longer in the group call.', errorLabel: controlRejectionLabel(controlReconciliation.type)});
                 return;
             }
             const room: GroupCallRoomPayload = {...snapshot, ice_servers: controlReconciliation.room.ice_servers};
@@ -546,7 +551,7 @@ export class GroupCallFacade implements OnDestroy {
             this.rejoinableStateRevision = snapshot.state_revision;
             this.lastAppliedStateRevision = snapshot.state_revision;
             this.controlStateUncertain = false;
-            this.setState({...idleState, phase: 'left', conversationID: controlReconciliation.room.conversation_id, statusLabel: `${controlRejectionLabel(controlReconciliation.type)} Rejoin to restore audio.`, errorLabel: controlRejectionLabel(controlReconciliation.type)});
+            this.setState({...idleState, phase: 'left', conversationID: controlReconciliation.room.conversation_id, supportRef: controlReconciliation.room.support_ref || this.state.supportRef, statusLabel: `${controlRejectionLabel(controlReconciliation.type)} Rejoin to restore audio.`, errorLabel: controlRejectionLabel(controlReconciliation.type)});
             return;
         }
         const pending = this.pendingSync;
@@ -612,7 +617,7 @@ export class GroupCallFacade implements OnDestroy {
                 this.presentationAudioSenders.delete(key);
             }
         }
-        this.setState({...this.state, room, peers, phase: local ? 'active' : 'ringing', statusLabel: local ? `${room.participants.length} participants in the group call.` : 'Group call is ready to join.'});
+        this.setState({...this.state, room, supportRef: room.support_ref || this.state.supportRef, peers, phase: local ? 'active' : 'ringing', statusLabel: local ? `${room.participants.length} participants in the group call.` : 'Group call is ready to join.'});
         if (local && room.status === 'active') this.startSyncLoop();
         if (!local || !room.ice_servers) return;
         for (const participant of room.participants) {
@@ -813,7 +818,7 @@ export class GroupCallFacade implements OnDestroy {
         window.clearTimeout(this.controlSyncTimeout);
         this.controlSyncTimeout = undefined;
         this.retireRoom(roomID);
-        this.setState({...idleState, phase: 'ended', conversationID: control.room.conversation_id, statusLabel: 'The group call has ended.', errorLabel: controlRejectionLabel(control.type)});
+        this.setState({...idleState, phase: 'ended', conversationID: control.room.conversation_id, supportRef: control.room.support_ref || this.state.supportRef, statusLabel: 'The group call has ended.', errorLabel: controlRejectionLabel(control.type)});
     }
     private reconcileRejectedControl(control: PendingGroupCallControl): void {
         if (this.pendingControlReconciliation || this.generation !== control.localGeneration) return;
@@ -873,7 +878,7 @@ export class GroupCallFacade implements OnDestroy {
         this.playbackRequestedAudios.clear();
         this.conversationID = undefined;
         this.selfID = undefined;
-        this.setState({...idleState, phase: 'ended', conversationID: terminalConversationID, statusLabel: label});
+        this.setState({...idleState, phase: 'ended', conversationID: terminalConversationID, supportRef: this.state.room?.support_ref || this.state.supportRef, statusLabel: label});
         if (dismiss) this.dismissTerminalNoticeSoon();
     }
     private dismissTerminalNoticeSoon(): void {
@@ -895,9 +900,11 @@ export class GroupCallFacade implements OnDestroy {
         this.terminal('Realtime connection lost. Rejoin the group call after reconnecting.', false);
         this.rejoinableRoom = room;
         this.rejoinableStateRevision = revision;
-        this.setState({...idleState, phase: 'left', conversationID: room.conversation_id, statusLabel: 'Realtime connection lost. Rejoin the group call after reconnecting.'});
+        this.setState({...idleState, phase: 'left', conversationID: room.conversation_id, supportRef: room.support_ref || this.state.supportRef, statusLabel: 'Realtime connection lost. Rejoin the group call after reconnecting.'});
     }
-    private fail(label: string): void {
+    private fail(label: string, supportRef?: string): void {
+        const failureConversationID = this.state.conversationID;
+        const failureSupportRef = supportRef || this.state.room?.support_ref || this.state.supportRef;
         const retryRoom = this.state.room && this.rejoinableRoom?.room_id === this.state.room.room_id && this.rejoinableRoom.generation === this.state.room.generation
             ? this.rejoinableRoom
             : undefined;
@@ -907,10 +914,10 @@ export class GroupCallFacade implements OnDestroy {
         if (retryRoom) {
             this.rejoinableRoom = retryRoom;
             this.rejoinableStateRevision = Math.max(retryRevision, terminalRevision);
-            this.setState({...idleState, phase: 'left', conversationID: retryRoom.conversation_id, statusLabel: label, errorLabel: label});
+            this.setState({...idleState, phase: 'left', conversationID: retryRoom.conversation_id, supportRef: failureSupportRef, statusLabel: label, errorLabel: label});
             return;
         }
-        this.setState({...idleState, phase: 'error', conversationID: this.state.conversationID, statusLabel: label, errorLabel: label});
+        this.setState({...idleState, phase: 'error', conversationID: failureConversationID, supportRef: failureSupportRef, statusLabel: label, errorLabel: label});
     }
     private beginGeneration(selfID: string, conversationID: string): number { window.clearTimeout(this.dismissTimer); this.dismissTimer = undefined; this.screenShareAudioEnabled = false; this.stopSyncLoop(); this.remotePresentationReceivers.clear(); this.pendingControl = undefined; this.pendingControlReconciliation = undefined; window.clearTimeout(this.controlSyncTimeout); this.controlSyncTimeout = undefined; this.lastAppliedStateRevision = -1; this.generation += 1; this.selfID = selfID; this.conversationID = conversationID; return this.generation; }
     private current(generation: number): boolean { return generation === this.generation; }

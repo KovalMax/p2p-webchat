@@ -70,6 +70,28 @@ The VM must be Linux ARM64 with Docker Engine, the Docker Compose plugin, and `r
 
 The release workflow synchronizes `infrastructure/production/` over strict-host-key SSH using `rsync --delete`. It preserves `.env` and `.deploy.env`; other files inside `DEPLOY_PATH` may be removed, so use a dedicated directory and keep unrelated data elsewhere. The workflow writes the selected release tag to `.deploy.env`, pulls the production images, starts database and Redis, runs migrations, recreates the services, and probes public HTTPS health and security headers. The production Compose configuration is separate from the local development configuration. Review `.github/workflows/release.yml` and `infrastructure/production/` as the operational source of truth; no manual VM bootstrap procedure is provided here.
 
+### Private realtime support-log export
+
+For a support investigation, export only realtime JSON log records whose top-level `support_ref` exactly equals the supplied UUID. Locally, run `make support-export SUPPORT_REF=<uuid>` (optional `WINDOW=30m`, up to `24h`). This uses the existing development Compose project. On the production VM, from the deployed `infrastructure/production` directory (the directory containing `.env` and `docker-compose.yml`), run:
+
+```sh
+python3 export-realtime-logs.py <uuid> --window 30m
+```
+
+The lookback defaults to 30 minutes; valid windows are positive integer seconds, minutes, or hours, capped at 24 hours. The exporter validates the UUID and window before invoking Docker, never follows logs, and does not upload anything. It handles Docker Compose's container-name prefix and timestamp, examines at most the last 20,000 Docker log lines / 32 MiB, and writes at most 1,000 matching records / 2 MiB. By default, the newly created JSONL file is placed directly in the user's home directory (including when run from the deployed directory) and is mode `0600`; `--output` can select another path. The command prints the selected path and reports its UTC window, empty results, and any safety-cap truncation. An existing output path is never overwritten. Python 3 and the Docker Compose plugin are required on the VM.
+
+The support reference is an opaque correlation ID, not an access credential. It is stored with the existing TTL-bound Redis call state, but production Redis uses AOF persistence: expiration from the live keyspace does **not** securely erase earlier AOF records. Redis AOF rewrites can compact obsolete entries, and VM snapshots/backups may retain older files according to their own retention policy. Treat Redis persistence files and backups as sensitive operational data, restrict access, and apply the VM's normal backup retention/deletion controls; do not promise immediate erasure when the call expires.
+
+Treat the export as sensitive. After verifying the VM host key is already in your `known_hosts`, copy it from the printed path in the VM user's home directory to a private local directory, then review it before sharing:
+
+```sh
+install -d -m 700 "$HOME/private-support"
+scp -o StrictHostKeyChecking=yes <vm-user>@<verified-vm-host>:<export-file-path-under-home> "$HOME/private-support/"
+less "$HOME/private-support/<export-file>"
+```
+
+Remove anything not needed and share only with the authorized support recipient over an approved private channel. Do not put it in a ticket with public access, commit it, or send it through a public route. The production realtime Docker `json-file` log is capped at 10 MiB per file and three files (30 MiB total). This bounds disk use but means older records rotate out; an export may be incomplete even when its output-cap status says complete. Do not treat Docker logs as durable audit storage.
+
 ## Browser PWA installation
 
 Zwei is a browser PWA, not a signed native application. It is served over HTTPS

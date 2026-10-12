@@ -186,18 +186,23 @@ func (c *client) readPump(ctx context.Context) {
 			return
 		}
 		var envelope struct {
-			Version int `json:"version"`
+			Version int    `json:"version"`
+			Type    string `json:"type"`
 		}
 		if json.Unmarshal(payload, &envelope) != nil || envelope.Version != c.protocol {
 			_ = c.socket.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseUnsupportedData, "unsupported protocol version"), time.Now().Add(writeTimeout))
 			return
 		}
-		slog.Info("websocket message received", "user_id", c.identity.UserID, "bytes", len(payload))
+		if envelope.Type != "call.signal" && envelope.Type != "group.call.signal" {
+			slog.Info("websocket message received", "user_id", c.identity.UserID, "bytes", len(payload))
+		}
 		if err := c.hub.HandleVersion(ctx, c, c.protocol, payload); err != nil {
 			requestID := ""
+			supportRef := uuid.Nil
 			var requestError *application.RequestError
 			if errors.As(err, &requestError) {
 				requestID = requestError.RequestID
+				supportRef = requestError.SupportRef
 			}
 			rejectionType := "message.rejected"
 			if len(payload) > 0 {
@@ -212,12 +217,16 @@ func (c *client) readPump(ctx context.Context) {
 			if rejectionType == "call.rejected" {
 				errorMessage = publicRejectionMessage(err)
 			}
+			responsePayload := map[string]string{"error": errorMessage}
+			if supportRef != uuid.Nil {
+				responsePayload["support_ref"] = supportRef.String()
+			}
 			c.SendJSON(struct {
 				Version   int               `json:"version"`
 				Type      string            `json:"type"`
 				RequestID string            `json:"request_id,omitempty"`
 				Payload   map[string]string `json:"payload"`
-			}{Version: c.protocol, Type: rejectionType, RequestID: requestID, Payload: map[string]string{"error": errorMessage}})
+			}{Version: c.protocol, Type: rejectionType, RequestID: requestID, Payload: responsePayload})
 		}
 	}
 }

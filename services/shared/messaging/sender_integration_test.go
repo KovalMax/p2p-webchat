@@ -1,6 +1,7 @@
 package messaging
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"os"
@@ -109,6 +110,61 @@ func TestDeliveryPendingExcludesInactiveAndPreVisibilityMessages(t *testing.T) {
 	pending, err = delivery.Pending(ctx, deviceID, 10)
 	if err != nil || len(pending) != 0 {
 		t.Fatalf("inactive pending = %#v, %v", pending, err)
+	}
+}
+
+func TestSenderPersistsAuthorizedMentionsAndReturnsThemOnRetryAndDelivery(t *testing.T) {
+	databaseURL := os.Getenv("ZWEI_TEST_DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("set ZWEI_TEST_DATABASE_URL to run PostgreSQL integration tests")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	db, err := pgxpool.New(ctx, databaseURL)
+	if err != nil {
+		t.Fatalf("open database: %v", err)
+	}
+	defer db.Close()
+
+	senderID, recipientID, outsiderID, conversationID, deviceID := uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	if _, err := db.Exec(ctx, `INSERT INTO users (id, email, password_hash, display_name) VALUES ($1, $2, 'integration', 'Sender'), ($3, $4, 'integration', 'Recipient'), ($5, $6, 'integration', 'Outsider')`, senderID, senderID.String()+"@integration.test", recipientID, recipientID.String()+"@integration.test", outsiderID, outsiderID.String()+"@integration.test"); err != nil {
+		t.Fatalf("insert users: %v", err)
+	}
+	defer func() {
+		_, _ = db.Exec(context.Background(), `DELETE FROM users WHERE id = ANY($1)`, []uuid.UUID{senderID, recipientID, outsiderID})
+	}()
+	insertConversation(t, ctx, db, conversationID, senderID, recipientID)
+	if _, err := db.Exec(ctx, `INSERT INTO devices (id, user_id, client_device_id) VALUES ($1, $2, 'mention-device')`, deviceID, recipientID); err != nil {
+		t.Fatalf("insert device: %v", err)
+	}
+	sender := NewSender(db, "mention-persistence-test-key")
+	mentions := []Mention{{UserID: recipientID, Start: 0, End: 4}, {UserID: recipientID, Start: 5, End: 9}}
+	request := SendRequest{SenderID: senderID, ConversationID: conversationID, ClientMessageID: "mention-send", Body: "@hey @hey", Mentions: mentions}
+	created, wasCreated, err := sender.Send(ctx, request)
+	if err != nil || !wasCreated || len(created.Mentions) != 2 {
+		t.Fatalf("send = (%+v, %t, %v), want both mention spans", created, wasCreated, err)
+	}
+	var mentionCiphertext, mentionNonce []byte
+	if err := db.QueryRow(ctx, `SELECT mentions_ciphertext, mentions_nonce FROM messages WHERE id = $1`, created.ID).Scan(&mentionCiphertext, &mentionNonce); err != nil {
+		t.Fatalf("read encrypted mention storage: %v", err)
+	}
+	if len(mentionCiphertext) == 0 || len(mentionNonce) == 0 || bytes.Contains(mentionCiphertext, []byte(recipientID.String())) {
+		t.Fatal("mention identity was not stored as encrypted metadata")
+	}
+	changedRetry := request
+	changedRetry.Mentions = nil
+	replayed, wasCreated, err := sender.Send(ctx, changedRetry)
+	if err != nil || wasCreated || len(replayed.Mentions) != 2 || replayed.Mentions[1].Start != 5 {
+		t.Fatalf("idempotent retry = (%+v, %t, %v), want original mention metadata", replayed, wasCreated, err)
+	}
+	request.ClientMessageID = "unauthorized-mention"
+	request.Mentions = []Mention{{UserID: outsiderID, Start: 0, End: 4}}
+	if _, wasCreated, err := sender.Send(ctx, request); !errors.Is(err, ErrInvalidMention) || wasCreated {
+		t.Fatalf("unauthorized mention error = %v, created = %t", err, wasCreated)
+	}
+	pending, err := NewDeliveryRepository(db, "mention-persistence-test-key").Pending(ctx, deviceID, 10)
+	if err != nil || len(pending) != 1 || len(pending[0].Mentions) != 2 {
+		t.Fatalf("pending delivery = (%+v, %v), want stored mention spans", pending, err)
 	}
 }
 

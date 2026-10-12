@@ -58,6 +58,11 @@ func TestGroupRoomReservationIntegration(t *testing.T) {
 		t.Fatalf("create coordinator: %v", err)
 	}
 	defer coordinator.Close()
+	replica, err := NewPresenceCoordinator(rawURL)
+	if err != nil {
+		t.Fatalf("create second coordinator: %v", err)
+	}
+	defer replica.Close()
 
 	roomID, conversationID := uuid.New(), uuid.New()
 	participants := []application.GroupParticipant{
@@ -75,12 +80,22 @@ func TestGroupRoomReservationIntegration(t *testing.T) {
 		_ = coordinator.client.Del(ctx, keys...).Err()
 	}()
 
-	room, err := startAdmittedGroupRoom(ctx, coordinator, application.GroupRoom{ID: roomID, ConversationID: conversationID, MembershipRevision: 7, Generation: 1, Participants: participants[:1]})
+	supportRef := uuid.New()
+	room, err := startAdmittedGroupRoom(ctx, coordinator, application.GroupRoom{ID: roomID, SupportRef: supportRef, ConversationID: conversationID, MembershipRevision: 7, Generation: 1, Participants: participants[:1]})
 	if err != nil {
 		t.Fatalf("start room: %v", err)
 	}
+	// Simulate a reservation with only a short ringing lifetime left; joining
+	// must extend the starter reservation together with the room itself.
+	if err := coordinator.client.Expire(ctx, groupRoomUserKey(participants[0].UserID), 2*time.Second).Err(); err != nil {
+		t.Fatalf("shorten starter reservation: %v", err)
+	}
 	if room.Status != application.GroupRoomRinging || len(room.Participants) != 1 || room.Participants[0].ConnectionID != participants[0].ConnectionID {
 		t.Fatalf("started room = %#v", room)
+	}
+	fromRedis, err := replica.GetGroupRoom(ctx, roomID)
+	if err != nil || fromRedis.SupportRef != supportRef {
+		t.Fatalf("group room support_ref from shared state = %s, want %s (err=%v)", fromRedis.SupportRef, supportRef, err)
 	}
 
 	joinResults := make(chan error, len(participants)-1)
@@ -107,6 +122,40 @@ func TestGroupRoomReservationIntegration(t *testing.T) {
 	}
 	if room.Status != application.GroupRoomActive || len(room.Participants) != application.GroupRoomCapacity {
 		t.Fatalf("active room = %#v", room)
+	}
+	starterReservation := groupRoomUserKey(participants[0].UserID)
+	starterTTL, err := coordinator.client.TTL(ctx, starterReservation).Result()
+	if err != nil || starterTTL <= groupRoomActiveTTL || starterTTL > groupRoomActiveTTL+groupRoomEndedTTL {
+		t.Fatalf("starter reservation TTL = %s, err=%v; want active lifetime plus ended retention", starterTTL, err)
+	}
+	time.Sleep(2100 * time.Millisecond)
+	if reservation, err := coordinator.client.Get(ctx, starterReservation).Result(); err != nil || reservation != roomID.String() {
+		t.Fatalf("starter reservation after ringing TTL = %q, err=%v; want room %s", reservation, err, roomID)
+	}
+	competingToken, err := coordinator.AcquireCallAdmission(ctx, []uuid.UUID{participants[0].UserID})
+	if err != nil {
+		t.Fatalf("acquire competing call admission: %v", err)
+	}
+	_, err = coordinator.Start(ctx, application.Call{
+		ID: uuid.New(), CallerID: participants[0].UserID, RecipientID: uuid.New(),
+		CallerDeviceID: uuid.NewString(), CallerConnectionID: uuid.NewString(),
+	}, competingToken)
+	coordinator.ReleaseCallAdmission(ctx, []uuid.UUID{participants[0].UserID}, competingToken)
+	if !errors.Is(err, application.ErrCallBusy) {
+		t.Fatalf("competing call for starter = %v, want call busy", err)
+	}
+	conversationTTL, err := coordinator.client.TTL(ctx, groupRoomConversationKey(conversationID)).Result()
+	if err != nil || conversationTTL <= groupRoomRingingTTL+groupRoomEndedTTL || conversationTTL > groupRoomActiveTTL+groupRoomEndedTTL {
+		t.Fatalf("active conversation index TTL = %s, err=%v; want it extended with the active room lifetime", conversationTTL, err)
+	}
+	joinedParticipant := room.Participants[1]
+	reservationKey := groupRoomUserKey(joinedParticipant.UserID)
+	if reservation, err := coordinator.client.Get(ctx, reservationKey).Result(); err != nil || reservation != roomID.String() {
+		t.Fatalf("joined participant reservation = %q, err=%v; want room %s", reservation, err, roomID)
+	}
+	reservationTTL, err := coordinator.client.TTL(ctx, reservationKey).Result()
+	if err != nil || reservationTTL <= groupRoomActiveTTL || reservationTTL > groupRoomActiveTTL+groupRoomEndedTTL {
+		t.Fatalf("joined participant reservation TTL = %s, err=%v; want active lifetime plus ended retention", reservationTTL, err)
 	}
 	if room, err = coordinator.SetGroupPresenter(ctx, roomID, room.Participants[1], true); err != nil || room.Presenter == nil || room.Presenter.UserID != room.Participants[1].UserID {
 		t.Fatalf("set presenter: room=%#v err=%v", room, err)
@@ -172,6 +221,57 @@ func TestGroupRoomReservationIntegration(t *testing.T) {
 	}
 	if _, err := startAdmittedGroupRoom(ctx, coordinator, application.GroupRoom{ID: uuid.New(), ConversationID: conversationID, MembershipRevision: 7, Generation: 2, Participants: participants[:1]}); err != nil {
 		t.Fatalf("start after terminal cleanup: %v", err)
+	}
+}
+
+func TestStaleGroupRoomLeaveAndEndPreserveNewConversationIndex(t *testing.T) {
+	rawURL := os.Getenv("ZWEI_TEST_REDIS_URL")
+	if rawURL == "" {
+		t.Skip("set ZWEI_TEST_REDIS_URL to run Redis integration tests")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	coordinator, err := NewPresenceCoordinator(rawURL)
+	if err != nil {
+		t.Fatalf("create coordinator: %v", err)
+	}
+	defer coordinator.Close()
+
+	for _, cleanup := range []string{"leave", "end"} {
+		t.Run(cleanup, func(t *testing.T) {
+			conversationID, userID := uuid.New(), uuid.New()
+			oldRoomID, newerRoomID := uuid.New(), uuid.New()
+			participant := application.GroupParticipant{UserID: userID, DeviceID: uuid.NewString(), ConnectionID: uuid.NewString()}
+			keys := []string{groupRoomKey(oldRoomID), groupRoomKey(newerRoomID), groupRoomConversationKey(conversationID), groupRoomUserKey(userID)}
+			defer coordinator.client.Del(ctx, keys...)
+			if _, err := startAdmittedGroupRoom(ctx, coordinator, application.GroupRoom{ID: oldRoomID, ConversationID: conversationID, MembershipRevision: 1, Generation: 1, Participants: []application.GroupParticipant{participant}}); err != nil {
+				t.Fatalf("start old room: %v", err)
+			}
+			if err := coordinator.client.HSet(ctx, groupRoomKey(newerRoomID), map[string]any{
+				"conversation_id": conversationID.String(), "membership_revision": "2", "generation": "2",
+				"status": application.GroupRoomRinging, "participants": "[]", "connections": "",
+			}).Err(); err != nil {
+				t.Fatalf("seed new room: %v", err)
+			}
+			for key := range map[string]string{groupRoomConversationKey(conversationID): newerRoomID.String(), groupRoomUserKey(userID): newerRoomID.String()} {
+				if err := coordinator.client.Set(ctx, key, newerRoomID.String(), time.Minute).Err(); err != nil {
+					t.Fatalf("set newer index %s: %v", key, err)
+				}
+			}
+			if cleanup == "leave" {
+				_, err = coordinator.LeaveGroupRoom(ctx, oldRoomID, participant)
+			} else {
+				_, err = coordinator.EndGroupRoom(ctx, oldRoomID, participant)
+			}
+			if err != nil {
+				t.Fatalf("old room %s cleanup: %v", cleanup, err)
+			}
+			for _, key := range []string{groupRoomConversationKey(conversationID), groupRoomUserKey(userID)} {
+				if got, err := coordinator.client.Get(ctx, key).Result(); err != nil || got != newerRoomID.String() {
+					t.Fatalf("index %s = %q, %v; want newer room %s", key, got, err, newerRoomID)
+				}
+			}
+		})
 	}
 }
 
@@ -347,6 +447,9 @@ func TestAbortGroupRoomStartDoesNotRemoveNewerGeneration(t *testing.T) {
 			t.Fatalf("index %s = %q, %v; want newer room %s", key, got, err, newerRoomID)
 		}
 	}
+	if ttl, err := coordinator.client.TTL(ctx, groupRoomUserKey(userID)).Result(); err != nil || ttl <= 0 {
+		t.Fatalf("newer room reservation TTL = %s, err=%v; old-room cleanup must not remove it", ttl, err)
+	}
 	newRoom, err := coordinator.GetGroupRoom(ctx, newerRoomID)
 	if err != nil || newRoom.Generation != 2 || newRoom.Status != application.GroupRoomRinging || newRoom.Participants[0].ConnectionID != "new-socket" {
 		t.Fatalf("new generation changed: room=%#v err=%v", newRoom, err)
@@ -357,6 +460,62 @@ func TestAbortGroupRoomStartDoesNotRemoveNewerGeneration(t *testing.T) {
 	}
 	if err := coordinator.AbortGroupRoomStart(ctx, newerRoomID, 1, newOwner); !errors.Is(err, application.ErrCallNotAllowed) {
 		t.Fatalf("stale generation cleanup = %v, want not allowed", err)
+	}
+}
+
+func TestJoinOlderGroupRoomDoesNotRefreshNewerConversationIndex(t *testing.T) {
+	rawURL := os.Getenv("ZWEI_TEST_REDIS_URL")
+	if rawURL == "" {
+		t.Skip("set ZWEI_TEST_REDIS_URL to run Redis integration tests")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	coordinator, err := NewPresenceCoordinator(rawURL)
+	if err != nil {
+		t.Fatalf("create coordinator: %v", err)
+	}
+	defer coordinator.Close()
+
+	conversationID, starterID, joinerID := uuid.New(), uuid.New(), uuid.New()
+	oldRoomID, newerRoomID := uuid.New(), uuid.New()
+	starter := application.GroupParticipant{UserID: starterID, DeviceID: "starter-device", ConnectionID: "starter-socket"}
+	joiner := application.GroupParticipant{UserID: joinerID, DeviceID: "joiner-device", ConnectionID: "joiner-socket"}
+	conversationKey, starterKey := groupRoomConversationKey(conversationID), groupRoomUserKey(starterID)
+	keys := []string{groupRoomKey(oldRoomID), groupRoomKey(newerRoomID), conversationKey, starterKey, groupRoomUserKey(joinerID), groupRoomExpiryKey}
+	defer coordinator.client.Del(ctx, keys...)
+
+	if _, err := startAdmittedGroupRoom(ctx, coordinator, application.GroupRoom{
+		ID: oldRoomID, ConversationID: conversationID, MembershipRevision: 7, Generation: 1,
+		Participants: []application.GroupParticipant{starter},
+	}); err != nil {
+		t.Fatalf("start older room: %v", err)
+	}
+	longTTL := 3 * time.Hour
+	if err := coordinator.client.Set(ctx, conversationKey, newerRoomID.String(), longTTL).Err(); err != nil {
+		t.Fatalf("set newer conversation index: %v", err)
+	}
+	if err := coordinator.client.Set(ctx, starterKey, newerRoomID.String(), longTTL).Err(); err != nil {
+		t.Fatalf("set newer user reservation: %v", err)
+	}
+	minimumPreservedTTL := longTTL - 5*time.Second
+
+	if _, err := joinAdmittedGroupRoom(ctx, coordinator, oldRoomID, joiner, 7); !errors.Is(err, application.ErrCallBusy) {
+		t.Fatalf("stale room join = %v, want busy conflict", err)
+	}
+	for _, key := range []string{conversationKey, starterKey} {
+		if got, err := coordinator.client.Get(ctx, key).Result(); err != nil || got != newerRoomID.String() {
+			t.Fatalf("index %s = %q, %v; want newer room %s", key, got, err, newerRoomID)
+		}
+		if ttl, err := coordinator.client.TTL(ctx, key).Result(); err != nil || ttl < minimumPreservedTTL {
+			t.Fatalf("newer index %s TTL = %s, err=%v; want at least %s after stale join", key, ttl, err, minimumPreservedTTL)
+		}
+	}
+	room, err := coordinator.GetGroupRoom(ctx, oldRoomID)
+	if err != nil {
+		t.Fatalf("get older room: %v", err)
+	}
+	if room.Status != application.GroupRoomRinging || len(room.Participants) != 1 {
+		t.Fatalf("stale join changed older room: %#v", room)
 	}
 }
 

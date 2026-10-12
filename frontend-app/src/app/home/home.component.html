@@ -9,7 +9,7 @@
             <button type="button" class="call-minimized-summary" [attr.aria-label]="'Return to call with ' + callDisplayName()" (click)="restoreCall()">
                 <span><strong>Call with {{ callDisplayName() }}</strong><small><span class="call-minimized-sharing-label" *ngIf="call.state.screenShareStream || call.state.remoteScreenStream">Sharing screen · </span>{{ callDurationLabel() }}</small></span>
             </button>
-            <button type="button" class="call-minimized-end" aria-label="End ongoing call" (click)="call.end()">End</button>
+            <app-copy-support-reference *ngIf="call.state.supportRef" [reference]="call.state.supportRef"></app-copy-support-reference><button type="button" class="call-minimized-end" aria-label="End ongoing call" (click)="call.end()">End</button>
         </div>
 
         <mat-form-field class="search-field" appearance="outline">
@@ -55,7 +55,7 @@
             <button type="button" class="call-minimized-summary" [attr.aria-label]="'Return to call with ' + callDisplayName()" (click)="restoreCall()">
                 <span><strong>Call with {{ callDisplayName() }}</strong><small><span class="call-minimized-sharing-label" *ngIf="call.state.screenShareStream || call.state.remoteScreenStream">Sharing screen · </span>{{ callDurationLabel() }}</small></span>
             </button>
-            <button type="button" class="call-minimized-end" aria-label="End ongoing call" (click)="call.end()">End</button>
+            <app-copy-support-reference *ngIf="call.state.supportRef" [reference]="call.state.supportRef"></app-copy-support-reference><button type="button" class="call-minimized-end" aria-label="End ongoing call" (click)="call.end()">End</button>
         </div>
         <header class="chat-header" *ngIf="!isCreatingGroup">
             <div class="chat-identity">
@@ -79,16 +79,17 @@
             </div>
         </section>
         <div class="group-call-minimized call-minimized-banner" *ngIf="groupCall?.isOngoing && groupCallMinimized" role="status">
-            <button type="button" class="call-minimized-summary" aria-label="Return to group call" (click)="restoreGroupCall()"><span><strong>Group call in progress</strong><small>{{ groupCall.state.statusLabel }}</small></span></button>
-            <button type="button" class="call-minimized-end" aria-label="End group call for everyone" title="End group call for everyone" matTooltip="End group call for everyone" matTooltipClass="group-call-end-tooltip" matTooltipPosition="below" (click)="onGroupCallSurfaceIntent({type: 'end'})">End group call</button>
+            <button type="button" class="call-minimized-summary" aria-label="Return to group call" (click)="restoreGroupCall()"><span><strong>Group call in progress</strong><small><span *ngIf="groupCall.state.sharing" class="call-minimized-sharing-label">Sharing screen ·</span>{{ groupCall.state.statusLabel }}</small></span></button>
+            <app-copy-support-reference *ngIf="groupCall.state.supportRef" [reference]="groupCall.state.supportRef"></app-copy-support-reference><button type="button" class="call-minimized-end" aria-label="End group call for everyone" title="End group call for everyone" matTooltip="End group call for everyone" matTooltipClass="group-call-end-tooltip" matTooltipPosition="below" (click)="onGroupCallSurfaceIntent({type: 'end'})">End group call</button>
         </div>
         <ng-container *ngIf="groupCall">
         <ng-container *ngIf="groupCall.state$ | async as groupCallState">
-        <app-call-terminal-notice *ngIf="showGroupCallTerminalNotice(groupCallState)" [message]="groupCallState.statusLabel" [error]="!!groupCallState.errorLabel" [group]="true"></app-call-terminal-notice>
+        <app-call-terminal-notice *ngIf="showGroupCallTerminalNotice(groupCallState)" [message]="groupCallState.statusLabel" [error]="!!groupCallState.errorLabel" [group]="true" [supportRef]="groupCallState.supportRef"></app-call-terminal-notice>
         <app-group-call-surface [state]="groupCallState" [minimized]="groupCallMinimized" [ongoing]="groupCall.isOngoing" [profile]="groupCallProfile()" [participants]="groupCallParticipants()" [controls]="groupCallControls()" [actions]="groupCallActions()" [panelClass]="callSelectPanelClass()" (intent)="onGroupCallSurfaceIntent($event)"></app-group-call-surface>
         </ng-container>
         </ng-container>
         <ng-container *ngIf="call.state$ | async as directCallState">
+            <app-call-terminal-notice *ngIf="directCallState.phase === 'ended' || directCallState.phase === 'error'" [message]="directCallState.statusLabel" [error]="!!directCallState.errorLabel" [supportRef]="directCallState.supportRef"></app-call-terminal-notice>
             <app-direct-call-surface
                 *ngIf="directCallState.phase !== 'idle'"
                 class="call-panel"
@@ -138,16 +139,20 @@
             <div class="message-list" *ngIf="messages.length; else emptyMessages">
                 <article class="message-bubble" *ngFor="let message of messages; trackBy: trackMessage" [class.message-own]="message.kind !== 'system' && isOwnMessage(message)" [class.message-system]="message.kind === 'system'" [class.message-pending]="message.pending">
                     <span class="message-sender" *ngIf="message.kind !== 'system'">{{ senderName(message) }}</span>
-                    <p>{{ message.body }}</p><div class="message-meta"><time [attr.datetime]="message.createdAt" [attr.title]="messageDateTimeLabel(message)">{{ messageDateLabel(message) }} · {{ message.createdAt | date:'shortTime' }}</time><span class="message-read" *ngIf="isLatestReadMessage(message)" role="img" [attr.aria-label]="readReceiptLabel(message)"><zwei-icon name="done_all"></zwei-icon></span></div><span class="message-pending-label" *ngIf="message.pending">Sending…</span><span class="message-pending-label" *ngIf="!message.pending && message.uncertain">Delivery uncertain</span>
+                    <p><ng-container *ngFor="let segment of messageSegments(message)"><span [class.message-mention]="segment.mentioned">{{ segment.text }}</span></ng-container></p><div class="message-meta"><time [attr.datetime]="message.createdAt" [attr.title]="messageDateTimeLabel(message)">{{ messageDateLabel(message) }} · {{ message.createdAt | date:'shortTime' }}</time><span class="message-read" *ngIf="isLatestReadMessage(message)" role="img" [attr.aria-label]="readReceiptLabel(message)"><zwei-icon name="done_all"></zwei-icon></span></div><span class="message-pending-label" *ngIf="message.pending">Sending…</span><span class="message-pending-label" *ngIf="!message.pending && message.uncertain">Delivery uncertain</span>
                 </article>
             </div>
             <ng-template #emptyMessages><div class="empty-messages"><zwei-icon name="mark_chat_unread"></zwei-icon><p>No messages yet.</p></div></ng-template>
         </section>
         <form class="composer" *ngIf="!isCreatingGroup && !(selectedConversation?.kind === 'group' && selectedConversation.accessNeedsVerification)" [class.call-surface-hidden]="isCallSurfaceVisible() || (groupCall?.isOngoing && !groupCallMinimized)" [class.composer-disabled]="!selectedConversation" (ngSubmit)="sendMessage($event)" [attr.aria-label]="selectedConversation ? 'Message composer' : 'Message composer disabled until a conversation is selected'">
             <mat-form-field appearance="outline">
-                <textarea matInput [(ngModel)]="draft" name="message" rows="1" maxlength="4096" aria-label="Message" [placeholder]="!selectedConversation ? 'Choose a chat to start messaging' : (socketReady ? 'Write a message…' : 'Connecting…')" [disabled]="!selectedConversation || !socketReady" (input)="onDraftChange()" (keydown.enter)="sendMessage($event)"></textarea>
+                <textarea #messageDraft matInput [(ngModel)]="draft" name="message" rows="1" maxlength="4096" aria-label="Message" [attr.aria-haspopup]="mentionSuggestions.length ? 'listbox' : null" [attr.aria-autocomplete]="mentionSuggestions.length ? 'list' : null" [attr.aria-controls]="mentionSuggestions.length ? 'mention-picker' : null" [attr.aria-expanded]="mentionSuggestions.length > 0" [attr.aria-activedescendant]="mentionSuggestions.length ? mentionOptionID(activeMentionIndex) : null" [placeholder]="!selectedConversation ? 'Choose a chat to start messaging' : (socketReady ? 'Write a message…' : 'Connecting…')" [disabled]="!selectedConversation || !socketReady" (input)="onDraftChange()" (keydown)="handleMentionKeydown($event)" (keydown.enter)="onComposerEnter($event)"></textarea>
             </mat-form-field>
+            <div class="mention-picker" *ngIf="mentionSuggestions.length" id="mention-picker" role="listbox" aria-label="Mention a chat member">
+                <button type="button" role="option" tabindex="-1" *ngFor="let member of mentionSuggestions; let index = index" [id]="mentionOptionID(index)" [attr.aria-selected]="index === activeMentionIndex" [class.active]="index === activeMentionIndex" (mousedown)="$event.preventDefault()" (click)="selectMention(member)">{{ member.displayName }}</button>
+            </div>
             <button mat-fab color="primary" type="submit" aria-label="Send message" [disabled]="!selectedConversation || !draft.trim() || !socketReady"><zwei-icon name="send"></zwei-icon></button>
+            <div class="composer-mentions" *ngIf="draftMentionNames().length" role="status" aria-live="polite" aria-label="Selected mentions"><span *ngFor="let name of draftMentionNames()">{{ name }}</span></div>
         </form>
     </main>
 </section>

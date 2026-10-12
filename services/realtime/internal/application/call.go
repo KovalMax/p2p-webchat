@@ -26,6 +26,7 @@ var (
 // Call is ephemeral shared signaling state. It is deliberately not a persisted domain aggregate.
 type Call struct {
 	ID                   uuid.UUID `json:"call_id"`
+	SupportRef           uuid.UUID `json:"support_ref,omitzero"`
 	ConversationID       uuid.UUID `json:"conversation_id"`
 	CallerID             uuid.UUID `json:"caller_id"`
 	RecipientID          uuid.UUID `json:"recipient_id"`

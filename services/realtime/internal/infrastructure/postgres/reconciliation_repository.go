@@ -53,10 +53,10 @@ func (r *ReconciliationRepository) Reconcile(ctx context.Context, userID, conver
 		)
 		SELECT authorized.high_watermark, authorized.own_read_sequence, authorized.peer_read_sequence, authorized.peer_read_cursors,
 			message.id, message.sender_id, message.client_message_id, message.sequence,
-			message.ciphertext, message.nonce, message.created_at, message.kind
+			message.ciphertext, message.nonce, message.created_at, message.kind, message.mentions_ciphertext, message.mentions_nonce
 		FROM authorized
 		LEFT JOIN LATERAL (
-			SELECT id, sender_id, client_message_id, sequence, ciphertext, nonce, created_at, kind
+			SELECT id, sender_id, client_message_id, sequence, ciphertext, nonce, created_at, kind, mentions_ciphertext, mentions_nonce
 			FROM messages
 			WHERE conversation_id = $2
 				AND sequence > GREATEST($3, authorized.visible_from_sequence - 1)
@@ -79,8 +79,8 @@ func (r *ReconciliationRepository) Reconcile(ctx context.Context, userID, conver
 		var sequence pgtype.Int8
 		var createdAt pgtype.Timestamptz
 		var message messaging.Message
-		var ciphertext, nonce []byte
-		if err := rows.Scan(&highWatermark, &ownReadSequence, &peerReadSequence, &peerReadCursors, &messageID, &senderID, &clientMessageID, &sequence, &ciphertext, &nonce, &createdAt, &kind); err != nil {
+		var ciphertext, nonce, mentionsCiphertext, mentionsNonce []byte
+		if err := rows.Scan(&highWatermark, &ownReadSequence, &peerReadSequence, &peerReadCursors, &messageID, &senderID, &clientMessageID, &sequence, &ciphertext, &nonce, &createdAt, &kind, &mentionsCiphertext, &mentionsNonce); err != nil {
 			return application.Reconciliation{}, err
 		}
 		authorized = true
@@ -105,6 +105,12 @@ func (r *ReconciliationRepository) Reconcile(ctx context.Context, userID, conver
 		message.Body, err = sharedmessage.Decrypt(r.key, ciphertext, nonce)
 		if err != nil {
 			return application.Reconciliation{}, errors.New("could not decrypt reconciled message")
+		}
+		if len(mentionsCiphertext) > 0 {
+			mentionsJSON, err := sharedmessage.Decrypt(r.key, mentionsCiphertext, mentionsNonce)
+			if err != nil || json.Unmarshal([]byte(mentionsJSON), &message.Mentions) != nil {
+				return application.Reconciliation{}, errors.New("could not decode reconciled message mentions")
+			}
 		}
 		result.Messages = append(result.Messages, message)
 	}
