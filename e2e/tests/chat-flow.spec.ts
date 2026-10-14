@@ -1,4 +1,4 @@
-import { expect, Locator, Page, test } from '@playwright/test';
+import { errors, expect, Locator, Page, test } from '@playwright/test';
 
 const password = 'Password123!';
 const adminBase = process.env.ADMIN_BASE_URL ?? 'https://kyc.localhost';
@@ -11,18 +11,27 @@ function uniqueEmail(name: string): string {
 
 type BrowserNotificationRecord = {title: string; body?: string; tag?: string};
 type RenderedContrast = {foreground: string; background: string; ratio: number};
-type RenderedTextContrast = {foreground: string; background: string; ratio: number; opacity: number; disabled: boolean};
+type RenderedTextContrast = {foreground: string; background: string; ratio: number; opacity: number; disabled: boolean; visible: boolean};
 
 async function waitForReadableTooltip(tooltip: Locator): Promise<RenderedTextContrast> {
   const deadline = Date.now() + 5_000;
   let contrast: RenderedTextContrast | undefined;
+  let lastTimeout: errors.TimeoutError | undefined;
   while (Date.now() < deadline) {
     const remaining = Math.max(1, deadline - Date.now());
-    contrast = await measureRenderedTextContrastAtSurface(tooltip, undefined, remaining);
-    if (contrast.ratio >= 4.5) return contrast;
-    await tooltip.evaluate(element => new Promise<void>(resolve => requestAnimationFrame(() => resolve())), undefined, {timeout: Math.max(1, deadline - Date.now())});
+    try {
+      await tooltip.waitFor({state: 'visible', timeout: remaining});
+      contrast = await measureRenderedTextContrastAtSurface(tooltip, undefined, Math.max(1, deadline - Date.now()));
+      // Visibility is measured against the exact node whose styles produced this
+      // contrast sample; resolving the locator again could target a replacement overlay.
+      if (contrast.visible && contrast.ratio >= 4.5) return contrast;
+      await tooltip.page().waitForTimeout(Math.min(50, Math.max(1, deadline - Date.now())));
+    } catch (error) {
+      if (!(error instanceof errors.TimeoutError)) throw error;
+      lastTimeout = error;
+    }
   }
-  throw new Error(`Tooltip did not reach 4.5:1 rendered contrast: ${JSON.stringify(contrast)}`);
+  throw new Error(`Tooltip did not reach 4.5:1 rendered contrast within 5 seconds: ${JSON.stringify({contrast, lastTimeout: lastTimeout?.message})}`);
 }
 
 async function measureRenderedTextContrast(element: Locator): Promise<RenderedContrast> {
@@ -123,12 +132,19 @@ async function measureRenderedTextContrastAtSurface(element: Locator, pseudoElem
     const renderedForeground = composite([foreground[0], foreground[1], foreground[2], foregroundOpacity], background);
     const foregroundLuminance = luminance(renderedForeground);
     const backgroundLuminance = luminance(background);
+    let visible = node.isConnected && node.getClientRects().length > 0;
+    for (const layer of ancestry) {
+      const style = getComputedStyle(layer);
+      const opacity = Number.parseFloat(style.opacity);
+      if (style.display === 'none' || style.visibility !== 'visible' || (Number.isFinite(opacity) && opacity <= 0)) visible = false;
+    }
     return {
       foreground: foregroundColor,
       background: `rgba(${background[0]}, ${background[1]}, ${background[2]}, ${background[3]})`,
       ratio: (Math.max(foregroundLuminance, backgroundLuminance) + .05) / (Math.min(foregroundLuminance, backgroundLuminance) + .05),
       opacity: effectiveOpacity,
       disabled: 'disabled' in node && Boolean((node as HTMLInputElement).disabled),
+      visible,
     };
   }, pseudoElement, {timeout});
 }
