@@ -3546,7 +3546,7 @@ test('register, create conversation, and deliver a message', async ({ browser },
               const controls = Array.from(banner.querySelectorAll<HTMLElement>('button')).map(control => control.getBoundingClientRect());
               const status = Array.from(banner.querySelectorAll<HTMLElement>('.call-minimized-summary strong, .call-minimized-summary small')).map(element => ({text: element.innerText, scrollWidth: element.scrollWidth, clientWidth: element.clientWidth, scrollHeight: element.scrollHeight, clientHeight: element.clientHeight, rect: element.getBoundingClientRect().toJSON()}));
               const copyButton = banner.querySelector<HTMLElement>('app-copy-support-reference button');
-              const header = banner.parentElement?.querySelector<HTMLElement>('.chat-header')?.getBoundingClientRect();
+              const header = banner.closest('.chat-panel')?.querySelector<HTMLElement>('.chat-header')?.getBoundingClientRect();
               return {left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom, width: rect.width, scrollWidth: banner.scrollWidth, compactCopy: !!banner.querySelector('.support-reference-compact'), copyLabel: copyButton?.textContent?.trim(), copyWidth: copyButton?.getBoundingClientRect().width, copyHeight: copyButton?.getBoundingClientRect().height, copyRadius: copyButton && getComputedStyle(copyButton).borderRadius, controls: controls.map(control => ({left: control.left, right: control.right, top: control.top, bottom: control.bottom, width: control.width, height: control.height})), status, headerBottom: header?.bottom};
             });
             expect(layout.scrollWidth, `${theme}/${viewport.width}px minimized support action overflows: ${JSON.stringify(layout)}`).toBeLessThanOrEqual(layout.width + 1);
@@ -3556,7 +3556,8 @@ test('register, create conversation, and deliver a message', async ({ browser },
             expect(layout.copyHeight).toBe(44);
             expect(layout.copyRadius).toBe('50%');
             expect(layout.bottom - layout.top, `${theme}/${viewport.width}px direct minimized banner should use the shared compact presentation: ${JSON.stringify(layout)}`).toBeLessThanOrEqual(80);
-            expect(layout.top, `${theme}/${viewport.width}px banner must follow the selected chat header`).toBeGreaterThanOrEqual((layout.headerBottom ?? 0) - 1);
+            expect(layout.headerBottom, `${theme}/${viewport.width}px direct minimized banner should measure its selected chat header`).toBeDefined();
+            expect(layout.top - (layout.headerBottom ?? layout.top), `${theme}/${viewport.width}px direct minimized banner should leave at least 8px below the selected chat header: ${JSON.stringify(layout)}`).toBeGreaterThanOrEqual(8);
             expect(layout.status.map(item => item.text).join(' ')).toContain('Call with Bob');
             expect(layout.status.map(item => item.text).join(' ')).toContain('Sharing screen');
             expect(layout.status.map(item => item.text).join(' ')).toMatch(/00:[0-5]\d/);
@@ -6816,8 +6817,9 @@ test('runs a deterministic three-member group media lifecycle', async ({browser}
            const end = element.querySelector<HTMLElement>('.call-minimized-end')?.getBoundingClientRect();
            const copy = element.querySelector<HTMLElement>('app-copy-support-reference button')?.getBoundingClientRect();
            const status = Array.from(element.querySelectorAll<HTMLElement>('.call-minimized-summary strong, .call-minimized-summary small')).map(node => ({text: node.innerText, scrollWidth: node.scrollWidth, clientWidth: node.clientWidth, scrollHeight: node.scrollHeight, clientHeight: node.clientHeight, rect: node.getBoundingClientRect().toJSON()}));
-            const copyButton = element.querySelector<HTMLElement>('app-copy-support-reference button');
-            return {rect: {left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom}, restore: restore && {left: restore.left, right: restore.right, top: restore.top, bottom: restore.bottom}, end: end && {left: end.left, right: end.right, top: end.top, bottom: end.bottom}, copy: copy && {left: copy.left, right: copy.right, top: copy.top, bottom: copy.bottom, width: copy.width, height: copy.height}, copyRadius: copyButton && getComputedStyle(copyButton).borderRadius, compactCopy: !!element.querySelector('.support-reference-compact'), status, scrollWidth: element.scrollWidth, clientWidth: element.clientWidth, documentScrollWidth: document.documentElement.scrollWidth, documentClientWidth: document.documentElement.clientWidth, viewportHeight: window.innerHeight};
+             const copyButton = element.querySelector<HTMLElement>('app-copy-support-reference button');
+             const header = element.closest('.chat-panel')?.querySelector<HTMLElement>('.chat-header')?.getBoundingClientRect();
+             return {rect: {left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom}, headerBottom: header?.bottom, restore: restore && {left: restore.left, right: restore.right, top: restore.top, bottom: restore.bottom}, end: end && {left: end.left, right: end.right, top: end.top, bottom: end.bottom}, copy: copy && {left: copy.left, right: copy.right, top: copy.top, bottom: copy.bottom, width: copy.width, height: copy.height}, copyRadius: copyButton && getComputedStyle(copyButton).borderRadius, compactCopy: !!element.querySelector('.support-reference-compact'), status, scrollWidth: element.scrollWidth, clientWidth: element.clientWidth, documentScrollWidth: document.documentElement.scrollWidth, documentClientWidth: document.documentElement.clientWidth, viewportHeight: window.innerHeight};
          });
         expect(bounds.documentScrollWidth).toBeLessThanOrEqual(bounds.documentClientWidth + 1);
          expect(bounds.scrollWidth).toBeLessThanOrEqual(bounds.clientWidth + 1);
@@ -6847,6 +6849,8 @@ test('runs a deterministic three-member group media lifecycle', async ({browser}
         expect(bounds.rect.left).toBeGreaterThanOrEqual(0);
         expect(bounds.rect.right).toBeLessThanOrEqual(viewport.width);
         expect(bounds.rect.top).toBeGreaterThanOrEqual(0);
+        expect(bounds.headerBottom, `${theme}/${viewport.width}px group minimized banner should measure its selected chat header`).toBeDefined();
+        expect(bounds.rect.top - (bounds.headerBottom ?? bounds.rect.top), `${theme}/${viewport.width}px group minimized banner should leave at least 8px below the selected chat header: ${JSON.stringify(bounds)}`).toBeGreaterThanOrEqual(8);
         expect(bounds.rect.bottom).toBeLessThanOrEqual(bounds.viewportHeight);
         for (const control of [bounds.restore, bounds.copy, bounds.end]) {
           expect(control).toBeDefined();
