@@ -4375,6 +4375,8 @@ test('shares read and unread state across a user\'s browser devices', async ({ b
   await bob.getByPlaceholder('Write a message…').fill(message);
   await bob.getByRole('button', {name: 'Send message'}).click();
   await expect(alice.getByText(message)).toBeVisible({timeout: 5_000});
+  const bobMessage = bob.locator('.message-bubble').filter({hasText: message});
+  await expect(bobMessage.locator('.message-read[aria-label="Read by peer"]')).toBeVisible({timeout: 10_000});
   await aliceSecond.reload();
   await expect(aliceSecond.locator('.person-option').filter({hasText: 'Bob'})).toBeVisible();
   await expect(aliceSecond.locator('.person-option').filter({hasText: 'Bob'}).locator('.unread-count')).not.toBeVisible({timeout: 5_000});
