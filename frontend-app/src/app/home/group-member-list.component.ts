@@ -20,6 +20,7 @@ export class GroupMemberListComponent implements OnChanges {
     private activeTooltip?: MatTooltip;
     private queuedShowGeneration = 0;
     private queuedShowFrame?: number;
+    private readonly queuedHideFrames = new Set<number>();
 
     public constructor(
         private readonly changeDetector: ChangeDetectorRef,
@@ -38,6 +39,8 @@ export class GroupMemberListComponent implements OnChanges {
         }, {capture: true, passive: true}));
         destroyRef.onDestroy(() => {
             this.cancelQueuedShow();
+            this.queuedHideFrames.forEach(frame => cancelAnimationFrame(frame));
+            this.queuedHideFrames.clear();
             this.focusedTooltip = undefined;
             this.hoveredTooltip = undefined;
             this.activeTooltip = undefined;
@@ -58,11 +61,18 @@ export class GroupMemberListComponent implements OnChanges {
     public isTooltipDisabled(tooltip: MatTooltip): boolean { return this.suppressHoverAfterScroll && this.focusedTooltip !== tooltip; }
     public showTooltipOnFocus(tooltip: MatTooltip): void {
         this.suppressHoverAfterScroll = false;
+        const previousFocusedTooltip = this.focusedTooltip;
         this.focusedTooltip = tooltip;
-        this.activateTooltip(tooltip);
+        if (this.activeTooltip && this.activeTooltip !== tooltip && this.activeTooltip !== previousFocusedTooltip) {
+            this.scheduleTooltipHide(this.activeTooltip);
+        }
+        this.activeTooltip = tooltip;
         tooltip.disabled = false;
         this.changeDetector.markForCheck();
-        this.scheduleTooltipShow(tooltip, () => this.focusedTooltip === tooltip && this.activeTooltip === tooltip && !this.suppressHoverAfterScroll);
+        // Material may have observed focus while this tooltip was disabled and
+        // discard its native focus show request. Retry after the focus event has
+        // completed, while the ownership guard prevents stale focus reopening.
+        this.scheduleTooltipShow(tooltip, () => this.activeTooltip === tooltip && this.focusedTooltip === tooltip);
     }
     public showTooltipOnHover(tooltip: MatTooltip): void {
         // Scrolling can move a different button underneath a stationary pointer
@@ -88,17 +98,14 @@ export class GroupMemberListComponent implements OnChanges {
             this.changeDetector.markForCheck();
             this.scheduleTooltipShow(remainingTooltip, () => this.activeTooltip === remainingTooltip &&
                 (this.focusedTooltip === remainingTooltip || this.hoveredTooltip === remainingTooltip) && !this.suppressHoverAfterScroll);
-            if (tooltip !== remainingTooltip) tooltip.hide(0);
         } else {
             if (this.activeTooltip === tooltip) this.activeTooltip = undefined;
             this.cancelQueuedShow();
-            tooltip.hide(0);
         }
         this.changeDetector.markForCheck();
     }
     public hideTooltipOnLeave(tooltip: MatTooltip): void {
         if (this.hoveredTooltip === tooltip) this.hoveredTooltip = undefined;
-        tooltip.hide(0);
         const remainingTooltip = this.focusedTooltip ?? (!this.suppressHoverAfterScroll ? this.hoveredTooltip : undefined);
         if (remainingTooltip) {
             this.activeTooltip = remainingTooltip;
@@ -106,10 +113,15 @@ export class GroupMemberListComponent implements OnChanges {
             this.changeDetector.markForCheck();
             this.scheduleTooltipShow(remainingTooltip, () => this.activeTooltip === remainingTooltip &&
                 (this.focusedTooltip === remainingTooltip || this.hoveredTooltip === remainingTooltip) && !this.suppressHoverAfterScroll);
+            // Pointer leave ends hover intent, but must not hide a tooltip still
+            // owned by keyboard focus. Calling hide() first can race Material's
+            // hide animation against the queued focus-owned show.
+            if (tooltip !== remainingTooltip) this.scheduleTooltipHide(tooltip);
             return;
         }
         if (this.activeTooltip === tooltip) this.activeTooltip = undefined;
         this.cancelQueuedShow();
+        this.scheduleTooltipHide(tooltip);
     }
     public restoreHoverOnPointerMove(tooltip: MatTooltip): void {
         if (!this.suppressHoverAfterScroll) return;
@@ -125,15 +137,15 @@ export class GroupMemberListComponent implements OnChanges {
         this.focusedTooltip = undefined;
         this.hoveredTooltip = undefined;
         this.cancelQueuedShow();
-        const activeTooltip = this.activeTooltip;
+        this.queuedHideFrames.forEach(frame => cancelAnimationFrame(frame));
+        this.queuedHideFrames.clear();
         this.activeTooltip = undefined;
-        if (activeTooltip) {
-            activeTooltip.disabled = true;
-            activeTooltip.hide(0);
-        }
         this.tooltips?.forEach(tooltip => {
+            // Setting disabled already asks MatTooltip to hide. Calling hide()
+            // separately (and again for activeTooltip) restarts its animation;
+            // a keyboard focus arriving during that transition can then be
+            // swallowed by Material's native FocusMonitor show request.
             tooltip.disabled = true;
-            tooltip.hide(0);
         });
         this.changeDetector.markForCheck();
     }
@@ -144,7 +156,7 @@ export class GroupMemberListComponent implements OnChanges {
     }
 
     private activateTooltip(tooltip: MatTooltip): void {
-        if (this.activeTooltip && this.activeTooltip !== tooltip) this.activeTooltip.hide(0);
+        if (this.activeTooltip && this.activeTooltip !== tooltip) this.scheduleTooltipHide(this.activeTooltip);
         this.activeTooltip = tooltip;
     }
 
@@ -155,6 +167,14 @@ export class GroupMemberListComponent implements OnChanges {
             this.queuedShowFrame = undefined;
             if (generation === this.queuedShowGeneration && isCurrentIntent() && this.tooltips?.toArray().includes(tooltip)) tooltip.show(0);
         });
+    }
+
+    private scheduleTooltipHide(tooltip: MatTooltip): void {
+        const frame = requestAnimationFrame(() => {
+            this.queuedHideFrames.delete(frame);
+            if (this.activeTooltip !== tooltip && this.tooltips?.toArray().includes(tooltip)) tooltip.hide(0);
+        });
+        this.queuedHideFrames.add(frame);
     }
 
     private cancelQueuedShow(): void {

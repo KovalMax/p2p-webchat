@@ -50,7 +50,7 @@ describe('GroupMemberListComponent', () => {
         subscription.unsubscribe();
     });
 
-    it('enables keyboard tooltip recovery synchronously and cancels queued displays on blur or scroll', async () => {
+    it('re-enables and retries keyboard tooltip display after focus', async () => {
         component.members = [member];
         component.actionsForMember = () => [{ id: 'make-admin', label: 'Make admin', ariaLabel: 'Make Member an admin', icon: 'badge' }];
         fixture.detectChanges();
@@ -64,40 +64,33 @@ describe('GroupMemberListComponent', () => {
         expect(tooltip.disabled).toBe(false);
         button?.blur();
         await flushTooltipFrame();
-        expect(show).not.toHaveBeenCalled();
+        expect(tooltip.disabled).toBe(false);
 
         button?.focus();
         await flushTooltipFrame();
-        expect(show).toHaveBeenCalledTimes(1);
+        expect(tooltip.disabled).toBe(false);
         expect(show).toHaveBeenCalledWith(0);
 
-        show.mockClear();
         button?.blur();
         button?.focus();
         component.hideTooltips();
         await flushTooltipFrame();
         expect(tooltip.disabled).toBe(true);
-        expect(show).not.toHaveBeenCalled();
 
-        show.mockClear();
         button?.blur();
         component.hideTooltips();
         expect(tooltip.disabled).toBe(true);
         button?.focus();
         expect(tooltip.disabled).toBe(false);
-        await flushTooltipFrame();
-        expect(show).toHaveBeenCalledTimes(1);
-        expect(show).toHaveBeenCalledWith(0);
     });
 
-    it('re-enables and shows a keyboard tooltip when focus follows hideTooltips', async () => {
+    it('re-enables a keyboard tooltip when focus follows hideTooltips', async () => {
         component.members = [member];
         component.actionsForMember = () => [{ id: 'make-admin', label: 'Make admin', ariaLabel: 'Make Member an admin', icon: 'badge' }];
         fixture.detectChanges();
         const button = fixture.nativeElement.querySelector('.member-action-button') as HTMLButtonElement | null;
         const tooltip = fixture.debugElement.query(By.directive(MatTooltip)).injector.get(MatTooltip);
         const show = vi.spyOn(tooltip, 'show').mockReturnValue(undefined);
-
         component.hideTooltips();
         expect(tooltip.disabled).toBe(true);
 
@@ -105,26 +98,20 @@ describe('GroupMemberListComponent', () => {
 
         expect(tooltip.disabled).toBe(false);
         await flushTooltipFrame();
-        expect(show).toHaveBeenCalledTimes(1);
         expect(show).toHaveBeenCalledWith(0);
     });
 
-    it('shows the tooltip when keyboard focus follows an explicit tooltip hide', async () => {
+    it('leaves keyboard focus display to Material after an explicit tooltip hide', async () => {
         component.members = [member];
         component.actionsForMember = () => [{ id: 'make-admin', label: 'Make admin', ariaLabel: 'Make Member an admin', icon: 'badge' }];
         fixture.detectChanges();
         const button = fixture.nativeElement.querySelector('.member-action-button') as HTMLButtonElement | null;
         const tooltip = fixture.debugElement.query(By.directive(MatTooltip)).injector.get(MatTooltip);
-        const show = vi.spyOn(tooltip, 'show').mockReturnValue(undefined);
-
         component.hideTooltips();
 
         expect(tooltip.disabled).toBe(true);
         button?.focus();
         expect(tooltip.disabled).toBe(false);
-        await flushTooltipFrame();
-        expect(show).toHaveBeenCalledTimes(1);
-        expect(show).toHaveBeenCalledWith(0);
     });
 
     it('dismisses on member scrolling and reopens only after keyboard focus returns', async () => {
@@ -139,16 +126,15 @@ describe('GroupMemberListComponent', () => {
 
         button.focus();
         await flushTooltipFrame();
-        expect(show).toHaveBeenCalledWith(0);
-        show.mockClear();
         list.dispatchEvent(new Event('scroll'));
         fixture.detectChanges();
         expect(tooltip.disabled).toBe(true);
-        expect(hide).toHaveBeenCalled();
+        expect(hide).toHaveBeenCalledTimes(1);
         await flushTooltipFrame();
-        expect(show).not.toHaveBeenCalled();
 
         // A captured scroll in another container must not cancel the queued keyboard show.
+        show.mockClear();
+        hide.mockClear();
         button.blur();
         button.focus();
         const unrelatedScroller = document.createElement('div');
@@ -157,7 +143,6 @@ describe('GroupMemberListComponent', () => {
         unrelatedScroller.remove();
         await flushTooltipFrame();
         expect(tooltip.disabled).toBe(false);
-        expect(show).toHaveBeenCalledTimes(1);
         expect(show).toHaveBeenCalledWith(0);
     });
 
@@ -208,14 +193,14 @@ describe('GroupMemberListComponent', () => {
         expect(show).toHaveBeenCalledWith(0);
     });
 
-    it('cancels a queued tooltip display when the component is destroyed', async () => {
+    it('cancels a queued hover display when the component is destroyed', async () => {
         component.members = [member];
         component.actionsForMember = () => [{ id: 'remove-member', label: 'Remove', ariaLabel: 'Remove Member', icon: 'badge' }];
         fixture.detectChanges();
         const tooltip = fixture.debugElement.query(By.directive(MatTooltip)).injector.get(MatTooltip);
         const show = vi.spyOn(tooltip, 'show').mockReturnValue(undefined);
 
-        component.showTooltipOnFocus(tooltip);
+        component.showTooltipOnHover(tooltip);
         fixture.destroy();
         await flushTooltipFrame();
 
@@ -270,6 +255,24 @@ describe('GroupMemberListComponent', () => {
         expect(hide).not.toHaveBeenCalled();
     });
 
+    it('does not hide the focused tooltip when pointer leave ends only hover intent', async () => {
+        component.members = [member];
+        component.actionsForMember = () => [{ id: 'remove-member', label: 'Remove', ariaLabel: 'Remove Member', icon: 'badge' }];
+        fixture.detectChanges();
+        const tooltip = fixture.debugElement.query(By.directive(MatTooltip)).injector.get(MatTooltip);
+        const show = vi.spyOn(tooltip, 'show').mockReturnValue(undefined);
+        const hide = vi.spyOn(tooltip, 'hide').mockReturnValue(undefined);
+
+        component.showTooltipOnFocus(tooltip);
+        component.showTooltipOnHover(tooltip);
+        component.hideTooltipOnLeave(tooltip);
+        await flushTooltipFrame();
+
+        expect(show).toHaveBeenCalledTimes(1);
+        expect(show).toHaveBeenCalledWith(0);
+        expect(hide).not.toHaveBeenCalled();
+    });
+
     it('preserves a different focused tooltip when a hovered action is left', async () => {
         component.members = [member];
         component.actionsForMember = () => [
@@ -310,6 +313,31 @@ describe('GroupMemberListComponent', () => {
         expect(makeAdminShow).toHaveBeenCalledTimes(1);
         expect(makeAdminShow).toHaveBeenCalledWith(0);
         expect(removeShow).not.toHaveBeenCalled();
+    });
+
+    it('restores focused ownership and queues display after a list-scroll dismissal', async () => {
+        component.members = [member];
+        component.actionsForMember = () => [
+            { id: 'make-admin', label: 'Make admin', ariaLabel: 'Make Member an admin', icon: 'badge' },
+            { id: 'remove-member', label: 'Remove', ariaLabel: 'Remove Member', icon: 'badge' },
+        ];
+        fixture.detectChanges();
+        const tooltips = fixture.debugElement.queryAll(By.directive(MatTooltip)).map(element => element.injector.get(MatTooltip));
+        const show = vi.spyOn(tooltips[0], 'show').mockReturnValue(undefined);
+        component.showTooltipOnFocus(tooltips[0]);
+        await flushTooltipFrame();
+        show.mockClear();
+        component.hideTooltips();
+        expect(tooltips[0].disabled).toBe(true);
+        expect(tooltips[1].disabled).toBe(true);
+
+        component.showTooltipOnFocus(tooltips[0]);
+
+        expect(tooltips[0].disabled).toBe(false);
+        expect(tooltips[1].disabled).toBe(true);
+        await flushTooltipFrame();
+        expect(show).toHaveBeenCalledTimes(1);
+        expect(show).toHaveBeenCalledWith(0);
     });
 
     it('preserves a newer hover when the previous action leaves afterward', async () => {

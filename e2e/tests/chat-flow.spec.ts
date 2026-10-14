@@ -24,7 +24,7 @@ async function waitForReadableTooltip(tooltip: Locator): Promise<RenderedTextCon
       contrast = await measureRenderedTextContrastAtSurface(tooltip, undefined, Math.max(1, deadline - Date.now()));
       // Visibility is measured against the exact node whose styles produced this
       // contrast sample; resolving the locator again could target a replacement overlay.
-      if (contrast.visible && contrast.ratio >= 4.5) return contrast;
+      if (contrast.visible && contrast.opacity >= .95 && contrast.ratio >= 4.5) return contrast;
       await tooltip.page().waitForTimeout(Math.min(50, Math.max(1, deadline - Date.now())));
     } catch (error) {
       if (!(error instanceof errors.TimeoutError)) throw error;
@@ -786,6 +786,8 @@ async function assertGroupSettingsOverlay(page: Page, testInfo: import('@playwri
     }));
     const contrast = await waitForReadableTooltip(tooltip);
     expect(contrast.ratio, `${theme} ${viewport.width}px ${action.label} rendered contrast: ${JSON.stringify(contrast)}`).toBeGreaterThanOrEqual(4.5);
+    expect(contrast.opacity, `${theme} ${viewport.width}px ${action.label} tooltip should finish its show transition: ${JSON.stringify(contrast)}`).toBeGreaterThanOrEqual(.95);
+    await expect(page.locator('.mat-mdc-tooltip-panel .mat-mdc-tooltip-surface:visible'), `${theme} ${viewport.width}px should show only the focused or hovered action tooltip`).toHaveCount(1);
     const {tooltipRect, managerRect, tooltipClasses, panelClasses, tooltipStyle} = await page.evaluate(label => {
       const toRect = (element: Element | null) => {
         const rect = element?.getBoundingClientRect();
