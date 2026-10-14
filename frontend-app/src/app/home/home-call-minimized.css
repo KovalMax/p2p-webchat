@@ -3,6 +3,7 @@ app-home { --chat-header-row-min-height: 72px; --chat-header-gutter-x: 26px; }
 app-home .call-panel-full { overflow: hidden; }
 app-home .call-panel-minimized { display: none !important; }
 app-home .call-minimized-banner { position: relative; display: grid; min-height: 66px; box-sizing: border-box; grid-template-columns: minmax(0, 1fr) 44px auto; grid-template-rows: minmax(44px, auto); align-items: center; gap: 4px 6px; margin: 0 0 12px; padding: 4px 6px; border: 1px solid var(--chat-line-strong); border-radius: 14px; background: var(--chat-surface-control); color: var(--chat-text); }
+app-home .chat-panel > app-minimized-call-banner { margin-top: 8px; }
 app-home .call-minimized-sharing-active { border-color: var(--zwei-success); box-shadow: inset 3px 0 0 var(--zwei-success); }
 app-home .call-minimized-sharing-label { color: var(--chat-call-sharing-text); font-weight: 700; }
 app-home .call-minimized-summary, app-home .call-minimized-end { border: 0; border-radius: 9px; background: transparent; color: inherit; cursor: pointer; }
