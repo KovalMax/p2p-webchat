@@ -1,8 +1,13 @@
 import {DOCUMENT} from '@angular/common';
 import {ChangeDetectionStrategy, ChangeDetectorRef, Component, DestroyRef, ElementRef, EventEmitter, HostListener, Inject, Input, OnChanges, Output, QueryList, Renderer2, SimpleChanges, ViewChild, ViewChildren} from '@angular/core';
 import {MatTooltip} from '@angular/material/tooltip';
+import {Subscription} from 'rxjs';
 import {GroupMember} from './conversation.model';
 import {GroupMemberAction, GroupMemberActionID, GroupMemberActionIntent} from './group-member-actions.model';
+
+// Material's hide transition is 75ms; keep recovery beyond that transition and
+// bounded even when a background tab delays animation frames or disables motion.
+const SCROLL_TOOLTIP_HIDE_SETTLE_MS = 250;
 
 @Component({
     selector: 'app-group-member-list',
@@ -13,7 +18,13 @@ import {GroupMemberAction, GroupMemberActionID, GroupMemberActionIntent} from '.
 })
 export class GroupMemberListComponent implements OnChanges {
     @ViewChild('memberScroller') private memberScroller?: ElementRef<HTMLUListElement>;
-    @ViewChildren(MatTooltip) private tooltips?: QueryList<MatTooltip>;
+    @ViewChildren(MatTooltip) private set tooltips(query: QueryList<MatTooltip>) {
+        this.tooltipList = query;
+        this.tooltipChangesSubscription?.unsubscribe();
+        this.tooltipChangesSubscription = query.changes.subscribe(() => this.pruneRemovedTooltipIntents());
+    }
+    private tooltipList?: QueryList<MatTooltip>;
+    private tooltipChangesSubscription?: Subscription;
     private suppressHoverAfterScroll = false;
     private focusedTooltip?: MatTooltip;
     private hoveredTooltip?: MatTooltip;
@@ -21,6 +32,11 @@ export class GroupMemberListComponent implements OnChanges {
     private queuedShowGeneration = 0;
     private queuedShowFrame?: number;
     private readonly queuedHideFrames = new Set<number>();
+    private queuedHideGeneration = 0;
+    private tooltipHideInProgressUntil?: number;
+    private awaitingScrollHideSettle = false;
+    private pendingTooltipShow?: {tooltip: MatTooltip; isCurrentIntent: () => boolean};
+    private scrollHideSettleTimer?: ReturnType<typeof setTimeout>;
 
     public constructor(
         private readonly changeDetector: ChangeDetectorRef,
@@ -39,8 +55,10 @@ export class GroupMemberListComponent implements OnChanges {
         }, {capture: true, passive: true}));
         destroyRef.onDestroy(() => {
             this.cancelQueuedShow();
-            this.queuedHideFrames.forEach(frame => cancelAnimationFrame(frame));
-            this.queuedHideFrames.clear();
+            this.cancelQueuedTooltipHides();
+            if (this.scrollHideSettleTimer !== undefined) clearTimeout(this.scrollHideSettleTimer);
+            this.tooltipChangesSubscription?.unsubscribe();
+            this.pendingTooltipShow = undefined;
             this.focusedTooltip = undefined;
             this.hoveredTooltip = undefined;
             this.activeTooltip = undefined;
@@ -58,7 +76,10 @@ export class GroupMemberListComponent implements OnChanges {
 
     public trackMember(_index: number, member: GroupMember): string { return member.userId; }
     public trackAction(_index: number, action: GroupMemberAction): GroupMemberActionID { return action.id; }
-    public isTooltipDisabled(tooltip: MatTooltip): boolean { return this.suppressHoverAfterScroll && this.focusedTooltip !== tooltip; }
+    public isTooltipDisabled(tooltip: MatTooltip): boolean {
+        return this.awaitingScrollHideSettle ||
+            (this.suppressHoverAfterScroll && this.focusedTooltip !== tooltip);
+    }
     public showTooltipOnFocus(tooltip: MatTooltip): void {
         this.suppressHoverAfterScroll = false;
         const previousFocusedTooltip = this.focusedTooltip;
@@ -67,7 +88,7 @@ export class GroupMemberListComponent implements OnChanges {
             this.scheduleTooltipHide(this.activeTooltip);
         }
         this.activeTooltip = tooltip;
-        tooltip.disabled = false;
+        tooltip.disabled = this.awaitingScrollHideSettle;
         this.changeDetector.markForCheck();
         // Material may have observed focus while this tooltip was disabled and
         // discard its native focus show request. Retry after the focus event has
@@ -85,7 +106,7 @@ export class GroupMemberListComponent implements OnChanges {
         // re-entry must re-enable this instance before Material handles hover;
         // relying on the bound input's next change-detection pass can lose the
         // mouseenter that should reopen the overlay.
-        tooltip.disabled = false;
+        tooltip.disabled = this.awaitingScrollHideSettle;
         this.changeDetector.markForCheck();
         this.scheduleTooltipShow(tooltip, () => this.activeTooltip === tooltip && this.hoveredTooltip === tooltip && !this.suppressHoverAfterScroll);
     }
@@ -94,13 +115,14 @@ export class GroupMemberListComponent implements OnChanges {
         const remainingTooltip = this.focusedTooltip ?? (!this.suppressHoverAfterScroll ? this.hoveredTooltip : undefined);
         if (remainingTooltip) {
             this.activeTooltip = remainingTooltip;
-            remainingTooltip.disabled = false;
+            remainingTooltip.disabled = this.awaitingScrollHideSettle;
             this.changeDetector.markForCheck();
             this.scheduleTooltipShow(remainingTooltip, () => this.activeTooltip === remainingTooltip &&
                 (this.focusedTooltip === remainingTooltip || this.hoveredTooltip === remainingTooltip) && !this.suppressHoverAfterScroll);
         } else {
             if (this.activeTooltip === tooltip) this.activeTooltip = undefined;
             this.cancelQueuedShow();
+            this.tooltipHideInProgressUntil = Date.now() + SCROLL_TOOLTIP_HIDE_SETTLE_MS;
         }
         this.changeDetector.markForCheck();
     }
@@ -109,7 +131,7 @@ export class GroupMemberListComponent implements OnChanges {
         const remainingTooltip = this.focusedTooltip ?? (!this.suppressHoverAfterScroll ? this.hoveredTooltip : undefined);
         if (remainingTooltip) {
             this.activeTooltip = remainingTooltip;
-            remainingTooltip.disabled = false;
+            remainingTooltip.disabled = this.awaitingScrollHideSettle;
             this.changeDetector.markForCheck();
             this.scheduleTooltipShow(remainingTooltip, () => this.activeTooltip === remainingTooltip &&
                 (this.focusedTooltip === remainingTooltip || this.hoveredTooltip === remainingTooltip) && !this.suppressHoverAfterScroll);
@@ -128,23 +150,28 @@ export class GroupMemberListComponent implements OnChanges {
         this.suppressHoverAfterScroll = false;
         this.hoveredTooltip = tooltip;
         this.activateTooltip(tooltip);
-        tooltip.disabled = false;
+        tooltip.disabled = this.awaitingScrollHideSettle;
         this.changeDetector.markForCheck();
         this.scheduleTooltipShow(tooltip, () => this.activeTooltip === tooltip && this.hoveredTooltip === tooltip && !this.suppressHoverAfterScroll);
     }
     public hideTooltips(): void {
+        const hasTooltipLifecycleToSettle = this.awaitingScrollHideSettle || this.activeTooltip !== undefined ||
+            this.pendingTooltipShow !== undefined || this.queuedShowFrame !== undefined ||
+            this.queuedHideFrames.size > 0 ||
+            (this.tooltipHideInProgressUntil !== undefined && Date.now() < this.tooltipHideInProgressUntil);
         this.suppressHoverAfterScroll = true;
         this.focusedTooltip = undefined;
         this.hoveredTooltip = undefined;
         this.cancelQueuedShow();
-        this.queuedHideFrames.forEach(frame => cancelAnimationFrame(frame));
-        this.queuedHideFrames.clear();
+        this.cancelQueuedTooltipHides();
         this.activeTooltip = undefined;
-        this.tooltips?.forEach(tooltip => {
-            // Setting disabled already asks MatTooltip to hide. Calling hide()
-            // separately (and again for activeTooltip) restarts its animation;
-            // a keyboard focus arriving during that transition can then be
-            // swallowed by Material's native FocusMonitor show request.
+        this.pendingTooltipShow = undefined;
+        if (hasTooltipLifecycleToSettle) {
+            this.awaitingScrollHideSettle = true;
+            if (this.scrollHideSettleTimer !== undefined) clearTimeout(this.scrollHideSettleTimer);
+            this.scrollHideSettleTimer = setTimeout(() => this.finishScrollHideSettle(), SCROLL_TOOLTIP_HIDE_SETTLE_MS);
+        }
+        this.tooltipList?.forEach(tooltip => {
             tooltip.disabled = true;
         });
         this.changeDetector.markForCheck();
@@ -161,24 +188,67 @@ export class GroupMemberListComponent implements OnChanges {
     }
 
     private scheduleTooltipShow(tooltip: MatTooltip, isCurrentIntent: () => boolean): void {
+        if (this.awaitingScrollHideSettle) {
+            this.pendingTooltipShow = {tooltip, isCurrentIntent};
+            return;
+        }
         if (this.queuedShowFrame !== undefined) cancelAnimationFrame(this.queuedShowFrame);
         const generation = ++this.queuedShowGeneration;
         this.queuedShowFrame = requestAnimationFrame(() => {
             this.queuedShowFrame = undefined;
-            if (generation === this.queuedShowGeneration && isCurrentIntent() && this.tooltips?.toArray().includes(tooltip)) tooltip.show(0);
+            if (generation === this.queuedShowGeneration && isCurrentIntent() && this.tooltipList?.toArray().includes(tooltip)) {
+                tooltip.show(0);
+            }
         });
     }
 
+    private finishScrollHideSettle(): void {
+        if (!this.awaitingScrollHideSettle) return;
+        this.awaitingScrollHideSettle = false;
+        this.scrollHideSettleTimer = undefined;
+        this.tooltipHideInProgressUntil = undefined;
+        const pending = this.pendingTooltipShow;
+        this.pendingTooltipShow = undefined;
+        if (pending && pending.isCurrentIntent() && this.tooltipList?.toArray().includes(pending.tooltip)) {
+            pending.tooltip.disabled = false;
+            this.changeDetector.markForCheck();
+            this.scheduleTooltipShow(pending.tooltip, pending.isCurrentIntent);
+        }
+    }
+
     private scheduleTooltipHide(tooltip: MatTooltip): void {
-        const frame = requestAnimationFrame(() => {
-            this.queuedHideFrames.delete(frame);
-            if (this.activeTooltip !== tooltip && this.tooltips?.toArray().includes(tooltip)) tooltip.hide(0);
+        const generation = this.queuedHideGeneration;
+        let frame = 0;
+        frame = requestAnimationFrame(() => {
+            if (generation !== this.queuedHideGeneration || !this.queuedHideFrames.delete(frame)) return;
+            if (this.activeTooltip !== tooltip && this.tooltipList?.toArray().includes(tooltip)) {
+                this.tooltipHideInProgressUntil = Date.now() + SCROLL_TOOLTIP_HIDE_SETTLE_MS;
+                tooltip.hide(0);
+            }
         });
         this.queuedHideFrames.add(frame);
     }
 
+    private cancelQueuedTooltipHides(): void {
+        this.queuedHideGeneration++;
+        this.queuedHideFrames.forEach(frame => cancelAnimationFrame(frame));
+        this.queuedHideFrames.clear();
+    }
+
+    private pruneRemovedTooltipIntents(): void {
+        const currentTooltips = this.tooltipList?.toArray() ?? [];
+        const isCurrent = (tooltip: MatTooltip | undefined): tooltip is MatTooltip => tooltip !== undefined && currentTooltips.includes(tooltip);
+        if (!isCurrent(this.focusedTooltip)) this.focusedTooltip = undefined;
+        if (!isCurrent(this.hoveredTooltip)) this.hoveredTooltip = undefined;
+        if (!isCurrent(this.activeTooltip)) this.activeTooltip = undefined;
+        if (this.pendingTooltipShow && !isCurrent(this.pendingTooltipShow.tooltip)) this.pendingTooltipShow = undefined;
+        if (!this.activeTooltip) this.cancelQueuedShow();
+        this.changeDetector.markForCheck();
+    }
+
     private cancelQueuedShow(): void {
         this.queuedShowGeneration++;
+        this.pendingTooltipShow = undefined;
         if (this.queuedShowFrame === undefined) return;
         cancelAnimationFrame(this.queuedShowFrame);
         this.queuedShowFrame = undefined;

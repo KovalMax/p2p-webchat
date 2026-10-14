@@ -38,9 +38,19 @@ async function measureRenderedTextContrast(element: Locator): Promise<RenderedCo
   return element.evaluate(node => {
     type RGBA = readonly [number, number, number, number];
     const parse = (color: string): RGBA => {
-      const channels = color.match(/[\d.]+/g)?.map(Number);
-      if (!channels || channels.length < 3) throw new Error(`Unexpected computed color: ${color}`);
-      return [channels[0], channels[1], channels[2], channels[3] ?? 1];
+      const number = '([-+]?(?:\\d+\\.?\\d*|\\.\\d+)(?:e[-+]?\\d+)?)';
+      const srgb = color.match(new RegExp(`^color\\(\\s*srgb\\s+${number}(%)?\\s+${number}(%)?\\s+${number}(%)?(?:\\s*\\/\\s*${number}(%)?)?\\s*\\)$`, 'i'));
+      if (srgb) {
+        const channel = (value: string, percentage: string | undefined): number => Number(value) * (percentage ? 2.55 : 255);
+        const alpha = srgb[7] === undefined ? 1 : Number(srgb[7]) * (srgb[8] ? .01 : 1);
+        return [channel(srgb[1], srgb[2]), channel(srgb[3], srgb[4]), channel(srgb[5], srgb[6]), alpha];
+      }
+      const rgb = color.match(/^rgba?\((.*)\)$/i);
+      const channels = rgb?.[1].trim().split(/[\s,/]+/);
+      if (!channels || channels.length < 3 || channels.length > 4) throw new Error(`Unexpected computed color: ${color}`);
+      const channel = (value: string): number => Number.parseFloat(value) * (value.endsWith('%') ? 2.55 : 1);
+      const alpha = channels[3] === undefined ? 1 : Number.parseFloat(channels[3]) * (channels[3].endsWith('%') ? .01 : 1);
+      return [channel(channels[0]), channel(channels[1]), channel(channels[2]), alpha];
     };
     const composite = (top: RGBA, bottom: RGBA): RGBA => {
       const alpha = top[3] + bottom[3] * (1 - top[3]);
@@ -81,9 +91,19 @@ async function measureRenderedTextContrastAtSurface(element: Locator, pseudoElem
   return element.evaluate((node, pseudo) => {
     type RGBA = readonly [number, number, number, number];
     const parse = (color: string): RGBA => {
-      const channels = color.match(/[\d.]+/g)?.map(Number);
-      if (!channels || channels.length < 3) throw new Error(`Unexpected computed color: ${color}`);
-      return [channels[0], channels[1], channels[2], channels[3] ?? 1];
+      const number = '([-+]?(?:\\d+\\.?\\d*|\\.\\d+)(?:e[-+]?\\d+)?)';
+      const srgb = color.match(new RegExp(`^color\\(\\s*srgb\\s+${number}(%)?\\s+${number}(%)?\\s+${number}(%)?(?:\\s*\\/\\s*${number}(%)?)?\\s*\\)$`, 'i'));
+      if (srgb) {
+        const channel = (value: string, percentage: string | undefined): number => Number(value) * (percentage ? 2.55 : 255);
+        const alpha = srgb[7] === undefined ? 1 : Number(srgb[7]) * (srgb[8] ? .01 : 1);
+        return [channel(srgb[1], srgb[2]), channel(srgb[3], srgb[4]), channel(srgb[5], srgb[6]), alpha];
+      }
+      const rgb = color.match(/^rgba?\((.*)\)$/i);
+      const channels = rgb?.[1].trim().split(/[\s,/]+/);
+      if (!channels || channels.length < 3 || channels.length > 4) throw new Error(`Unexpected computed color: ${color}`);
+      const channel = (value: string): number => Number.parseFloat(value) * (value.endsWith('%') ? 2.55 : 1);
+      const alpha = channels[3] === undefined ? 1 : Number.parseFloat(channels[3]) * (channels[3].endsWith('%') ? .01 : 1);
+      return [channel(channels[0]), channel(channels[1]), channel(channels[2]), alpha];
     };
     const composite = (top: RGBA, bottom: RGBA): RGBA => {
       const alpha = top[3] + bottom[3] * (1 - top[3]);
@@ -4536,6 +4556,20 @@ test('keeps load older messages readable in both themes and responsive layouts',
     await expect(loadOlder).toBeVisible();
     await expect(alice.getByText('Older message 22', {exact: true})).toBeVisible();
     await expect(alice.getByText('Older message 21', {exact: true})).toHaveCount(0);
+    const srgbProbe = await alice.evaluate(() => {
+      const probe = document.createElement('span');
+      probe.id = 'contrast-srgb-probe';
+      probe.setAttribute('aria-hidden', 'true');
+      probe.textContent = 'Contrast probe';
+      probe.style.cssText = 'position:fixed;left:-100px;top:-100px;color:rgb(23, 32, 51);background-color:color(srgb 0.915294 0.953412 0.989647 / 1)';
+      document.body.append(probe);
+      return getComputedStyle(probe).backgroundColor;
+    });
+    expect(srgbProbe, 'browser should preserve normalized sRGB computed colors for contrast sampling').toMatch(/^color\(srgb\b/i);
+    const srgbProbeLocator = alice.locator('#contrast-srgb-probe');
+    const srgbProbeContrast = await measureRenderedTextContrastAtSurface(srgbProbeLocator);
+    expect(srgbProbeContrast.ratio, `normalized sRGB contrast sample: ${JSON.stringify(srgbProbeContrast)}`).toBeGreaterThanOrEqual(4.5);
+    await srgbProbeLocator.evaluate(probe => probe.remove());
 
     for (const theme of ['light', 'dark'] as const) {
       await setTheme(alice, theme);
