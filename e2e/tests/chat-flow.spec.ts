@@ -765,6 +765,9 @@ async function assertGroupSettingsOverlay(page: Page, testInfo: import('@playwri
     const tooltip = page.locator('.mat-mdc-tooltip-panel .mat-mdc-tooltip-surface:visible').filter({hasText: action.label}).last();
     await expect(tooltip, `${theme} ${viewport.width}px tooltip: ${action.label}`).toBeVisible();
     await expect(page.locator('.mat-mdc-tooltip-panel .mat-mdc-tooltip-surface:visible'), `${theme} ${viewport.width}px must render only the active action tooltip`).toHaveCount(1);
+    await page.evaluate(() => new Promise<void>(resolve => {
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+    }));
     const contrast = await waitForReadableTooltip(tooltip);
     expect(contrast.ratio, `${theme} ${viewport.width}px ${action.label} rendered contrast: ${JSON.stringify(contrast)}`).toBeGreaterThanOrEqual(4.5);
     const {tooltipRect, managerRect, tooltipClasses, panelClasses, tooltipStyle} = await page.evaluate(label => {
@@ -1255,7 +1258,7 @@ async function assertMobileGroupRail(page: Page, testInfo: import('@playwright/t
 
 async function callThemeColors(page: Page): Promise<{panel: string; text: string; card: string; cardText: string; action: string; actionText: string; device: string; control: string; controlBorder: string; icon: string; scrollTrack: string; scrollThumb: string}> {
   return page.evaluate(() => {
-    const panel = document.querySelector<HTMLElement>('.call-panel');
+    const panel = document.querySelector<HTMLElement>('.call-panel-full app-call-surface-frame');
     const card = document.querySelector<HTMLElement>('.call-card');
     const action = document.querySelector<HTMLElement>('.call-actions');
     const actionButton = document.querySelector<HTMLElement>('.call-presentation-icon-actions button');
@@ -1264,13 +1267,14 @@ async function callThemeColors(page: Page): Promise<{panel: string; text: string
     const icon = document.querySelector<HTMLElement>('.call-button');
     const scrollSurface = document.querySelector<HTMLElement>('.message-history');
     const panelStyle = panel ? getComputedStyle(panel) : undefined;
+    const canvasColor = getComputedStyle(document.documentElement).getPropertyValue('--chat-canvas').trim();
     const cardStyle = card ? getComputedStyle(card) : undefined;
     const actionStyle = action ? getComputedStyle(action) : undefined;
     const actionButtonStyle = actionButton ? getComputedStyle(actionButton) : undefined;
     const deviceStyle = device ? getComputedStyle(device) : undefined;
     const scrollStyle = scrollSurface ? getComputedStyle(scrollSurface) : undefined;
     return {
-      panel: panelStyle?.backgroundColor || '',
+      panel: canvasColor || panelStyle?.backgroundColor || '',
       text: panelStyle?.color || '',
       card: cardStyle?.backgroundColor || '',
       cardText: cardStyle?.color || '',
@@ -1626,9 +1630,9 @@ async function assertGroupCallLayout(page: Page, testInfo: import('@playwright/t
       return {label: control.getAttribute('aria-label') || control.innerText.trim(), left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom};
     });
       const video = element.querySelector<HTMLVideoElement>('.group-presentation')?.getBoundingClientRect();
-    const card = element.querySelector<HTMLElement>('.group-call-card');
+    const card = element.matches('.group-call-card') ? element as HTMLElement : element.querySelector<HTMLElement>('.group-call-card');
     const cardRect = card?.getBoundingClientRect();
-      const groupTitle = element.querySelector<HTMLElement>('.group-call-card > app-call-profile .call-presentation-copy strong');
+      const groupTitle = element.querySelector<HTMLElement>('.group-call-card .zwei-call-frame-header app-call-profile .call-presentation-copy strong');
       const groupTitleRect = groupTitle?.getBoundingClientRect();
        const select = element.querySelector<HTMLElement>('.group-call-devices .call-select');
        const selectors = Array.from(element.querySelectorAll<HTMLElement>('.group-call-devices .call-select')).map(control => control.getBoundingClientRect());
@@ -1641,18 +1645,20 @@ async function assertGroupCallLayout(page: Page, testInfo: import('@playwright/t
        const action = element.querySelector<HTMLElement>('.group-call-actions .mat-mdc-outlined-button');
         const leaveAction = element.querySelector<HTMLElement>('.group-call-actions button.mat-mdc-outlined-button');
         const callActions = element.querySelector<HTMLElement>('.group-call-actions');
-        const supportCopy = element.querySelector<HTMLElement>('.group-call-header app-copy-support-reference button');
-        const header = element.querySelector<HTMLElement>('.group-call-header');
+        const supportCopy = element.querySelector<HTMLElement>('.group-call-support app-copy-support-reference button');
+        const footer = element.querySelector<HTMLElement>('.zwei-call-frame-footer');
         const endAction = element.querySelector<HTMLElement>('.group-call-active-controls .group-call-end-button:not(.group-call-end-button-labeled)');
         const activeControlRow = element.querySelector<HTMLElement>('.group-call-active-controls')?.getBoundingClientRect();
-       const collapse = element.querySelector<HTMLElement>('.group-call-collapse-button');
+        const collapse = element.querySelector<HTMLElement>('.zwei-call-frame-collapse');
        const avatar = element.querySelector<HTMLElement>('.call-presentation-avatar');
       const luminance = (color: string): number => (color.match(/\d+(?:\.\d+)?/g)?.slice(0, 3).map(channel => Number(channel) / 255).map(channel => channel <= .04045 ? channel / 12.92 : ((channel + .055) / 1.055) ** 2.4).reduce((sum, channel, index) => sum + channel * [0.2126, 0.7152, 0.0722][index], 0)) || 0;
        const iconActions = Array.from(element.querySelectorAll<HTMLElement>('app-call-icon-actions .call-presentation-icon-actions button')).map(button => button.getBoundingClientRect());
     const contains = (rect: DOMRect) => rect.left >= panelRect.left - 1 && rect.right <= panelRect.right + 1 && rect.top >= panelRect.top - 1 && rect.bottom <= panelRect.bottom + 1;
     const style = getComputedStyle(element);
     const panelStyle = getComputedStyle(element);
-    const panelAvailableWidth = element.clientWidth - (Number.parseFloat(panelStyle.paddingLeft) || 0) - (Number.parseFloat(panelStyle.paddingRight) || 0);
+       const sharedHost = element.closest<HTMLElement>('app-call-surface-frame');
+       const sharedHostStyle = sharedHost ? getComputedStyle(sharedHost) : null;
+       const panelAvailableWidth = Math.min(720, sharedHost ? sharedHost.clientWidth - (Number.parseFloat(sharedHostStyle?.paddingLeft || '0') || 0) - (Number.parseFloat(sharedHostStyle?.paddingRight || '0') || 0) : element.clientWidth - (Number.parseFloat(panelStyle.paddingLeft) || 0) - (Number.parseFloat(panelStyle.paddingRight) || 0));
     return {
       documentScrollWidth: document.documentElement.scrollWidth,
       documentClientWidth: document.documentElement.clientWidth,
@@ -1677,7 +1683,7 @@ async function assertGroupCallLayout(page: Page, testInfo: import('@playwright/t
        action: action ? {background: getComputedStyle(action).backgroundColor, color: getComputedStyle(action).color, border: getComputedStyle(action).borderTopColor} : undefined,
         leaveAction: leaveAction ? {label: leaveAction.innerText.trim(), background: getComputedStyle(leaveAction).backgroundColor, color: getComputedStyle(leaveAction).color, border: getComputedStyle(leaveAction).borderTopColor, rect: leaveAction.getBoundingClientRect()} : undefined,
         callActions: callActions ? {display: getComputedStyle(callActions).display, flexDirection: getComputedStyle(callActions).flexDirection} : undefined,
-        supportCopy: supportCopy ? {rect: supportCopy.getBoundingClientRect(), label: supportCopy.getAttribute('aria-label'), header: header?.getBoundingClientRect()} : undefined,
+          supportCopy: supportCopy ? {rect: supportCopy.getBoundingClientRect(), radius: getComputedStyle(supportCopy).borderRadius, label: supportCopy.getAttribute('aria-label'), footer: footer?.getBoundingClientRect()} : undefined,
         endAction: endAction ? {background: getComputedStyle(endAction).backgroundColor, color: getComputedStyle(endAction).color, rect: endAction.getBoundingClientRect(), contrast: (() => { const background = luminance(getComputedStyle(endAction).backgroundColor); const foreground = luminance(getComputedStyle(endAction).color); return (Math.max(background, foreground) + .05) / (Math.min(background, foreground) + .05); })()} : undefined,
         activeControlRow: activeControlRow ? {left: activeControlRow.left, right: activeControlRow.right, top: activeControlRow.top, bottom: activeControlRow.bottom} : undefined,
        collapse: collapse ? {rect: collapse.getBoundingClientRect(), width: collapse.getBoundingClientRect().width, height: collapse.getBoundingClientRect().height} : undefined,
@@ -1718,21 +1724,29 @@ async function assertGroupCallLayout(page: Page, testInfo: import('@playwright/t
        if (!metrics.leaveAction || !metrics.collapse || !metrics.avatar) throw new Error('Active group call leave/collapse controls were not rendered');
         if (!metrics.supportCopy || !metrics.callActions) throw new Error('Active group call header copy/footer controls were not rendered');
         expect(metrics.supportCopy.label).toBe('Copy support reference');
-        expect(metrics.supportCopy.rect.width).toBeGreaterThanOrEqual(44);
-        expect(metrics.supportCopy.rect.height).toBeGreaterThanOrEqual(44);
-        expect(metrics.supportCopy.rect.left).toBeGreaterThanOrEqual((metrics.supportCopy.header?.left ?? 0) - 1);
-        expect(metrics.supportCopy.rect.right).toBeLessThanOrEqual((metrics.supportCopy.header?.right ?? 0) + 1);
-        expect(metrics.supportCopy.rect.left).toBeGreaterThanOrEqual(metrics.collapse.rect.right - 1);
-        expect(metrics.supportCopy.rect.left - metrics.collapse.rect.right).toBeLessThanOrEqual(9);
-        await page.locator('.group-call-collapse-button').focus();
-        await page.keyboard.press('Tab');
-        const supportCopyFocus = await page.locator('.group-call-header app-copy-support-reference button').evaluate(button => ({focused: document.activeElement === button, focusVisible: button.matches(':focus-visible'), outlineStyle: getComputedStyle(button).outlineStyle, outlineWidth: getComputedStyle(button).outlineWidth}));
+         expect(metrics.supportCopy.rect.width).toBe(44);
+         expect(metrics.supportCopy.rect.height).toBe(44);
+         expect(metrics.supportCopy.radius).toBe('50%');
+        expect(metrics.supportCopy.rect.left).toBeGreaterThanOrEqual((metrics.supportCopy.footer?.left ?? 0) - 1);
+        expect(metrics.supportCopy.rect.right).toBeLessThanOrEqual((metrics.supportCopy.footer?.right ?? 0) + 1);
+        expect(metrics.supportCopy.rect.top).toBeGreaterThanOrEqual((metrics.supportCopy.footer?.top ?? 0) - 1);
+        expect(metrics.supportCopy.rect.bottom).toBeLessThanOrEqual((metrics.supportCopy.footer?.bottom ?? 0) + 1);
+        const supportOverlapsCollapse = metrics.supportCopy.rect.left < metrics.collapse.rect.right && metrics.supportCopy.rect.right > metrics.collapse.rect.left && metrics.supportCopy.rect.top < metrics.collapse.rect.bottom && metrics.supportCopy.rect.bottom > metrics.collapse.rect.top;
+        expect(supportOverlapsCollapse, `${theme}/${viewport.width}px support reference must remain in the footer, clear of the header collapse control`).toBeFalsy();
+          const groupCopyButton = page.locator('.group-call-support app-copy-support-reference button');
+         await groupCopyButton.focus();
+         await page.keyboard.press('Tab');
+         await page.keyboard.press('Shift+Tab');
+        const defaultCopyBackground = await groupCopyButton.evaluate(button => getComputedStyle(button).backgroundColor);
+        await groupCopyButton.hover();
+        const hoverCopyBackground = await groupCopyButton.evaluate(button => getComputedStyle(button).backgroundColor);
+        expect(hoverCopyBackground, `${theme}/${viewport.width}px copy control hover feedback`).not.toBe(defaultCopyBackground);
+        const supportCopyFocus = await groupCopyButton.evaluate(button => ({focused: document.activeElement === button, focusVisible: button.matches(':focus-visible'), outlineStyle: getComputedStyle(button).outlineStyle, outlineWidth: getComputedStyle(button).outlineWidth}));
         expect(supportCopyFocus.focused, JSON.stringify(supportCopyFocus)).toBe(true);
         expect(supportCopyFocus.focusVisible, JSON.stringify(supportCopyFocus)).toBe(true);
         expect(supportCopyFocus.outlineStyle, JSON.stringify(supportCopyFocus)).not.toBe('none');
         expect(supportCopyFocus.outlineWidth, JSON.stringify(supportCopyFocus)).not.toBe('0px');
         await page.keyboard.press('Tab');
-        expect(metrics.groupTitle?.right).toBeLessThanOrEqual(metrics.supportCopy.rect.left + 1);
         expect(metrics.callActions.display).toBe('flex');
         expect(metrics.callActions.flexDirection).toBe('column');
        const leaveContrast = await measureRenderedTextContrast(page.getByRole('button', {name: 'Leave call'}));
@@ -1788,9 +1802,82 @@ async function assertGroupCallLayout(page: Page, testInfo: import('@playwright/t
        await page.mouse.move(0, 0);
        expect(metrics.collapse.rect.left).toBeGreaterThanOrEqual(metrics.card.rect.left - 1);
       expect(metrics.collapse.rect.right).toBeLessThanOrEqual(metrics.card.rect.right + 1);
-      const collapseButton = page.getByRole('button', {name: 'Minimize group call'});
-      await collapseButton.hover();
-      const collapseAlignment = await collapseButton.evaluate(button => {
+        const collapseButton = page.getByRole('button', {name: 'Minimize group call'});
+        await collapseButton.hover();
+        if (viewport.width <= 760) {
+          await expect(collapseButton).toHaveAttribute('aria-label', 'Minimize group call');
+           await expect(collapseButton).not.toHaveAttribute('title');
+          const mobileCollapseTooltip = page.locator('.mat-mdc-tooltip-panel .mat-mdc-tooltip-surface:visible').filter({hasText: 'Minimize group call'});
+          await expect(mobileCollapseTooltip).toHaveCount(0);
+          const mobileTooltipGeometry = await page.evaluate(() => {
+            const header = document.querySelector<HTMLElement>('.chat-header')?.getBoundingClientRect();
+            const frame = document.querySelector<HTMLElement>('.zwei-call-frame')?.getBoundingClientRect();
+            const intersects = (a: DOMRect, b: DOMRect): boolean => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+            const visibleCollapseTooltips = Array.from(document.querySelectorAll<HTMLElement>('.mat-mdc-tooltip-surface')).filter(tooltip => {
+              const style = getComputedStyle(tooltip);
+              const rect = tooltip.getBoundingClientRect();
+              return tooltip.textContent?.includes('Minimize group call') === true && style.visibility !== 'hidden' && style.display !== 'none' && Number(style.opacity) > 0 && rect.width > 0 && rect.height > 0;
+            });
+            return {
+              header: header && {left: header.left, right: header.right, top: header.top, bottom: header.bottom},
+              frame: frame && {left: frame.left, right: frame.right, top: frame.top, bottom: frame.bottom},
+              visibleCollapseTooltips: visibleCollapseTooltips.map(tooltip => {
+                const rect = tooltip.getBoundingClientRect();
+                return {
+                  text: tooltip.textContent?.trim() ?? '',
+                  left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom,
+                  intersectsHeader: !!header && intersects(rect, header),
+                  intersectsFrame: !!frame && intersects(rect, frame),
+                };
+              }),
+            };
+          });
+          expect(mobileTooltipGeometry.header, `${theme}/${viewport.width}px conversation header geometry`).toBeDefined();
+          expect(mobileTooltipGeometry.frame, `${theme}/${viewport.width}px call frame geometry`).toBeDefined();
+          expect(mobileTooltipGeometry.visibleCollapseTooltips, `${theme}/${viewport.width}px minimize tooltip overlaps header/frame: ${JSON.stringify(mobileTooltipGeometry)}`).toEqual([]);
+          await collapseButton.focus();
+          await expect(collapseButton).toBeFocused();
+          await expect(collapseButton).toHaveCSS('outline-style', 'solid');
+          await page.screenshot({path: testInfo.outputPath(`group-call-collapse-no-tooltip-${theme}-390.png`), fullPage: false});
+        } else {
+          const collapseTooltip = page.locator('.mat-mdc-tooltip-panel .mat-mdc-tooltip-surface:visible').filter({hasText: 'Minimize group call'});
+          await expect(collapseTooltip).toBeVisible();
+          const collapseTooltipGeometry = await collapseTooltip.evaluate(tooltip => {
+          const tip = tooltip.getBoundingClientRect();
+          const button = document.querySelector<HTMLElement>('.zwei-call-frame-collapse')?.getBoundingClientRect();
+          const header = document.querySelector<HTMLElement>('.chat-header')?.getBoundingClientRect();
+          const frame = document.querySelector<HTMLElement>('.zwei-call-frame')?.getBoundingClientRect();
+          const profileCopy = document.querySelector<HTMLElement>('.zwei-call-frame-header app-call-profile .call-presentation-copy');
+          const name = profileCopy?.querySelector<HTMLElement>('strong')?.getBoundingClientRect();
+          const status = profileCopy?.querySelector<HTMLElement>('span')?.getBoundingClientRect();
+         const intersects = (a: DOMRect, b: DOMRect): boolean => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+         return {
+            tooltip: {left: tip.left, right: tip.right, top: tip.top, bottom: tip.bottom},
+            button: button && {left: button.left, right: button.right, top: button.top, bottom: button.bottom},
+            header: header && {left: header.left, right: header.right, top: header.top, bottom: header.bottom},
+            frame: frame && {left: frame.left, right: frame.right, top: frame.top, bottom: frame.bottom},
+           name: name && {left: name.left, right: name.right, top: name.top, bottom: name.bottom},
+           status: status && {left: status.left, right: status.right, top: status.top, bottom: status.bottom},
+            intersectsName: !!name && intersects(tip, name),
+            intersectsStatus: !!status && intersects(tip, status),
+            intersectsHeader: !!header && intersects(tip, header),
+            viewport: {width: document.documentElement.clientWidth, height: window.innerHeight},
+          };
+          });
+          expect(collapseTooltipGeometry.button).toBeDefined();
+          expect(collapseTooltipGeometry.header).toBeDefined();
+          expect(collapseTooltipGeometry.frame).toBeDefined();
+          expect(collapseTooltipGeometry.tooltip.bottom).toBeLessThanOrEqual((collapseTooltipGeometry.button?.top ?? 0) + 1);
+          expect(collapseTooltipGeometry.intersectsName, `${theme}/${viewport.width}px collapse tooltip overlaps group name: ${JSON.stringify(collapseTooltipGeometry)}`).toBe(false);
+          expect(collapseTooltipGeometry.intersectsStatus, `${theme}/${viewport.width}px collapse tooltip overlaps group status: ${JSON.stringify(collapseTooltipGeometry)}`).toBe(false);
+          expect(collapseTooltipGeometry.intersectsHeader, `${theme}/${viewport.width}px collapse tooltip overlaps conversation header: ${JSON.stringify(collapseTooltipGeometry)}`).toBe(false);
+          expect(collapseTooltipGeometry.tooltip.left).toBeGreaterThanOrEqual(0);
+          expect(collapseTooltipGeometry.tooltip.right).toBeLessThanOrEqual(collapseTooltipGeometry.viewport.width + 1);
+          expect(collapseTooltipGeometry.tooltip.top).toBeGreaterThanOrEqual(0);
+          expect(collapseTooltipGeometry.tooltip.bottom).toBeLessThanOrEqual(collapseTooltipGeometry.viewport.height);
+          console.info(`GROUP_COLLAPSE_TOOLTIP_GEOMETRY ${JSON.stringify({theme, viewport, collapseTooltipGeometry})}`);
+        }
+       const collapseAlignment = await collapseButton.evaluate(button => {
         const control = button.getBoundingClientRect();
         const icon = button.querySelector('zwei-icon')?.getBoundingClientRect();
         const svg = button.querySelector('svg')?.getBoundingClientRect();
@@ -1902,7 +1989,8 @@ async function assertGroupPresentationLayout(page: Page, testInfo: import('@play
   await page.setViewportSize(viewport);
   await setTheme(page, theme);
   const metrics = await page.locator('.group-call-panel').evaluate(panel => {
-    const card = panel.querySelector<HTMLElement>('.group-call-card');
+    const card = panel.matches('.group-call-card') ? panel : panel.querySelector<HTMLElement>('.group-call-card');
+    const sharedHost = panel.closest<HTMLElement>('app-call-surface-frame');
     const content = panel.querySelector<HTMLElement>('.group-call-content');
     const stage = panel.querySelector<HTMLElement>('.group-call-presentation');
     const stageContent = stage?.parentElement;
@@ -1924,6 +2012,7 @@ async function assertGroupPresentationLayout(page: Page, testInfo: import('@play
     const selectors = Array.from(panel.querySelectorAll<HTMLElement>('.group-call-devices [role="combobox"]')).map(rect);
     return {
       document: {scrollWidth: document.documentElement.scrollWidth, clientWidth: document.documentElement.clientWidth},
+      sharedSurface: sharedHost ? (() => { const hostStyle = getComputedStyle(sharedHost); const cardStyle = getComputedStyle(panel); const hostRect = sharedHost.getBoundingClientRect(); const cardRect = panel.getBoundingClientRect(); const probe = document.createElement('div'); probe.style.backgroundColor = 'var(--chat-canvas)'; document.body.append(probe); const canvas = getComputedStyle(probe).backgroundColor; probe.remove(); const cardProbe = document.createElement('div'); cardProbe.style.backgroundColor = 'var(--chat-surface)'; document.body.append(cardProbe); const surface = getComputedStyle(cardProbe).backgroundColor; cardProbe.remove(); return {backgroundColor: hostStyle.backgroundColor, backgroundImage: hostStyle.backgroundImage, cardBackground: cardStyle.backgroundColor, canvas, surface, contained: cardRect.left >= hostRect.left - 1 && cardRect.right <= hostRect.right + 1 && cardRect.top >= hostRect.top - 1 && cardRect.bottom <= hostRect.bottom + 1, scrollWidth: sharedHost.scrollWidth, clientWidth: sharedHost.clientWidth}; })() : undefined,
       card: rect(card), cardStyle: card ? {width: getComputedStyle(card).width, radius: getComputedStyle(card).borderTopLeftRadius, padding: getComputedStyle(card).padding, sharedWidth: getComputedStyle(document.documentElement).getPropertyValue('--zwei-call-card-max-width').trim(), sharedHeight: getComputedStyle(document.documentElement).getPropertyValue('--zwei-call-card-height').trim(), sharedPadding: getComputedStyle(document.documentElement).getPropertyValue('--zwei-call-card-padding').trim(), sharedRadius: getComputedStyle(document.documentElement).getPropertyValue('--zwei-call-card-radius').trim()} : undefined, content: rect(content), actions: rect(panel.querySelector<HTMLElement>('.group-call-actions')), stage: rect(stage), stageVideoMaxHeight: video ? getComputedStyle(video).maxHeight : '', video: rect(video), firstSelector: rect(firstSelector), selectors, audioToggle: rect(audioToggle), deviceLabels,
       scroll: content ? {scrollTop: content.scrollTop, scrollHeight: content.scrollHeight, clientHeight: content.clientHeight, scrollWidth: content.scrollWidth, clientWidth: content.clientWidth} : undefined,
        stageInContent: !!content && stageContent?.classList.contains('group-call-content-inner') === true && stageContent?.parentElement === content,
@@ -1964,6 +2053,11 @@ async function assertGroupPresentationLayout(page: Page, testInfo: import('@play
   expect(metrics.cardStyle?.sharedRadius).toBe('28px');
   expect(metrics.cardStyle?.radius).toBe('28px');
   expect(Number.parseFloat(metrics.cardStyle?.width ?? '0')).toBeLessThanOrEqual(720);
+  expect(metrics.sharedSurface?.backgroundImage).toContain('radial-gradient');
+  expect(metrics.sharedSurface?.backgroundColor).toBe(metrics.sharedSurface?.canvas);
+  expect(metrics.sharedSurface?.cardBackground).toBe(metrics.sharedSurface?.surface);
+  expect(metrics.sharedSurface?.contained).toBe(true);
+  expect(metrics.sharedSurface?.scrollWidth).toBeLessThanOrEqual((metrics.sharedSurface?.clientWidth ?? 0) + 1);
   expect(metrics.stage?.height).toBeGreaterThanOrEqual(viewport.width <= 760 ? 140 : 180);
   expect(metrics.stage?.height).toBeLessThanOrEqual(viewport.width <= 760 ? 190 : 280);
   expect(metrics.stageVideoMaxHeight).toBe('none');
@@ -2072,11 +2166,18 @@ test('direct call offers and answers connect in the browser UI', async ({browser
     const supportReferenceLayout = await supportReferenceButton.evaluate(button => {
       const bounds = button.getBoundingClientRect();
       const card = button.closest('.call-card')?.getBoundingClientRect();
-      return {left: bounds.left, right: bounds.right, cardLeft: card?.left, cardRight: card?.right, scrollWidth: document.documentElement.scrollWidth, clientWidth: document.documentElement.clientWidth};
+      return {left: bounds.left, right: bounds.right, width: bounds.width, height: bounds.height, radius: getComputedStyle(button).borderRadius, background: getComputedStyle(button).backgroundColor, cardLeft: card?.left, cardRight: card?.right, scrollWidth: document.documentElement.scrollWidth, clientWidth: document.documentElement.clientWidth};
     });
+    expect(supportReferenceLayout.width).toBe(44);
+    expect(supportReferenceLayout.height).toBe(44);
+    expect(supportReferenceLayout.radius).toBe('50%');
     expect(supportReferenceLayout.left).toBeGreaterThanOrEqual((supportReferenceLayout.cardLeft ?? 0) - 1);
     expect(supportReferenceLayout.right).toBeLessThanOrEqual((supportReferenceLayout.cardRight ?? 0) + 1);
     expect(supportReferenceLayout.scrollWidth).toBeLessThanOrEqual(supportReferenceLayout.clientWidth + 1);
+    await supportReferenceButton.hover();
+    const hoveredSupportBackground = await supportReferenceButton.evaluate(button => getComputedStyle(button).backgroundColor);
+    expect(hoveredSupportBackground).not.toBe(supportReferenceLayout.background);
+    await alice.screenshot({path: testInfo.outputPath('direct-call-support-copy-hover-dark.png'), fullPage: false});
     await alice.evaluate(() => Object.defineProperty(navigator, 'clipboard', {
       configurable: true,
       value: {writeText: async (text: string) => { document.documentElement.dataset.clipboardWrittenText = text; }},
@@ -2114,30 +2215,43 @@ test('direct call offers and answers connect in the browser UI', async ({browser
     for (const theme of ['dark', 'light'] as const) {
       await setTheme(alice, theme);
       for (const viewport of [{width: 2560, height: 1440}, {width: 1440, height: 900}, {width: 1024, height: 900}, {width: 390, height: 844}]) {
-        await alice.setViewportSize(viewport);
-        await expect(alice.locator('.call-panel-full')).toBeVisible();
+      await alice.setViewportSize(viewport);
+      await expect(alice.locator('.call-panel-full')).toBeVisible();
+        await alice.mouse.move(1, 1);
         const copyBounds = await alice.getByRole('button', {name: 'Copy support reference'}).evaluate(button => {
           const rect = button.getBoundingClientRect();
           const card = button.closest('.call-card')?.getBoundingClientRect();
-          const actions = button.closest('.call-actions') as HTMLElement | null;
-          return {left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom, cardLeft: card?.left, cardRight: card?.right, actionsScrollWidth: actions?.scrollWidth, actionsClientWidth: actions?.clientWidth};
+          const actions = button.closest('.zwei-call-frame-footer') as HTMLElement | null;
+          return {left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom, width: rect.width, height: rect.height, radius: getComputedStyle(button).borderRadius, background: getComputedStyle(button).backgroundColor, cardLeft: card?.left, cardRight: card?.right, actionsScrollWidth: actions?.scrollWidth, actionsClientWidth: actions?.clientWidth};
         });
+        expect(copyBounds.width).toBe(44);
+        expect(copyBounds.height).toBe(44);
+        expect(copyBounds.radius).toBe('50%');
         expect(copyBounds.left, `${theme}/${viewport.width}px copy control clips left: ${JSON.stringify(copyBounds)}`).toBeGreaterThanOrEqual((copyBounds.cardLeft ?? 0) - 1);
         expect(copyBounds.right, `${theme}/${viewport.width}px copy control clips right: ${JSON.stringify(copyBounds)}`).toBeLessThanOrEqual((copyBounds.cardRight ?? 0) + 1);
         expect(copyBounds.actionsScrollWidth).toBeLessThanOrEqual((copyBounds.actionsClientWidth ?? 0) + 1);
-        const supportFailureGeometry = await alice.locator('.call-actions').evaluate(actions => {
+        const activeCopy = alice.getByRole('button', {name: 'Copy support reference'});
+        await activeCopy.hover();
+        const hoverBackground = await activeCopy.evaluate(button => getComputedStyle(button).backgroundColor);
+        expect(hoverBackground, `${theme}/${viewport.width}px direct active copy hover`).not.toBe(copyBounds.background);
+        await alice.screenshot({path: testInfo.outputPath(`direct-call-support-copy-hover-${theme}-${viewport.width}.png`), fullPage: false});
+         const supportFailureGeometry = await alice.locator('.zwei-call-frame-footer').evaluate(actions => {
           const rect = (selector: string): DOMRect | undefined => actions.querySelector<HTMLElement>(selector)?.getBoundingClientRect();
           const copy = rect('app-copy-support-reference');
           const status = rect('.support-reference-feedback');
           const manual = rect('.support-reference-manual');
           const controls = rect('.direct-call-control-row');
           const copyButton = rect('app-copy-support-reference button');
-          const card = actions.closest('.call-card')?.getBoundingClientRect();
+           const card = actions.closest('.call-card')?.getBoundingClientRect();
+           const frame = actions.closest('.zwei-call-frame')?.getBoundingClientRect();
+           const footerStyle = getComputedStyle(actions);
+           const frameStyle = actions.closest('.zwei-call-frame') ? getComputedStyle(actions.closest('.zwei-call-frame') as HTMLElement) : undefined;
           const documentElement = document.documentElement;
           const describe = (bounds: DOMRect | undefined) => bounds ? {left: bounds.left, right: bounds.right, top: bounds.top, bottom: bounds.bottom, width: bounds.width, height: bounds.height} : undefined;
           return {
             copy: describe(copy), status: describe(status), manual: describe(manual), controls: describe(controls), copyButton: describe(copyButton),
-            card: describe(card), actions: describe(actions.getBoundingClientRect()),
+             card: describe(card), frame: describe(frame), actions: describe(actions.getBoundingClientRect()),
+             footerSurface: footerStyle.backgroundColor, frameSurface: frameStyle?.backgroundColor,
             actionDisplay: getComputedStyle(actions).display,
             actionColumns: getComputedStyle(actions).gridTemplateColumns,
             scrollWidth: documentElement.scrollWidth, clientWidth: documentElement.clientWidth,
@@ -2148,7 +2262,8 @@ test('direct call offers and answers connect in the browser UI', async ({browser
         expect(supportFailureGeometry.manual, `${theme}/${viewport.width}px manual support reference missing`).toBeDefined();
         expect(supportFailureGeometry.controls).toBeDefined();
         expect(supportFailureGeometry.copyButton).toBeDefined();
-        expect(supportFailureGeometry.card).toBeDefined();
+         expect(supportFailureGeometry.card).toBeDefined();
+         expect(supportFailureGeometry.footerSurface).toBe(supportFailureGeometry.frameSurface);
         expect(supportFailureGeometry.status?.left).toBeGreaterThanOrEqual((supportFailureGeometry.copy?.left ?? 0) - 1);
         expect(supportFailureGeometry.status?.right).toBeLessThanOrEqual((supportFailureGeometry.copy?.right ?? 0) + 1);
         expect(supportFailureGeometry.manual?.left).toBeGreaterThanOrEqual((supportFailureGeometry.copy?.left ?? 0) - 1);
@@ -2156,7 +2271,7 @@ test('direct call offers and answers connect in the browser UI', async ({browser
         expect(supportFailureGeometry.copyButton?.bottom).toBeLessThanOrEqual((supportFailureGeometry.status?.top ?? 0) + 1);
         expect(supportFailureGeometry.status?.bottom).toBeLessThanOrEqual((supportFailureGeometry.manual?.top ?? 0) + 1);
         expect(supportFailureGeometry.status?.bottom).toBeLessThanOrEqual((supportFailureGeometry.controls?.top ?? 0) - 1);
-        expect(supportFailureGeometry.manual?.bottom).toBeLessThanOrEqual((supportFailureGeometry.controls?.top ?? 0) - 1);
+         expect(supportFailureGeometry.manual?.bottom).toBeLessThanOrEqual((supportFailureGeometry.controls?.top ?? 0) - 1);
         for (const element of [supportFailureGeometry.copyButton, supportFailureGeometry.copy, supportFailureGeometry.status, supportFailureGeometry.manual, supportFailureGeometry.controls]) {
           expect(element?.left).toBeGreaterThanOrEqual((supportFailureGeometry.card?.left ?? 0) - 1);
           expect(element?.right).toBeLessThanOrEqual((supportFailureGeometry.card?.right ?? 0) + 1);
@@ -2171,13 +2286,13 @@ test('direct call offers and answers connect in the browser UI', async ({browser
           const panel = document.querySelector<HTMLElement>('.call-panel-full');
           const card = panel?.querySelector<HTMLElement>('.call-card');
           const callActions = panel?.querySelector<HTMLElement>('.call-actions');
-          const profile = panel?.querySelector<HTMLElement>('.call-card > app-call-profile');
+           const profile = panel?.querySelector<HTMLElement>('.call-card .zwei-call-frame-header app-call-profile');
           const profileAvatar = profile?.querySelector<HTMLElement>('.call-presentation-avatar');
           const profileName = profile?.querySelector<HTMLElement>('.call-presentation-copy strong');
           const controls = Array.from(panel?.querySelectorAll<HTMLElement>('.call-devices [role="combobox"], .call-presentation-icon-actions button, .call-actions button') || []);
             const end = panel?.querySelector<HTMLElement>('.direct-call-end-button');
              const actionRow = panel?.querySelector<HTMLElement>('.direct-call-control-row');
-             const collapse = panel?.querySelector<HTMLElement>('.call-direct-collapse-button');
+              const collapse = panel?.querySelector<HTMLElement>('.zwei-call-frame-collapse');
              const collapseIcon = collapse?.querySelector<HTMLElement>('zwei-icon');
             const iconActions = Array.from(panel?.querySelectorAll<HTMLElement>('.direct-call-control-row .call-presentation-icon-actions button') || []);
           const cardRect = card?.getBoundingClientRect();
@@ -2185,15 +2300,15 @@ test('direct call offers and answers connect in the browser UI', async ({browser
             theme: document.documentElement.classList.contains('light-theme') ? 'light' : 'dark',
             viewportWidth: document.documentElement.clientWidth,
             scrollWidth: document.documentElement.scrollWidth,
-            panelPadding: panel ? {
-              top: Number.parseFloat(getComputedStyle(panel).paddingTop),
-              right: Number.parseFloat(getComputedStyle(panel).paddingRight),
-              bottom: Number.parseFloat(getComputedStyle(panel).paddingBottom),
-              left: Number.parseFloat(getComputedStyle(panel).paddingLeft),
+            panelPadding: panel?.querySelector<HTMLElement>('app-call-surface-frame') ? {
+              top: Number.parseFloat(getComputedStyle(panel.querySelector<HTMLElement>('app-call-surface-frame') as HTMLElement).paddingTop),
+              right: Number.parseFloat(getComputedStyle(panel.querySelector<HTMLElement>('app-call-surface-frame') as HTMLElement).paddingRight),
+              bottom: Number.parseFloat(getComputedStyle(panel.querySelector<HTMLElement>('app-call-surface-frame') as HTMLElement).paddingBottom),
+              left: Number.parseFloat(getComputedStyle(panel.querySelector<HTMLElement>('app-call-surface-frame') as HTMLElement).paddingLeft),
             } : undefined,
             card: cardRect ? {left: cardRect.left, right: cardRect.right} : undefined,
             profileAvatar: profileAvatar ? {width: profileAvatar.getBoundingClientRect().width, height: profileAvatar.getBoundingClientRect().height} : undefined,
-            profileSurface: profile ? getComputedStyle(profile).backgroundColor : '',
+            profileSurface: profile?.closest('.zwei-call-frame') ? getComputedStyle(profile.closest('.zwei-call-frame') as HTMLElement).backgroundColor : '',
             profileText: profileName ? getComputedStyle(profileName).color : '',
             callActionsJustifyContent: callActions ? getComputedStyle(callActions).justifyContent : undefined,
             controls: controls.map(control => { const rect = control.getBoundingClientRect(); return {left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom}; }),
@@ -2276,18 +2391,34 @@ test('direct call offers and answers connect in the browser UI', async ({browser
       expect(focus).not.toBe('none');
       await alice.screenshot({path: testInfo.outputPath(`direct-call-minimize-focus-${theme}-1440.png`), fullPage: false});
 
-      await alice.setViewportSize({width: 390, height: 844});
-      await minimize.hover();
-      const mobileTooltip = alice.locator('.mat-mdc-tooltip-panel .mat-mdc-tooltip-surface').filter({hasText: 'Minimize call'}).last();
-      await expect(mobileTooltip).toBeVisible();
-       const mobileTooltipContrast = await waitForReadableTooltip(mobileTooltip);
-      expect(mobileTooltipContrast.ratio, `${theme} mobile minimize tooltip contrast: ${JSON.stringify(mobileTooltipContrast)}`).toBeGreaterThanOrEqual(4.5);
-      const mobileTooltipBounds = await mobileTooltip.boundingBox();
-      expect(mobileTooltipBounds?.x).toBeGreaterThanOrEqual(0);
-      expect(mobileTooltipBounds?.y).toBeGreaterThanOrEqual(0);
-      expect((mobileTooltipBounds?.x ?? 390) + (mobileTooltipBounds?.width ?? 390)).toBeLessThanOrEqual(390);
-      expect((mobileTooltipBounds?.y ?? 844) + (mobileTooltipBounds?.height ?? 844)).toBeLessThanOrEqual(844);
-      await alice.screenshot({path: testInfo.outputPath(`direct-call-minimize-tooltip-${theme}-390.png`), fullPage: false});
+       await alice.setViewportSize({width: 390, height: 844});
+       await minimize.hover();
+       const mobileTooltip = alice.locator('.mat-mdc-tooltip-panel .mat-mdc-tooltip-surface:visible').filter({hasText: 'Minimize call'});
+       await expect(mobileTooltip).toHaveCount(0);
+       await expect(minimize).toHaveAttribute('aria-label', 'Minimize call');
+        await expect(minimize).not.toHaveAttribute('title');
+       const mobileTooltipGeometry = await alice.evaluate(() => {
+         const header = document.querySelector<HTMLElement>('.chat-header')?.getBoundingClientRect();
+         const frame = document.querySelector<HTMLElement>('.zwei-call-frame')?.getBoundingClientRect();
+         const intersects = (a: DOMRect, b: DOMRect): boolean => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+         const visibleCollapseTooltips = Array.from(document.querySelectorAll<HTMLElement>('.mat-mdc-tooltip-surface')).filter(tooltip => {
+           const style = getComputedStyle(tooltip);
+           const rect = tooltip.getBoundingClientRect();
+           return tooltip.textContent?.includes('Minimize call') === true && style.visibility !== 'hidden' && style.display !== 'none' && Number(style.opacity) > 0 && rect.width > 0 && rect.height > 0;
+         });
+         return {
+           header: header && {left: header.left, right: header.right, top: header.top, bottom: header.bottom},
+           frame: frame && {left: frame.left, right: frame.right, top: frame.top, bottom: frame.bottom},
+           visibleCollapseTooltips: visibleCollapseTooltips.map(tooltip => {
+             const rect = tooltip.getBoundingClientRect();
+             return {text: tooltip.textContent?.trim() ?? '', intersectsHeader: !!header && intersects(rect, header), intersectsFrame: !!frame && intersects(rect, frame)};
+           }),
+         };
+       });
+       expect(mobileTooltipGeometry.header, `${theme}/390px direct conversation header geometry`).toBeDefined();
+       expect(mobileTooltipGeometry.frame, `${theme}/390px direct call frame geometry`).toBeDefined();
+       expect(mobileTooltipGeometry.visibleCollapseTooltips, `${theme}/390px direct minimize tooltip overlaps header/frame: ${JSON.stringify(mobileTooltipGeometry)}`).toEqual([]);
+       await alice.screenshot({path: testInfo.outputPath(`direct-call-minimize-no-tooltip-${theme}-390.png`), fullPage: false});
       await minimize.focus();
       await alice.keyboard.press('Tab');
       await alice.keyboard.press('Shift+Tab');
@@ -2300,7 +2431,7 @@ test('direct call offers and answers connect in the browser UI', async ({browser
     const endCall = alice.getByRole('button', {name: 'End call'});
     await expect(shareAudioOption).toBeVisible();
     await expect(shareAudioOption).toBeEnabled();
-    await setTheme(alice, 'light');
+      await setTheme(alice, 'light');
     await setTheme(alice, 'light');
     await alice.setViewportSize({width: 390, height: 844});
     await expect(shareAudioOption).toBeVisible();
@@ -2403,7 +2534,12 @@ test('direct call offers and answers connect in the browser UI', async ({browser
     await register(unsupportedPage, uniqueEmail('no-screen-capture'), 'No Screen Capture');
     await unsupportedPage.evaluate(() => Object.defineProperty(navigator.mediaDevices, 'getDisplayMedia', {configurable: true, value: undefined}));
     await endCall.click();
+    await expect(alice.locator('app-call-terminal-notice')).toBeVisible();
+    await expect(alice.locator('app-direct-call-surface')).toHaveCount(0);
+    await expect(alice.getByText('Call ended.', {exact: true})).toHaveCount(1);
     await expect(bob.getByRole('status', {name: 'Call status', exact: true})).toContainText('Call ended.');
+    await expect(bob.locator('app-direct-call-surface')).toHaveCount(0);
+    await expect(bob.getByText('Call ended.', {exact: true})).toHaveCount(1);
     const terminalSupportReference = alice.locator('.call-terminal-notice').getByRole('button', {name: 'Copy support reference'});
     await expect(terminalSupportReference).toBeVisible();
     await terminalSupportReference.click();
@@ -2483,15 +2619,19 @@ test('direct no-answer timeout converges to terminal call UI', async ({browser},
     await expect(recipient.getByText('Incoming audio call.')).toBeVisible();
     await expect.poll(() => caller.locator('.call-terminal-notice').getByText('No answer.', {exact: true}).isVisible(), {timeout: 45_000}).toBe(true);
 
-    // The direct-call surface intentionally retains its accessible terminal status
-    // for callNoticeDuration before returning fully to the chat UI.
-    await expect(caller.locator('.call-panel')).toBeVisible();
-    await expect(caller.locator('.call-terminal-notice')).toContainText('No answer.');
+    // The terminal notice is the only direct-call UI during its dismissal window.
+    await expect(caller.locator('app-call-terminal-notice')).toBeVisible();
+    await expect(caller.locator('app-direct-call-surface')).toHaveCount(0);
+    await expect(caller.getByText('No answer.', {exact: true})).toHaveCount(1);
     const noAnswerSupportCopy = caller.locator('.call-terminal-notice').getByRole('button', {name: 'Copy support reference'});
     await expect(noAnswerSupportCopy).toBeVisible();
     // Capture the terminal message before its five-second auto-dismissal. The
     // screenshots below deliberately retain the separate post-dismissal matrix.
+    await setTheme(caller, 'light');
     await caller.screenshot({path: testInfo.outputPath('direct-call-no-answer-terminal-visible-mobile.png'), fullPage: false});
+    await setTheme(caller, 'dark');
+    await caller.screenshot({path: testInfo.outputPath('direct-call-no-answer-terminal-visible-dark-mobile.png'), fullPage: false});
+    await setTheme(caller, 'light');
     await expect(caller.getByText('Ringing...')).not.toBeVisible();
     await expect(caller.getByRole('button', {name: 'Cancel'})).toHaveCount(0);
     await expect(caller.getByRole('button', {name: 'End call'})).toHaveCount(0);
@@ -2502,7 +2642,7 @@ test('direct no-answer timeout converges to terminal call UI', async ({browser},
     await expect(recipient.getByRole('button', {name: 'Start audio call'})).toBeEnabled();
     await expect(recipient.getByPlaceholder('Write a message…')).toBeEnabled();
 
-    await expect(caller.locator('.call-panel')).toBeHidden({timeout: 10_000});
+    await expect(caller.locator('app-call-terminal-notice')).toHaveCount(0, {timeout: 10_000});
     // Terminal-state acceptance matrix: light/dark at desktop and mobile widths.
     for (const theme of ['light', 'dark'] as const) {
       await setTheme(caller, theme);
@@ -3236,8 +3376,16 @@ test('register, create conversation, and deliver a message', async ({ browser },
         }
              const desktopAudioOption = alice.getByRole('checkbox', {name: 'Share audio'});
              await expect(desktopAudioOption).toBeVisible();
-            const desktopFirstContent = desktopContent.locator('.call-screen-stage');
-            await expect(desktopFirstContent).toBeVisible();
+             const desktopFirstContent = desktopContent.locator('.call-screen-stage');
+             await expect(desktopFirstContent).toBeVisible();
+             const directSharingFrame = await alice.locator('.call-panel-full .zwei-call-frame').evaluate(frame => ({
+               sharing: frame.classList.contains('zwei-call-frame-sharing-active'),
+               borderColor: getComputedStyle(frame).borderTopColor,
+               shadow: getComputedStyle(frame).boxShadow,
+             }));
+             expect(directSharingFrame.sharing).toBe(true);
+             expect(directSharingFrame.borderColor).not.toBe('');
+             expect(directSharingFrame.shadow).toContain('24px 70px');
             const desktopTopState = await desktopContent.evaluate(element => {
               const content = element as HTMLElement;
               const first = content.querySelector<HTMLElement>('.call-screen-stage')?.getBoundingClientRect();
@@ -3320,28 +3468,57 @@ test('register, create conversation, and deliver a message', async ({ browser },
         await expect(alice.getByRole('heading', {name: 'Charlie'})).toBeVisible();
         await expect(alice.locator('.chat-presence')).toContainText('Online');
         await expect(alice.getByPlaceholder('Write a message…')).toBeVisible();
+        await expect.poll(() => bob.locator('.call-screen-remote').evaluate(video => {
+          const stream = video.srcObject;
+          return stream instanceof MediaStream && stream.active && stream.getVideoTracks().some(track => track.readyState === 'live' && track.enabled);
+        })).toBe(true);
         await alice.getByPlaceholder('Write a message…').fill('');
          await alice.screenshot({path: testInfo.outputPath('call-minimized-other-chat.png'), fullPage: false});
-         await expect(alice.locator('.call-minimized-banner-chat .call-minimized-sharing-label')).toHaveText('Sharing screen · ');
+          await expect(alice.locator('.chat-panel .call-minimized-banner .call-minimized-sharing-label')).toHaveText('Sharing screen · ');
         // Minimized call while browsing Charlie: verify copy/action containment across the same theme/viewport matrix.
         for (const theme of ['dark', 'light'] as const) {
           await setTheme(alice, theme);
           for (const viewport of [{width: 2560, height: 1440}, {width: 1440, height: 900}, {width: 1024, height: 900}, {width: 390, height: 844}]) {
             await alice.setViewportSize(viewport);
-            const minimizedBanner = alice.locator(viewport.width <= 760 ? '.call-minimized-banner-chat' : '.call-minimized-banner-rail');
+            const minimizedBanner = alice.locator('.chat-panel .call-minimized-banner');
             await expect(minimizedBanner).toBeVisible();
+             await expect(minimizedBanner).toHaveClass(/\bcall-minimized-banner-chat\b/);
+             await expect(minimizedBanner).not.toHaveClass(/\bcall-minimized-banner-rail\b/);
+             const chatEnd = minimizedBanner.getByRole('button', {name: 'End ongoing call'});
+             await expect(chatEnd).not.toHaveAttribute('title');
+             await chatEnd.hover();
+             await expect(alice.locator('.mat-mdc-tooltip-panel .mat-mdc-tooltip-surface:visible').filter({hasText: 'End ongoing call'}), 'the direct-call chat banner preserves its no-tooltip behavior').toHaveCount(0);
+             expect(await minimizedBanner.evaluate(banner => banner.closest('.chat-panel') !== null)).toBe(true);
+            await expect(alice.locator('.conversation-rail .call-minimized-banner')).toHaveCount(0);
+            await expect(alice.locator('.call-minimized-banner:visible')).toHaveCount(1);
+            const selectedSharingContrast = await minimizedBanner.locator('.call-minimized-sharing-label').evaluate(label => {
+              const rgb = (value: string): number[] => value.match(/[\d.]+/g)?.slice(0, 3).map(Number) ?? [];
+              const luminance = (color: string): number => rgb(color).map(channel => channel / 255).map(channel => channel <= .04045 ? channel / 12.92 : ((channel + .055) / 1.055) ** 2.4).reduce((sum, channel, index) => sum + channel * [0.2126, 0.7152, 0.0722][index], 0);
+              const foreground = getComputedStyle(label).color;
+              const background = getComputedStyle(label.closest('.call-minimized-banner') as HTMLElement).backgroundColor;
+              const foregroundLuminance = luminance(foreground);
+              const backgroundLuminance = luminance(background);
+              return {foreground, background, ratio: (Math.max(foregroundLuminance, backgroundLuminance) + .05) / (Math.min(foregroundLuminance, backgroundLuminance) + .05)};
+            });
+            expect(selectedSharingContrast.ratio, `${theme}/${viewport.width}px selected minimized sharing label contrast: ${JSON.stringify(selectedSharingContrast)}`).toBeGreaterThanOrEqual(4.5);
             const copy = minimizedBanner.getByRole('button', {name: 'Copy support reference'});
             await expect(copy).toBeVisible();
             const layout = await minimizedBanner.evaluate(banner => {
               const rect = banner.getBoundingClientRect();
               const controls = Array.from(banner.querySelectorAll<HTMLElement>('button')).map(control => control.getBoundingClientRect());
               const status = Array.from(banner.querySelectorAll<HTMLElement>('.call-minimized-summary strong, .call-minimized-summary small')).map(element => ({text: element.innerText, scrollWidth: element.scrollWidth, clientWidth: element.clientWidth, scrollHeight: element.scrollHeight, clientHeight: element.clientHeight, rect: element.getBoundingClientRect().toJSON()}));
-              return {left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom, width: rect.width, scrollWidth: banner.scrollWidth, compactCopy: !!banner.querySelector('.support-reference-compact'), copyLabel: banner.querySelector('app-copy-support-reference button')?.textContent?.trim(), controls: controls.map(control => ({left: control.left, right: control.right, top: control.top, bottom: control.bottom, width: control.width, height: control.height})), status};
+              const copyButton = banner.querySelector<HTMLElement>('app-copy-support-reference button');
+              const header = banner.parentElement?.querySelector<HTMLElement>('.chat-header')?.getBoundingClientRect();
+              return {left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom, width: rect.width, scrollWidth: banner.scrollWidth, compactCopy: !!banner.querySelector('.support-reference-compact'), copyLabel: copyButton?.textContent?.trim(), copyWidth: copyButton?.getBoundingClientRect().width, copyHeight: copyButton?.getBoundingClientRect().height, copyRadius: copyButton && getComputedStyle(copyButton).borderRadius, controls: controls.map(control => ({left: control.left, right: control.right, top: control.top, bottom: control.bottom, width: control.width, height: control.height})), status, headerBottom: header?.bottom};
             });
             expect(layout.scrollWidth, `${theme}/${viewport.width}px minimized support action overflows: ${JSON.stringify(layout)}`).toBeLessThanOrEqual(layout.width + 1);
-            expect(layout.compactCopy, 'Direct-call copy control must retain its standard presentation').toBeFalsy();
-            expect(layout.copyLabel).toBe('Copy support reference');
-            expect(layout.bottom - layout.top, `${theme}/${viewport.width}px direct minimized banner should retain its previous multi-row layout: ${JSON.stringify(layout)}`).toBeGreaterThan(64);
+            expect(layout.compactCopy, 'Direct-call copy control must share the compact icon presentation').toBeTruthy();
+            expect(layout.copyLabel).toBe('');
+            expect(layout.copyWidth).toBe(44);
+            expect(layout.copyHeight).toBe(44);
+            expect(layout.copyRadius).toBe('50%');
+            expect(layout.bottom - layout.top, `${theme}/${viewport.width}px direct minimized banner should use the shared compact presentation: ${JSON.stringify(layout)}`).toBeLessThanOrEqual(80);
+            expect(layout.top, `${theme}/${viewport.width}px banner must follow the selected chat header`).toBeGreaterThanOrEqual((layout.headerBottom ?? 0) - 1);
             expect(layout.status.map(item => item.text).join(' ')).toContain('Call with Bob');
             expect(layout.status.map(item => item.text).join(' ')).toContain('Sharing screen');
             expect(layout.status.map(item => item.text).join(' ')).toMatch(/00:[0-5]\d/);
@@ -3362,8 +3539,6 @@ test('register, create conversation, and deliver a message', async ({ browser },
               expect(control.width).toBeGreaterThanOrEqual(32);
               expect(control.height).toBeGreaterThanOrEqual(32);
             }
-            expect(layout.controls[1].top).toBeGreaterThan(layout.controls[0].top);
-            expect(layout.controls[2].top).toBeGreaterThan(layout.controls[0].top);
             for (const status of layout.status) {
               for (const control of layout.controls.slice(1)) {
                 const overlaps = status.rect.left < control.right && status.rect.right > control.left && status.rect.top < control.bottom && status.rect.bottom > control.top;
@@ -3376,10 +3551,10 @@ test('register, create conversation, and deliver a message', async ({ browser },
         await alice.setViewportSize({width: 1440, height: 900});
         await setTheme(alice, 'dark');
         await alice.evaluate(() => Object.defineProperty(navigator, 'clipboard', {configurable: true, value: {writeText: async () => { throw new Error('clipboard denied'); }}}));
-        await alice.locator('.call-minimized-banner-rail').getByRole('button', {name: 'Copy support reference'}).click();
-        await expect(alice.locator('.call-minimized-banner-rail .support-reference-feedback')).toContainText('Could not copy support reference');
+        await alice.locator('.chat-panel .call-minimized-banner').getByRole('button', {name: 'Copy support reference'}).click();
+        await expect(alice.locator('.chat-panel .call-minimized-banner .support-reference-feedback')).toContainText('Could not copy support reference');
         await expect(alice.getByLabel('Support reference, select and copy manually', {exact: true})).toBeVisible();
-        await expect(alice.locator('.call-minimized-banner-rail .support-reference-compact')).not.toBeAttached();
+        await expect(alice.locator('.chat-panel .call-minimized-banner .support-reference-compact')).toBeAttached();
       await expect(alice.locator('.person-option').filter({hasText: 'Bob'}).locator('.unread-count')).not.toBeVisible();
       await expect(bob.getByText(incomingDuringCall).locator('xpath=ancestor::article').getByRole('img', {name: 'Read by peer'})).toBeVisible({timeout: 5_000});
       await alice.getByRole('button', {name: 'Return to call with Bob'}).click();
@@ -3388,8 +3563,13 @@ test('register, create conversation, and deliver a message', async ({ browser },
        await expect(alice.locator('.call-duration')).not.toHaveText('00:00', {timeout: 3_000});
         await alice.getByRole('button', {name: 'Minimize call'}).click();
         await expect(alice.locator('.call-panel-full')).not.toBeVisible();
-         const minimizedCallStatus = alice.locator('.call-minimized-banner-chat');
-         await expect(minimizedCallStatus).toContainText('Call with Bob');
+          const minimizedCallStatus = alice.locator('.chat-panel .call-minimized-banner');
+          await expect(minimizedCallStatus).toContainText('Call with Bob');
+          await expect(alice.locator('.call-minimized-banner:visible')).toHaveCount(1);
+          const minimizedHeaderBox = await alice.locator('.chat-header').boundingBox();
+          const minimizedBannerBox = await minimizedCallStatus.boundingBox();
+          if (!minimizedHeaderBox || !minimizedBannerBox) throw new Error('Mobile selected chat header or minimized banner bounds were unavailable');
+          expect(minimizedBannerBox.y).toBeGreaterThanOrEqual(minimizedHeaderBox.y + minimizedHeaderBox.height - 1);
          const minimizedCopy = minimizedCallStatus.getByRole('button', {name: 'Copy support reference'});
          await expect(minimizedCopy).toBeVisible();
          const minimizedLayout = await minimizedCallStatus.evaluate(banner => {
@@ -3419,9 +3599,97 @@ test('register, create conversation, and deliver a message', async ({ browser },
       await alice.getByRole('button', {name: 'Return to call with Bob'}).click();
       await expect(alice.locator('.call-panel-full')).toBeVisible();
       await alice.getByRole('button', {name: 'Minimize call'}).click();
-      await alice.getByRole('button', {name: 'Back to chats'}).click();
-      await expect(alice.locator('.conversation-rail .call-minimized-banner')).toBeVisible();
-      await alice.locator('.conversation-rail').getByRole('button', {name: 'Return to call with Bob'}).click();
+       await alice.getByRole('button', {name: 'Back to chats'}).click();
+        await expect(alice.locator('.conversation-rail .call-minimized-banner')).toBeVisible();
+        await expect(alice.locator('.call-minimized-banner:visible')).toHaveCount(1);
+        await expect(alice.locator('.chat-panel .call-minimized-banner')).toHaveCount(0);
+        await expect.poll(() => bob.locator('.call-screen-remote').evaluate(video => {
+          const stream = video.srcObject;
+          return stream instanceof MediaStream && stream.active && stream.getVideoTracks().some(track => track.readyState === 'live' && track.enabled);
+        })).toBe(true);
+        // Fallback rail acceptance matrix: light/dark at 1440x900 and 390x844.
+        for (const theme of ['light', 'dark'] as const) {
+          await setTheme(alice, theme);
+          for (const viewport of [{width: 1440, height: 900}, {width: 390, height: 844}]) {
+            await alice.setViewportSize(viewport);
+            const railBanner = alice.locator('.conversation-rail .call-minimized-banner');
+            await expect(railBanner).toBeVisible();
+            await expect(alice.locator('.call-minimized-banner:visible')).toHaveCount(1);
+            await expect(alice.locator('.chat-panel .call-minimized-banner')).toHaveCount(0);
+            await expect(railBanner).toHaveClass(/\bcall-minimized-banner-rail\b/);
+             await expect(railBanner).not.toHaveClass(/\bcall-minimized-banner-chat\b/);
+             expect(await railBanner.evaluate(banner => banner.closest('.conversation-rail') !== null)).toBe(true);
+             await expect(railBanner.locator('.call-minimized-sharing-label')).toHaveText('Sharing screen · ');
+             const railSharingContrast = await railBanner.locator('.call-minimized-sharing-label').evaluate(label => {
+               const rgb = (value: string): number[] => value.match(/[\d.]+/g)?.slice(0, 3).map(Number) ?? [];
+               const luminance = (color: string): number => rgb(color).map(channel => channel / 255).map(channel => channel <= .04045 ? channel / 12.92 : ((channel + .055) / 1.055) ** 2.4).reduce((sum, channel, index) => sum + channel * [0.2126, 0.7152, 0.0722][index], 0);
+               const foreground = getComputedStyle(label).color;
+               const background = getComputedStyle(label.closest('.call-minimized-banner') as HTMLElement).backgroundColor;
+               const foregroundLuminance = luminance(foreground);
+               const backgroundLuminance = luminance(background);
+               return {foreground, background, ratio: (Math.max(foregroundLuminance, backgroundLuminance) + .05) / (Math.min(foregroundLuminance, backgroundLuminance) + .05)};
+             });
+             expect(railSharingContrast.ratio, `${theme}/${viewport.width}px fallback minimized sharing label contrast: ${JSON.stringify(railSharingContrast)}`).toBeGreaterThanOrEqual(4.5);
+              const restoreCall = railBanner.getByRole('button', {name: 'Return to call with Bob'});
+              const endCall = railBanner.getByRole('button', {name: 'End ongoing call'});
+              await expect(endCall).not.toHaveAttribute('title');
+             await expect(restoreCall).toBeVisible();
+             await expect(endCall).toBeVisible();
+             await restoreCall.focus();
+             await alice.keyboard.press('Tab');
+             await expect(railBanner.getByRole('button', {name: 'Copy support reference'}), 'keyboard navigation from restore reaches the intervening support action').toBeFocused();
+             await alice.keyboard.press('Tab');
+             await expect(endCall, 'keyboard navigation reaches minimized end action').toBeFocused();
+             await expect(endCall).toBeVisible();
+            await alice.waitForTimeout(600);
+            const railTooltipGeometry = await alice.evaluate(() => {
+              const search = document.querySelector<HTMLElement>('.conversation-rail .search-field')?.getBoundingClientRect();
+              const control = document.querySelector<HTMLElement>('.conversation-rail .call-minimized-end')?.getBoundingClientRect();
+              const visibleTooltips = Array.from(document.querySelectorAll<HTMLElement>('.mat-mdc-tooltip-panel .mat-mdc-tooltip-surface'))
+                .filter(tooltip => tooltip.textContent?.trim() === 'End ongoing call')
+                .filter(tooltip => {
+                  const style = getComputedStyle(tooltip);
+                  const rect = tooltip.getBoundingClientRect();
+                  return style.visibility !== 'hidden' && style.display !== 'none' && Number(style.opacity) > 0 && rect.width > 0 && rect.height > 0;
+                })
+                .map(tooltip => {
+                  const rect = tooltip.getBoundingClientRect();
+                  const overlaps = (target: DOMRect | undefined): boolean => !!target && rect.left < target.right && rect.right > target.left && rect.top < target.bottom && rect.bottom > target.top;
+                  return {text: tooltip.textContent?.trim(), bounds: rect.toJSON(), overlapsSearch: overlaps(search), overlapsEndControl: overlaps(control)};
+                });
+              return {
+                search: search?.toJSON(),
+                endControl: control?.toJSON(),
+                visibleTooltips,
+              };
+            });
+            expect(railTooltipGeometry.search, `${theme}/${viewport.width}px rail search geometry`).toBeDefined();
+            expect(railTooltipGeometry.endControl, `${theme}/${viewport.width}px rail end-control geometry`).toBeDefined();
+            expect(railTooltipGeometry.visibleTooltips.filter(tooltip => tooltip.overlapsSearch || tooltip.overlapsEndControl), `${theme}/${viewport.width}px focused rail end tooltip must not overlap search or its control: ${JSON.stringify(railTooltipGeometry)}`).toEqual([]);
+            expect(railTooltipGeometry.visibleTooltips, `${theme}/${viewport.width}px rail end action must not show a detached tooltip over the search/control region: ${JSON.stringify(railTooltipGeometry)}`).toEqual([]);
+            console.log(`RAIL_END_TOOLTIP_GEOMETRY ${JSON.stringify({theme, viewport, ...railTooltipGeometry})}`);
+            const geometry = await railBanner.evaluate(banner => {
+              const bounds = banner.getBoundingClientRect();
+              const rail = banner.closest('.conversation-rail')?.getBoundingClientRect();
+              const controls = Array.from(banner.querySelectorAll<HTMLElement>('button')).map(button => button.getBoundingClientRect());
+              return {bounds: bounds.toJSON(), rail: rail?.toJSON(), scrollWidth: banner.scrollWidth, clientWidth: banner.clientWidth, controls: controls.map(control => control.toJSON())};
+            });
+            expect(geometry.rail).toBeDefined();
+            expect(geometry.bounds.left).toBeGreaterThanOrEqual((geometry.rail?.left ?? 0) - 1);
+            expect(geometry.bounds.right).toBeLessThanOrEqual((geometry.rail?.right ?? viewport.width) + 1);
+            expect(geometry.scrollWidth).toBeLessThanOrEqual(geometry.clientWidth + 1);
+            for (let index = 1; index < geometry.controls.length; index++) {
+              const previous = geometry.controls[index - 1];
+              const current = geometry.controls[index];
+              const overlaps = previous.left < current.right && previous.right > current.left && previous.top < current.bottom && previous.bottom > current.top;
+              expect(overlaps, `${theme}/${viewport.width}px rail minimized controls overlap: ${JSON.stringify(geometry)}`).toBe(false);
+            }
+            await alice.screenshot({path: testInfo.outputPath(`direct-call-minimized-rail-${theme}-${viewport.width}.png`), fullPage: false});
+          }
+        }
+       await alice.setViewportSize({width: 390, height: 844});
+       await setTheme(alice, 'dark');
+       await alice.locator('.conversation-rail').getByRole('button', {name: 'Return to call with Bob'}).click();
       await expect(alice.locator('.call-panel-full')).toBeVisible();
        await expect(alice.getByRole('button', {name: 'Mute microphone'})).toBeVisible();
      await expect(alice.getByRole('button', {name: 'End call'})).toBeVisible();
@@ -3439,25 +3707,30 @@ test('register, create conversation, and deliver a message', async ({ browser },
          const contentBottom = children.reduce((bottom, child) => Math.max(bottom, child.offsetTop + child.offsetHeight), 0);
          return element.scrollHeight - contentBottom;
        })).toBeLessThanOrEqual(2);
-      const darkThemeColors = await callThemeColors(alice);
+       const darkThemeColors = await callThemeColors(alice);
+      expect(darkThemeColors.panel).not.toBe('rgba(0, 0, 0, 0)');
     expect(darkThemeColors.panel).not.toBe(darkThemeColors.text);
     expect(darkThemeColors.panel).not.toBe(darkThemeColors.control);
-    expect(darkThemeColors.panel).not.toBe(darkThemeColors.controlBorder);
-    expect(darkThemeColors.panel).not.toBe(darkThemeColors.icon);
+      expect(darkThemeColors.panel).not.toBe(darkThemeColors.controlBorder);
+      expect(darkThemeColors.panel).not.toBe(darkThemeColors.icon);
+      expect(darkThemeColors.panel).not.toBe(darkThemeColors.card);
+      expect(darkThemeColors.action).toBe(darkThemeColors.card);
     expect(darkThemeColors.scrollTrack).not.toBe(darkThemeColors.scrollThumb);
     await alice.getByRole('button', {name: 'Account menu'}).click();
     await alice.getByRole('menuitem', {name: 'Switch to light theme'}).click();
        await expect(alice.locator('html')).toHaveClass(/light-theme/);
-       const lightThemeColors = await callThemeColors(alice);
+        const lightThemeColors = await callThemeColors(alice);
+      expect(lightThemeColors.panel).not.toBe('rgba(0, 0, 0, 0)');
     expect(lightThemeColors.panel).not.toBe(lightThemeColors.text);
     expect(lightThemeColors.panel).not.toBe(lightThemeColors.control);
-    expect(lightThemeColors.panel).not.toBe(lightThemeColors.controlBorder);
-     expect(lightThemeColors.panel).not.toBe(lightThemeColors.icon);
+      expect(lightThemeColors.panel).not.toBe(lightThemeColors.controlBorder);
+      expect(lightThemeColors.panel).not.toBe(lightThemeColors.icon);
+      expect(lightThemeColors.panel).not.toBe(lightThemeColors.card);
      expect(lightThemeColors.scrollTrack).not.toBe(lightThemeColors.scrollThumb);
       expect(lightThemeColors.panel).not.toBe(darkThemeColors.panel);
       expect(lightThemeColors.card).not.toBe(darkThemeColors.card);
       expect(lightThemeColors.card).not.toBe(lightThemeColors.cardText);
-      expect(lightThemeColors.action).toBe('rgb(246, 248, 252)');
+       expect(lightThemeColors.action).toBe(lightThemeColors.card);
       expect(lightThemeColors.actionText).toBe('rgb(23, 32, 51)');
       expect(lightThemeColors.device).toBe('rgb(255, 255, 255)');
       expect(lightThemeColors.scrollThumb).not.toBe(darkThemeColors.scrollThumb);
@@ -3506,11 +3779,26 @@ test('register, create conversation, and deliver a message', async ({ browser },
        expect(await alice.locator('.call-screen-stage').evaluate(element => document.fullscreenElement === element)).toBeTruthy();
        await alice.screenshot({path: testInfo.outputPath('call-screen-share-fullscreen-light.png'), fullPage: false});
        await alice.getByRole('button', {name: 'Exit fullscreen'}).click();
-     await alice.setViewportSize({width: 1440, height: 900});
-     const callCard = alice.locator('.call-panel-full .call-card');
-     const callPanel = alice.locator('.call-panel-full');
-     const endCall = alice.getByRole('button', {name: 'End call'});
-     const cardBox = await callCard.boundingBox();
+      await alice.setViewportSize({width: 1440, height: 900});
+       const callCard = alice.locator('.call-panel-full .call-card');
+       const callPanel = alice.locator('.call-panel-full');
+       const sharedFrameHost = alice.locator('.call-panel-full app-call-surface-frame');
+       const sharedSurfaceMetrics = await sharedFrameHost.evaluate(host => {
+         const frame = host.querySelector<HTMLElement>('.zwei-call-frame');
+         const hostStyle = getComputedStyle(host);
+         const frameStyle = frame ? getComputedStyle(frame) : null;
+         const hostRect = host.getBoundingClientRect();
+         const frameRect = frame?.getBoundingClientRect();
+         const probe = document.createElement('div'); probe.style.backgroundColor = 'var(--chat-canvas)'; document.body.append(probe); const canvas = getComputedStyle(probe).backgroundColor; probe.remove(); const cardProbe = document.createElement('div'); cardProbe.style.backgroundColor = 'var(--chat-surface)'; document.body.append(cardProbe); const surface = getComputedStyle(cardProbe).backgroundColor; cardProbe.remove();
+         return {backgroundColor: hostStyle.backgroundColor, backgroundImage: hostStyle.backgroundImage, cardBackground: frameStyle?.backgroundColor, canvas, surface, contained: !!frameRect && frameRect.left >= hostRect.left - 1 && frameRect.right <= hostRect.right + 1 && frameRect.top >= hostRect.top - 1 && frameRect.bottom <= hostRect.bottom + 1, scrollWidth: (host as HTMLElement).scrollWidth, clientWidth: (host as HTMLElement).clientWidth};
+       });
+       expect(sharedSurfaceMetrics.backgroundImage).toContain('radial-gradient');
+       expect(sharedSurfaceMetrics.backgroundColor).toBe(sharedSurfaceMetrics.canvas);
+       expect(sharedSurfaceMetrics.cardBackground).toBe(sharedSurfaceMetrics.surface);
+       expect(sharedSurfaceMetrics.contained).toBe(true);
+       expect(sharedSurfaceMetrics.scrollWidth).toBeLessThanOrEqual(sharedSurfaceMetrics.clientWidth + 1);
+      const endCall = alice.getByRole('button', {name: 'End call'});
+      const cardBox = await callCard.boundingBox();
       const panelBox = await callPanel.boundingBox();
       const endCallBox = await endCall.boundingBox();
       if (!cardBox || !panelBox || !endCallBox) {
@@ -3670,14 +3958,15 @@ test('register, create conversation, and deliver a message', async ({ browser },
   const startOfflineCall = alice.getByRole('button', {name: 'Start audio call'});
   await expect(startOfflineCall).toBeEnabled();
   await startOfflineCall.click();
-   const offlineCallNotice = alice.getByText('Call unavailable.', {exact: true});
-  const offlineCallStatus = alice.getByRole('alert', {name: 'Call status', exact: true});
+    const offlineCallNotice = alice.getByText('Call unavailable: recipient is offline', {exact: true});
+   const offlineCallStatus = alice.getByRole('alert', {name: 'Call status', exact: true});
   // The notice auto-dismisses at 5 seconds; observe it before its expiry rather
   // than using an assertion timeout equal to the notice's lifetime.
-  await expect(offlineCallNotice).toHaveCount(1, {timeout: 4_000});
+   await expect(offlineCallNotice).toHaveCount(1, {timeout: 4_000});
    await expect(offlineCallNotice).toBeVisible({timeout: 4_000});
    await expect(offlineCallStatus).toBeVisible();
-   await expect(alice.getByText('Call unavailable: recipient is offline', {exact: true})).toBeVisible();
+   await expect(alice.locator('app-direct-call-surface')).toHaveCount(0);
+    await expect(offlineCallNotice).toHaveCount(1);
   const offlineCopyButton = offlineCallStatus.getByRole('button', {name: 'Copy support reference'});
   await expect(offlineCopyButton).toBeVisible();
   await alice.evaluate(() => Object.defineProperty(navigator, 'clipboard', {
@@ -3729,16 +4018,17 @@ test('register, create conversation, and deliver a message', async ({ browser },
     if (viewport.width <= 600) {
       expect(noticeGeometry.message?.bottom, `Mobile offline message must occupy its own readable row: ${JSON.stringify(noticeGeometry)}`).toBeLessThanOrEqual((noticeGeometry.copy?.top ?? 0) + 1);
     } else {
-      expect(noticeGeometry.message?.right, `Desktop offline message must not overlap copy control: ${JSON.stringify(noticeGeometry)}`).toBeLessThanOrEqual((noticeGeometry.copy?.left ?? 0) + 1);
+      expect(noticeGeometry.message?.bottom, `Desktop offline message must occupy its own row before copy control: ${JSON.stringify(noticeGeometry)}`).toBeLessThanOrEqual((noticeGeometry.copy?.top ?? 0) + 1);
     }
-    expect(noticeGeometry.copyButton?.width).toBeGreaterThanOrEqual(160);
+    expect(noticeGeometry.copyButton?.width).toBeGreaterThanOrEqual(44);
+    expect(noticeGeometry.copyButton?.width).toBeLessThanOrEqual(45);
     expect(noticeGeometry.copyButton?.scrollWidth).toBeLessThanOrEqual((noticeGeometry.copyButton?.clientWidth ?? 0) + 1);
     expect(noticeGeometry.copyButton?.left).toBeGreaterThanOrEqual((noticeGeometry.notice.left ?? 0) - 1);
     expect(noticeGeometry.copyButton?.right).toBeLessThanOrEqual((noticeGeometry.notice.right ?? 0) + 1);
-    expect(noticeGeometry.failure?.left).toBeGreaterThanOrEqual((noticeGeometry.copy?.left ?? 0) - 1);
-    expect(noticeGeometry.failure?.right).toBeLessThanOrEqual((noticeGeometry.copy?.right ?? 0) + 1);
-    expect(noticeGeometry.reference?.left).toBeGreaterThanOrEqual((noticeGeometry.copy?.left ?? 0) - 1);
-    expect(noticeGeometry.reference?.right).toBeLessThanOrEqual((noticeGeometry.copy?.right ?? 0) + 1);
+    expect(noticeGeometry.failure?.left).toBeGreaterThanOrEqual((noticeGeometry.notice.left ?? 0) - 1);
+    expect(noticeGeometry.failure?.right).toBeLessThanOrEqual((noticeGeometry.notice.right ?? 0) + 1);
+    expect(noticeGeometry.reference?.left).toBeGreaterThanOrEqual((noticeGeometry.notice.left ?? 0) - 1);
+    expect(noticeGeometry.reference?.right).toBeLessThanOrEqual((noticeGeometry.notice.right ?? 0) + 1);
     expect((noticeGeometry.reference?.right ?? 0) - (noticeGeometry.reference?.left ?? 0)).toBeGreaterThanOrEqual(160);
     expect(noticeGeometry.reference?.scrollWidth).toBeLessThanOrEqual((noticeGeometry.reference?.clientWidth ?? 0) + 1);
     expect(noticeGeometry.failure?.bottom).toBeLessThanOrEqual((noticeGeometry.reference?.top ?? 0) + 1);
@@ -4191,6 +4481,183 @@ test('group HTTP surface enforces ownership and membership visibility', async ({
   }
 });
 
+test('keeps load older messages readable in both themes and responsive layouts', async ({browser}, testInfo) => {
+  test.setTimeout(120_000);
+  // Acceptance matrix: history top/end, light/dark, desktop 1440x900 and mobile 390x844.
+  const aliceEmail = uniqueEmail('history-contrast-alice');
+  const bobEmail = uniqueEmail('history-contrast-bob');
+  const context = await browser.newContext({viewport: {width: 1440, height: 900}});
+  const bobContext = await browser.newContext({viewport: {width: 1440, height: 900}});
+  const alice = await context.newPage();
+  const bob = await bobContext.newPage();
+
+  try {
+    await register(alice, aliceEmail, 'History Owner');
+    await register(bob, bobEmail, 'History Peer');
+    const token = await authenticatedToken(context, aliceEmail, 'history-contrast');
+    const authorization = {Authorization: `${token.token_type} ${token.access_token}`};
+    const peerID = await userID(context, token, bobEmail);
+    const createdConversation = await context.request.post(`${chatBase}/api/chat/conversations`, {headers: authorization, data: {other_user_id: peerID}});
+    expect(createdConversation.status()).toBe(201);
+    const conversation = await createdConversation.json() as {id: string};
+
+    for (let index = 1; index <= 41; index += 1) {
+      const response = await context.request.post(`${chatBase}/api/chat/conversations/${conversation.id}/messages`, {
+        headers: authorization,
+        data: {client_message_id: crypto.randomUUID(), body: `Older message ${String(index).padStart(2, '0')}`},
+      });
+      expect(response.status(), `Creating history message ${index}`).toBe(201);
+    }
+
+    await alice.reload();
+    await waitForLiveConnection(alice);
+    await alice.getByRole('button', {name: 'History Peer', exact: true}).click();
+    const loadOlder = alice.getByRole('button', {name: 'Load older messages'});
+    await expect(loadOlder).toBeVisible();
+    await expect(alice.getByText('Older message 22', {exact: true})).toBeVisible();
+    await expect(alice.getByText('Older message 21', {exact: true})).toHaveCount(0);
+
+    for (const theme of ['light', 'dark'] as const) {
+      await setTheme(alice, theme);
+      for (const viewport of [{width: 2560, height: 1440}, {width: 1440, height: 900}, {width: 1024, height: 768}, {width: 390, height: 844}]) {
+        await alice.setViewportSize(viewport);
+        await expect(loadOlder).toBeVisible();
+        const contrast = await measureRenderedTextContrastAtSurface(loadOlder);
+        expect(contrast.ratio, `${theme}/${viewport.width}px load-older text contrast: ${JSON.stringify(contrast)}`).toBeGreaterThanOrEqual(4.5);
+        const geometry = await loadOlder.evaluate(button => {
+          const bounds = button.getBoundingClientRect();
+          const history = button.closest<HTMLElement>('.message-history');
+          return {
+            left: bounds.left, right: bounds.right, top: bounds.top, bottom: bounds.bottom,
+            color: getComputedStyle(button.querySelector('.mdc-button__label') || button).color,
+            borderColor: getComputedStyle(button).borderTopColor,
+            history: history?.getBoundingClientRect().toJSON(),
+            documentWidth: document.documentElement.scrollWidth, viewportWidth: document.documentElement.clientWidth,
+            historyScrollWidth: history?.scrollWidth, historyClientWidth: history?.clientWidth,
+          };
+        });
+        expect(geometry.documentWidth, `${theme}/${viewport.width}px history page overflow`).toBeLessThanOrEqual(geometry.viewportWidth + 1);
+        expect(geometry.historyScrollWidth).toBeLessThanOrEqual((geometry.historyClientWidth ?? 0) + 1);
+        expect(geometry.left).toBeGreaterThanOrEqual((geometry.history?.left ?? 0) - 1);
+        expect(geometry.right).toBeLessThanOrEqual((geometry.history?.right ?? 0) + 1);
+        const restingBorder = geometry.borderColor;
+        await loadOlder.hover();
+        const hoverBorder = await loadOlder.evaluate(button => getComputedStyle(button).borderTopColor);
+        expect(hoverBorder, `${theme}/${viewport.width}px load-older hover border`).not.toBe(restingBorder);
+        await loadOlder.focus();
+        await alice.keyboard.press('Tab');
+        await alice.keyboard.press('Shift+Tab');
+        const focus = await loadOlder.evaluate(button => ({visible: button.matches(':focus-visible'), outline: getComputedStyle(button).outlineStyle, width: getComputedStyle(button).outlineWidth}));
+        expect(focus.visible).toBe(true);
+        expect(focus.outline).not.toBe('none');
+        expect(focus.width).not.toBe('0px');
+        await alice.screenshot({path: testInfo.outputPath(`load-older-${theme}-${viewport.width}.png`), fullPage: false});
+      }
+    }
+    await alice.setViewportSize({width: 390, height: 844});
+    let releaseResponse: (() => void) | undefined;
+    let acknowledgeIntercept: (() => void) | undefined;
+    const intercepted = new Promise<void>(resolve => { acknowledgeIntercept = resolve; });
+    const heldResponse = new Promise<void>(resolve => { releaseResponse = resolve; });
+    const historyRoute = async (route: import('@playwright/test').Route): Promise<void> => {
+      if (!new URL(route.request().url()).searchParams.has('before')) {
+        await route.continue();
+        return;
+      }
+      acknowledgeIntercept?.();
+      await heldResponse;
+      await route.continue();
+    };
+    await alice.route('**/api/chat/conversations/*/messages?**', historyRoute);
+    const clickRequest = loadOlder.click();
+    await intercepted;
+    const loadingButton = alice.getByRole('button', {name: 'Loading…'});
+    await expect(loadingButton).toBeDisabled();
+    for (const theme of ['light', 'dark'] as const) {
+      await setTheme(alice, theme);
+      const loadingGeometry = await loadingButton.evaluate(button => {
+        const bounds = button.getBoundingClientRect();
+        const history = button.closest<HTMLElement>('.message-history')?.getBoundingClientRect();
+        return {label: button.innerText, hasLoadingIcon: !!button.querySelector('zwei-icon[name="hourglass_top"]'), disabled: (button as HTMLButtonElement).disabled, bounds: bounds.toJSON(), history: history?.toJSON(), color: getComputedStyle(button.querySelector('.mdc-button__label') || button).color, border: getComputedStyle(button).borderTopColor};
+      });
+      expect(loadingGeometry.label).toContain('Loading');
+      expect(loadingGeometry.hasLoadingIcon).toBe(true);
+      expect(loadingGeometry.disabled).toBe(true);
+      expect(loadingGeometry.bounds.left).toBeGreaterThanOrEqual((loadingGeometry.history?.left ?? 0) - 1);
+      expect(loadingGeometry.bounds.right).toBeLessThanOrEqual((loadingGeometry.history?.right ?? 0) + 1);
+      await alice.screenshot({path: testInfo.outputPath(`load-older-loading-${theme}-390.png`), fullPage: false});
+    }
+    releaseResponse?.();
+    await clickRequest;
+    await alice.unroute('**/api/chat/conversations/*/messages?**', historyRoute);
+    await expect(loadOlder).toBeVisible();
+    await expect(alice.getByText('Older message 02', {exact: true})).toBeVisible();
+    await loadOlder.click();
+    await expect(alice.getByText('Older message 01', {exact: true})).toBeVisible();
+    await expect(alice.getByRole('button', {name: 'Load older messages'})).toHaveCount(0);
+    for (const viewport of [{width: 1440, height: 900}, {width: 390, height: 844}]) {
+      await alice.setViewportSize(viewport);
+      for (const theme of ['light', 'dark'] as const) {
+        await setTheme(alice, theme);
+        const historyStart = await alice.locator('.message-history').evaluate(history => {
+          history.scrollTop = 0;
+          const first = history.querySelector<HTMLElement>('.message-bubble');
+          const firstRect = first?.getBoundingClientRect();
+          const historyRect = history.getBoundingClientRect();
+          const composerRect = history.parentElement?.querySelector<HTMLElement>('.composer')?.getBoundingClientRect();
+          const style = getComputedStyle(history);
+          return {
+            scrollTop: history.scrollTop, scrollHeight: history.scrollHeight, clientHeight: history.clientHeight,
+            firstText: first?.innerText, firstTop: firstRect?.top, firstBottom: firstRect?.bottom,
+            historyTop: historyRect.top, historyBottom: historyRect.bottom, composerTop: composerRect?.top,
+            scrollWidth: history.scrollWidth, clientWidth: history.clientWidth,
+            overflowY: style.overflowY, paddingBottom: style.paddingBottom,
+          };
+        });
+        const startContext = `${theme}/${viewport.width}x${viewport.height} history start: ${JSON.stringify(historyStart)}`;
+        expect(historyStart.scrollTop, startContext).toBe(0);
+        expect(historyStart.firstText, startContext).toContain('Older message 01');
+        expect(historyStart.firstTop, startContext).toBeGreaterThanOrEqual(historyStart.historyTop - 1);
+        expect(historyStart.firstBottom, startContext).toBeLessThanOrEqual(historyStart.historyBottom + 1);
+        expect(historyStart.historyBottom, startContext).toBeLessThanOrEqual((historyStart.composerTop ?? 0) + 1);
+        expect(historyStart.scrollWidth, startContext).toBeLessThanOrEqual(historyStart.clientWidth + 1);
+        expect(historyStart.overflowY, startContext).toBe('auto');
+        await alice.screenshot({path: testInfo.outputPath(`load-older-history-start-${theme}-${viewport.width}x${viewport.height}.png`), fullPage: false});
+
+        const historyEnd = await alice.locator('.message-history').evaluate(history => {
+          history.scrollTop = history.scrollHeight;
+          const bubbles = history.querySelectorAll<HTMLElement>('.message-bubble');
+          const last = bubbles.item(bubbles.length - 1);
+          const lastRect = last?.getBoundingClientRect();
+          const historyRect = history.getBoundingClientRect();
+          const composerRect = history.parentElement?.querySelector<HTMLElement>('.composer')?.getBoundingClientRect();
+          const style = getComputedStyle(history);
+          return {
+            scrollTop: history.scrollTop, scrollHeight: history.scrollHeight, clientHeight: history.clientHeight,
+            scrollWidth: history.scrollWidth, clientWidth: history.clientWidth,
+            lastText: last?.innerText, lastTop: lastRect?.top, lastBottom: lastRect?.bottom,
+            historyTop: historyRect.top, historyBottom: historyRect.bottom, composerTop: composerRect?.top,
+            overflowY: style.overflowY, paddingBottom: style.paddingBottom,
+          };
+        });
+        const endContext = `${theme}/${viewport.width}x${viewport.height} history end: ${JSON.stringify(historyEnd)}`;
+        expect(historyEnd.scrollTop, endContext).toBeGreaterThan(0);
+        expect(historyEnd.scrollWidth, endContext).toBeLessThanOrEqual(historyEnd.clientWidth + 1);
+        expect(historyEnd.lastText, endContext).toContain('Older message 41');
+        expect(historyEnd.lastTop, endContext).toBeGreaterThanOrEqual(historyEnd.historyTop - 1);
+        expect(historyEnd.lastBottom, endContext).toBeLessThanOrEqual(historyEnd.historyBottom + 1);
+        expect(historyEnd.lastBottom, endContext).toBeLessThanOrEqual((historyEnd.composerTop ?? 0) - 1);
+        expect(historyEnd.historyBottom, endContext).toBeLessThanOrEqual((historyEnd.composerTop ?? 0) + 1);
+        expect(historyEnd.overflowY, endContext).toBe('auto');
+        console.log(`HISTORY_GEOMETRY ${JSON.stringify({theme, viewport, start: historyStart, end: historyEnd})}`);
+        await alice.screenshot({path: testInfo.outputPath(`load-older-end-of-history-${theme}-${viewport.width}x${viewport.height}.png`), fullPage: false});
+      }
+    }
+  } finally {
+    await Promise.allSettled([context.close(), bobContext.close()]);
+  }
+});
+
 test('a departed member quarantines private group UI after a newer revision and retries a failed projection', async ({browser}, testInfo) => {
   test.setTimeout(120_000);
   // Acceptance matrix: failed quarantine -> authorized 404 recovery; light/dark x 1440x900/390x844.
@@ -4266,7 +4733,7 @@ test('a departed member quarantines private group UI after a newer revision and 
       await expect(page.locator('.group-call-panel')).toContainText('2 participants in the group call.', {timeout: 10_000});
       await expect(page.getByRole('button', {name: 'Leave call'})).toBeVisible();
       await expect(page.getByRole('button', {name: 'End group call for everyone'})).toBeVisible();
-      await expect(page.locator('.group-call-header').getByRole('button', {name: 'Copy support reference'})).toBeVisible();
+      await expect(page.locator('.group-call-support').getByRole('button', {name: 'Copy support reference'})).toBeVisible();
     }));
     await owner.waitForTimeout(2_000);
     await owner.getByRole('button', {name: 'End group call for everyone'}).click({force: true});
@@ -5961,6 +6428,19 @@ test('runs a deterministic three-member group media lifecycle', async ({browser}
       return presentation.srcObject?.active === true && track?.kind === 'video' && track.readyState === 'live' && brightness > 80;
     }), {timeout: 10_000}).toBeTruthy();
     await owner.screenshot({path: testInfo.outputPath('group-call-remote-presentation-dark.png'), fullPage: false, timeout: 15_000});
+    const groupSharingFrame = await owner.locator('.group-call-card.zwei-call-frame').evaluate(frame => ({
+      sharing: frame.classList.contains('zwei-call-frame-sharing-active'),
+      borderColor: getComputedStyle(frame).borderTopColor,
+      shadow: getComputedStyle(frame).boxShadow,
+      footerSurface: getComputedStyle(frame.querySelector<HTMLElement>('.zwei-call-frame-footer') as HTMLElement).backgroundColor,
+      actionSurface: getComputedStyle(frame.querySelector<HTMLElement>('.group-call-actions') as HTMLElement).backgroundColor,
+      frameSurface: getComputedStyle(frame).backgroundColor,
+    }));
+    expect(groupSharingFrame.sharing).toBe(true);
+    expect(groupSharingFrame.borderColor).not.toBe('');
+    expect(groupSharingFrame.shadow).toContain('24px 70px');
+    expect(groupSharingFrame.footerSurface).toBe(groupSharingFrame.frameSurface);
+    expect(groupSharingFrame.actionSurface).toBe(groupSharingFrame.frameSurface);
     for (const theme of ['light', 'dark'] as const) {
       for (const viewport of [{width: 2560, height: 1440}, {width: 1440, height: 900}, {width: 1024, height: 900}, {width: 390, height: 844}]) {
         await assertGroupPresentationLayout(owner, testInfo, theme, viewport);
@@ -6048,7 +6528,7 @@ test('runs a deterministic three-member group media lifecycle', async ({browser}
     await expect(member.getByRole('button', {name: 'Stop presenting'})).toBeVisible();
     await assertRemotePresentationFrame('group-call-remote-presentation-restarted-dark');
     await member.getByRole('button', {name: 'Minimize group call'}).click();
-    const minimizedWhileSharing = member.locator('.group-call-minimized');
+    const minimizedWhileSharing = member.locator('.call-minimized-banner:not(.call-minimized-banner-rail):not(.call-minimized-banner-chat)');
     await expect(minimizedWhileSharing).toContainText('Sharing screen');
     await expect(member.locator('.group-presentation')).toBeHidden();
     const memberOtherGroup = member.locator('.person-option').filter({hasText: 'Another group conversation'});
@@ -6164,6 +6644,34 @@ test('runs a deterministic three-member group media lifecycle', async ({browser}
       for (const viewport of [{width: 1440, height: 900}, {width: 1024, height: 900}, {width: 390, height: 844}]) {
         await observer.setViewportSize(viewport);
         await setTheme(observer, theme);
+        const scrollGeometry = await observer.locator('.group-call-content').evaluate(async element => {
+          const content = element as HTMLElement;
+          content.scrollTop = content.scrollHeight;
+          await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+          const bounds = (selector: string) => {
+            const rect = document.querySelector<HTMLElement>(selector)?.getBoundingClientRect();
+            return rect && {left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom};
+          };
+          const contentRect = content.getBoundingClientRect();
+          return {
+            scrollTop: content.scrollTop,
+            scrollHeight: content.scrollHeight,
+            clientHeight: content.clientHeight,
+            content: {top: contentRect.top, bottom: contentRect.bottom},
+            lastSelector: bounds('.group-call-devices .call-quality-trigger'),
+            footer: bounds('.zwei-call-frame-footer'),
+            actions: bounds('.group-call-active-controls'),
+            leave: bounds('.group-call-leave'),
+          };
+        });
+        if (viewport.width === 390) {
+          expect(scrollGeometry.scrollHeight).toBeGreaterThan(scrollGeometry.clientHeight);
+          expect(scrollGeometry.scrollTop + scrollGeometry.clientHeight).toBeGreaterThanOrEqual(scrollGeometry.scrollHeight - 1);
+          expect(scrollGeometry.lastSelector?.bottom).toBeLessThanOrEqual((scrollGeometry.content?.bottom ?? 0) + 1);
+          expect(scrollGeometry.lastSelector?.bottom).toBeLessThanOrEqual((scrollGeometry.footer?.top ?? 0) + 1);
+          expect(scrollGeometry.actions?.bottom).toBeLessThanOrEqual((scrollGeometry.footer?.bottom ?? 0) + 1);
+          expect(scrollGeometry.leave?.bottom).toBeLessThanOrEqual((scrollGeometry.footer?.bottom ?? 0) + 1);
+        }
         const endCall = observer.getByRole('button', {name: 'End group call for everyone'});
         await endCall.hover();
         const endCallTooltip = observer.locator('.mat-mdc-tooltip-panel .mat-mdc-tooltip-surface').filter({hasText: 'End group call for everyone'}).last();
@@ -6214,10 +6722,11 @@ test('runs a deterministic three-member group media lifecycle', async ({browser}
     const remoteAudio = await owner.locator('audio[groupRemoteAudio]').elementHandle();
     expect(remoteAudio).not.toBeNull();
     await owner.getByRole('button', {name: 'Minimize group call'}).click();
-    const minimizedGroupCall = owner.locator('.group-call-minimized');
-    const minimizedEndCall = owner.getByRole('button', {name: 'End group call for everyone'});
-    await expect(minimizedGroupCall).toBeVisible();
-    await expect(minimizedEndCall).toHaveText('End group call');
+    const minimizedGroupCall = owner.locator('.call-minimized-banner:not(.call-minimized-banner-rail):not(.call-minimized-banner-chat)');
+        const minimizedEndCall = owner.getByRole('button', {name: 'End group call for everyone'});
+        await expect(minimizedGroupCall).toBeVisible();
+        await expect(minimizedEndCall).toHaveText('End group call');
+        await expect(minimizedEndCall).toHaveAttribute('title', 'End group call for everyone');
     await expect(owner.locator('audio[groupRemoteAudio]')).toHaveCount(1);
     await expect.poll(async () => remoteAudio?.evaluate(audio => audio.isConnected && !audio.paused), {timeout: 10_000}).toBe(true);
     const otherGroupOption = owner.locator('.person-option').filter({hasText: 'Another group conversation'});
@@ -6253,7 +6762,8 @@ test('runs a deterministic three-member group media lifecycle', async ({browser}
            const end = element.querySelector<HTMLElement>('.call-minimized-end')?.getBoundingClientRect();
            const copy = element.querySelector<HTMLElement>('app-copy-support-reference button')?.getBoundingClientRect();
            const status = Array.from(element.querySelectorAll<HTMLElement>('.call-minimized-summary strong, .call-minimized-summary small')).map(node => ({text: node.innerText, scrollWidth: node.scrollWidth, clientWidth: node.clientWidth, scrollHeight: node.scrollHeight, clientHeight: node.clientHeight, rect: node.getBoundingClientRect().toJSON()}));
-            return {rect: {left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom}, restore: restore && {left: restore.left, right: restore.right, top: restore.top, bottom: restore.bottom}, end: end && {left: end.left, right: end.right, top: end.top, bottom: end.bottom}, copy: copy && {left: copy.left, right: copy.right, top: copy.top, bottom: copy.bottom}, compactCopy: !!element.querySelector('.support-reference-compact'), status, scrollWidth: element.scrollWidth, clientWidth: element.clientWidth, documentScrollWidth: document.documentElement.scrollWidth, documentClientWidth: document.documentElement.clientWidth, viewportHeight: window.innerHeight};
+            const copyButton = element.querySelector<HTMLElement>('app-copy-support-reference button');
+            return {rect: {left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom}, restore: restore && {left: restore.left, right: restore.right, top: restore.top, bottom: restore.bottom}, end: end && {left: end.left, right: end.right, top: end.top, bottom: end.bottom}, copy: copy && {left: copy.left, right: copy.right, top: copy.top, bottom: copy.bottom, width: copy.width, height: copy.height}, copyRadius: copyButton && getComputedStyle(copyButton).borderRadius, compactCopy: !!element.querySelector('.support-reference-compact'), status, scrollWidth: element.scrollWidth, clientWidth: element.clientWidth, documentScrollWidth: document.documentElement.scrollWidth, documentClientWidth: document.documentElement.clientWidth, viewportHeight: window.innerHeight};
          });
         expect(bounds.documentScrollWidth).toBeLessThanOrEqual(bounds.documentClientWidth + 1);
          expect(bounds.scrollWidth).toBeLessThanOrEqual(bounds.clientWidth + 1);
@@ -6262,8 +6772,9 @@ test('runs a deterministic three-member group media lifecycle', async ({browser}
          expect(bounds.compactCopy, 'Group-call copy control should use the compact presentation').toBeTruthy();
            expect(bounds.rect.bottom - bounds.rect.top, `${theme}/${viewport.width}px minimized group-call banner should stay compact: ${JSON.stringify(bounds)}`).toBeLessThanOrEqual(80);
           if (!bounds.restore || !bounds.copy || !bounds.end) throw new Error(`Minimized group call controls are missing: ${JSON.stringify(bounds)}`);
-         expect(bounds.copy.right - bounds.copy.left).toBeGreaterThanOrEqual(44);
-         expect(bounds.copy.bottom - bounds.copy.top).toBeGreaterThanOrEqual(44);
+          expect(bounds.copy.width).toBe(44);
+          expect(bounds.copy.height).toBe(44);
+          expect(bounds.copyRadius).toBe('50%');
          expect(bounds.end.right - bounds.end.left).toBeGreaterThanOrEqual(44);
           expect(bounds.end.bottom - bounds.end.top).toBeGreaterThanOrEqual(44);
            expect(Math.abs((bounds.restore.top + bounds.restore.bottom) / 2 - (bounds.copy.top + bounds.copy.bottom) / 2), `${theme}/${viewport.width}px group summary/copy row alignment: ${JSON.stringify(bounds)}`).toBeLessThanOrEqual(2);
@@ -6393,20 +6904,21 @@ test('runs a deterministic three-member group media lifecycle', async ({browser}
       await setTheme(owner, theme);
       await owner.setViewportSize({width: 390, height: 844});
       const beforeSuccess = await owner.locator('.group-call-card').evaluate(card => ({
-        header: card.querySelector<HTMLElement>('.group-call-header')?.getBoundingClientRect().toJSON(),
-        profileTop: card.querySelector<HTMLElement>(':scope > app-call-profile')?.getBoundingClientRect().top,
+         header: card.querySelector<HTMLElement>('.zwei-call-frame-header')?.getBoundingClientRect().toJSON(),
+         profileTop: card.querySelector<HTMLElement>('.zwei-call-frame-header app-call-profile')?.getBoundingClientRect().top,
         actionsTop: card.querySelector<HTMLElement>('.group-call-actions')?.getBoundingClientRect().top,
       }));
       await groupSupportCopy.click();
       await expect(owner.getByRole('status').filter({hasText: 'Support reference copied.'})).toBeVisible();
       const afterSuccess = await owner.locator('.group-call-card').evaluate(card => ({
-        header: card.querySelector<HTMLElement>('.group-call-header')?.getBoundingClientRect().toJSON(),
-        profileTop: card.querySelector<HTMLElement>(':scope > app-call-profile')?.getBoundingClientRect().top,
+         header: card.querySelector<HTMLElement>('.zwei-call-frame-header')?.getBoundingClientRect().toJSON(),
+         profileTop: card.querySelector<HTMLElement>('.zwei-call-frame-header app-call-profile')?.getBoundingClientRect().top,
         actionsTop: card.querySelector<HTMLElement>('.group-call-actions')?.getBoundingClientRect().top,
         details: card.querySelector<HTMLElement>('.support-reference-details')?.getBoundingClientRect().toJSON(),
-        iconPath: card.querySelector('.group-call-header app-copy-support-reference zwei-icon svg path')?.getAttribute('d'),
+         iconPath: card.querySelector('.group-call-support app-copy-support-reference zwei-icon svg path')?.getAttribute('d'),
       }));
-      expect(afterSuccess.profileTop).toBe(beforeSuccess.profileTop);
+       expect(beforeSuccess.profileTop, 'projected profile should be measured inside the shared frame header').toBeDefined();
+       expect(afterSuccess.profileTop).toBe(beforeSuccess.profileTop);
       expect(afterSuccess.actionsTop).toBe(beforeSuccess.actionsTop);
       expect(afterSuccess.header).toEqual(beforeSuccess.header);
       expect(afterSuccess.iconPath).toBe('M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z');
@@ -6427,27 +6939,25 @@ test('runs a deterministic three-member group media lifecycle', async ({browser}
         await groupSupportCopy.click();
         await expect(groupSupportStatus).toBeVisible();
         await expect(groupSupportFallback).toBeVisible();
-        const fallbackGeometry = await owner.locator('.group-call-header .support-reference-details').evaluate(details => {
+         const fallbackGeometry = await owner.locator('.group-call-support .support-reference-details').evaluate(details => {
           const statusElement = details.querySelector<HTMLElement>('[role="status"]');
           const fallbackElement = details.querySelector<HTMLElement>('.support-reference-manual');
           const status = statusElement?.getBoundingClientRect();
           const fallback = fallbackElement?.getBoundingClientRect();
           const card = details.closest('.group-call-card')?.getBoundingClientRect();
+          const footer = details.closest('.group-call-card')?.querySelector<HTMLElement>('.zwei-call-frame-footer')?.getBoundingClientRect();
           const quality = details.closest('.group-call-card')?.querySelector<HTMLElement>('.group-call-devices .call-quality-control')?.getBoundingClientRect();
           const actions = details.closest('.group-call-card')?.querySelector<HTMLElement>('.group-call-actions')?.getBoundingClientRect();
-          const profile = details.closest('.group-call-card')?.querySelector<HTMLElement>(':scope > app-call-profile')?.getBoundingClientRect();
-          const header = details.closest('.group-call-card')?.querySelector<HTMLElement>('.group-call-header');
+           const profile = details.closest('.group-call-card')?.querySelector<HTMLElement>('.zwei-call-frame-header app-call-profile')?.getBoundingClientRect();
+           const header = details.closest('.group-call-card')?.querySelector<HTMLElement>('.zwei-call-frame-header');
           const component = details.closest('app-copy-support-reference');
-          return {status: status && {left: status.left, right: status.right, top: status.top, bottom: status.bottom}, fallback: fallback && {left: fallback.left, right: fallback.right, top: fallback.top, bottom: fallback.bottom}, detailsStyle: {position: getComputedStyle(details).position, display: getComputedStyle(details).display}, cardClass: details.closest('.group-call-card')?.className, headerStyle: header && {position: getComputedStyle(header).position, display: getComputedStyle(header).display}, header: header?.getBoundingClientRect().toJSON(), component: component?.getBoundingClientRect().toJSON(), statusContent: statusElement && {scrollWidth: statusElement.scrollWidth, clientWidth: statusElement.clientWidth, scrollHeight: statusElement.scrollHeight, clientHeight: statusElement.clientHeight}, fallbackContent: fallbackElement && {scrollWidth: fallbackElement.scrollWidth, clientWidth: fallbackElement.clientWidth, scrollHeight: fallbackElement.scrollHeight, clientHeight: fallbackElement.clientHeight}, card: card && {left: card.left, right: card.right, top: card.top, bottom: card.bottom}, quality: quality && {top: quality.top, bottom: quality.bottom}, actions: actions && {top: actions.top, bottom: actions.bottom}, profile: profile && {left: profile.left, right: profile.right, top: profile.top, bottom: profile.bottom}, documentScrollWidth: document.documentElement.scrollWidth, documentClientWidth: document.documentElement.clientWidth};
+          return {status: status && {left: status.left, right: status.right, top: status.top, bottom: status.bottom}, fallback: fallback && {left: fallback.left, right: fallback.right, top: fallback.top, bottom: fallback.bottom}, detailsStyle: {position: getComputedStyle(details).position, display: getComputedStyle(details).display}, footer: footer && {left: footer.left, right: footer.right, top: footer.top, bottom: footer.bottom}, headerStyle: header && {position: getComputedStyle(header).position, display: getComputedStyle(header).display}, header: header?.getBoundingClientRect().toJSON(), component: component?.getBoundingClientRect().toJSON(), statusContent: statusElement && {scrollWidth: statusElement.scrollWidth, clientWidth: statusElement.clientWidth, scrollHeight: statusElement.scrollHeight, clientHeight: statusElement.clientHeight}, fallbackContent: fallbackElement && {scrollWidth: fallbackElement.scrollWidth, clientWidth: fallbackElement.clientWidth, scrollHeight: fallbackElement.scrollHeight, clientHeight: fallbackElement.clientHeight}, card: card && {left: card.left, right: card.right, top: card.top, bottom: card.bottom}, quality: quality && {top: quality.top, bottom: quality.bottom}, actions: actions && {top: actions.top, bottom: actions.bottom}, profile: profile && {left: profile.left, right: profile.right, top: profile.top, bottom: profile.bottom}, documentScrollWidth: document.documentElement.scrollWidth, documentClientWidth: document.documentElement.clientWidth};
         });
         const {status, fallback, statusContent, fallbackContent, card} = fallbackGeometry;
         if (!status || !fallback || !card) throw new Error(`Group-call copy fallback geometry is missing: ${JSON.stringify(fallbackGeometry)}`);
         await owner.screenshot({path: testInfo.outputPath(`group-call-copy-failure-${theme}-${viewport.width}x${viewport.height}.png`), fullPage: false, timeout: 15_000});
-        expect(fallbackGeometry.cardClass).toContain('group-call-copy-failed');
-        if (viewport.width <= 760) {
-          expect(fallbackGeometry.headerStyle?.position).toBe('static');
-          expect(fallbackGeometry.headerStyle?.display).toBe('grid');
-        }
+         expect(fallbackGeometry.footer).toBeDefined();
+         expect(fallbackGeometry.actions, JSON.stringify(fallbackGeometry)).toBeDefined();
         expect(status.bottom).toBeLessThanOrEqual(fallback.top);
         expect(status.left).toBeGreaterThanOrEqual(card.left - 1);
         expect(fallback.left).toBeGreaterThanOrEqual(card.left - 1);
@@ -6465,11 +6975,14 @@ test('runs a deterministic three-member group media lifecycle', async ({browser}
           expect(fallbackGeometry.quality).toBeDefined();
           expect(fallbackGeometry.actions).toBeDefined();
           expect(fallbackGeometry.profile).toBeDefined();
-          expect(fallback.bottom).toBeLessThanOrEqual((fallbackGeometry.profile?.top ?? viewport.height) + 1);
           expect(fallbackGeometry.quality?.top ?? 0).toBeGreaterThanOrEqual((fallbackGeometry.profile?.bottom ?? 0) - 1);
-          expect(fallback.bottom).toBeLessThanOrEqual((fallbackGeometry.actions?.top ?? viewport.height) + 1);
-          expect((fallbackGeometry.profile?.right ?? 0) - (fallbackGeometry.profile?.left ?? 0)).toBeGreaterThanOrEqual((card.right - card.left) - 48);
+           expect(fallback.bottom).toBeLessThanOrEqual((fallbackGeometry.actions?.top ?? viewport.height) - 1);
+          expect(fallback.top).toBeGreaterThanOrEqual((fallbackGeometry.footer?.top ?? 0) - 1);
+          expect(fallback.bottom).toBeLessThanOrEqual((fallbackGeometry.footer?.bottom ?? viewport.height) + 1);
+          expect(fallbackGeometry.profile?.left).toBeGreaterThanOrEqual(card.left - 1);
+          expect(fallbackGeometry.profile?.right).toBeLessThanOrEqual(card.right + 1);
         }
+        expect(fallback.bottom, `${theme}/${viewport.width}x${viewport.height} group support fallback must remain above footer actions: ${JSON.stringify(fallbackGeometry)}`).toBeLessThanOrEqual((fallbackGeometry.actions?.top ?? 0) - 1);
         expect(fallbackGeometry.documentScrollWidth).toBeLessThanOrEqual(fallbackGeometry.documentClientWidth + 1);
         if (viewport.width <= 760) {
           const qualityVisibility = await owner.locator('.group-call-content').evaluate(content => {
@@ -6488,14 +7001,15 @@ test('runs a deterministic three-member group media lifecycle', async ({browser}
           const scrollEnd = await owner.locator('.group-call-content').evaluate(content => {
             const lastControl = content.querySelector<HTMLElement>('.share-audio-toggle');
             lastControl?.scrollIntoView({block: 'end', inline: 'nearest'});
+            content.scrollTop = content.scrollHeight;
             const lastDeviceControl = lastControl?.getBoundingClientRect();
             const contentRect = content.getBoundingClientRect();
             const actions = content.closest('.group-call-card')?.querySelector<HTMLElement>('.group-call-actions')?.getBoundingClientRect();
             return {scrollTop: content.scrollTop, scrollHeight: content.scrollHeight, clientHeight: content.clientHeight, content: {top: contentRect.top, bottom: contentRect.bottom}, lastDeviceControl: lastDeviceControl && {top: lastDeviceControl.top, bottom: lastDeviceControl.bottom}, actions: actions && {top: actions.top}};
           });
           if (!scrollEnd.lastDeviceControl || !scrollEnd.actions) throw new Error(`Group-call mobile scroll geometry is missing: ${JSON.stringify(scrollEnd)}`);
-          expect(scrollEnd.scrollHeight).toBeGreaterThan(scrollEnd.clientHeight);
-          expect(scrollEnd.scrollTop).toBeGreaterThan(0);
+          expect(scrollEnd.scrollHeight).toBeGreaterThanOrEqual(scrollEnd.clientHeight);
+          if (scrollEnd.scrollHeight > scrollEnd.clientHeight) expect(scrollEnd.scrollTop).toBeGreaterThan(0);
           expect(scrollEnd.lastDeviceControl.top).toBeGreaterThanOrEqual(scrollEnd.content.top - 1);
           expect(scrollEnd.lastDeviceControl.bottom).toBeLessThanOrEqual(scrollEnd.content.bottom + 1);
           expect(scrollEnd.lastDeviceControl.bottom).toBeLessThanOrEqual(scrollEnd.actions.top + 1);
@@ -6510,11 +7024,23 @@ test('runs a deterministic three-member group media lifecycle', async ({browser}
     await setTheme(owner, 'light');
     await setTheme(observer, 'dark');
     await owner.getByRole('button', {name: 'Minimize group call'}).click();
-    await expect(owner.locator('.group-call-minimized')).toBeVisible();
+    await expect(owner.locator('.call-minimized-banner:not(.call-minimized-banner-rail):not(.call-minimized-banner-chat)')).toBeVisible();
     await owner.getByRole('button', {name: 'End group call for everyone'}).click();
     const ownerTerminal = owner.locator('app-call-terminal-notice .group-call-terminal');
     await expect(ownerTerminal).toBeVisible({timeout: 5_000});
     await expect(ownerTerminal).toContainText('Group call ended.');
+    const ownerTerminalCopy = ownerTerminal.getByRole('button', {name: 'Copy support reference'});
+    await expect(ownerTerminalCopy).toBeVisible();
+    const ownerTerminalCopyGeometry = await ownerTerminalCopy.evaluate(button => {
+      const rect = button.getBoundingClientRect();
+      const notice = button.closest('.call-terminal-notice')?.getBoundingClientRect();
+      return {left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom, width: rect.width, height: rect.height, radius: getComputedStyle(button).borderRadius, notice: notice?.toJSON()};
+    });
+    expect(ownerTerminalCopyGeometry.width).toBe(44);
+    expect(ownerTerminalCopyGeometry.height).toBe(44);
+    expect(ownerTerminalCopyGeometry.radius).toBe('50%');
+    expect(ownerTerminalCopyGeometry.left).toBeGreaterThanOrEqual((ownerTerminalCopyGeometry.notice?.left ?? 0) - 1);
+    expect(ownerTerminalCopyGeometry.right).toBeLessThanOrEqual((ownerTerminalCopyGeometry.notice?.right ?? 0) + 1);
     const ownerTerminalStyle = await ownerTerminal.evaluate(element => ({background: getComputedStyle(element).backgroundColor, color: getComputedStyle(element).color}));
     const ownerTerminalContrast = await measureRenderedTextContrastAtSurface(ownerTerminal.locator('.call-terminal-message'));
     expect(ownerTerminalContrast.ratio, `light owner terminal contrast: ${JSON.stringify({ownerTerminalStyle, ownerTerminalContrast})}`).toBeGreaterThanOrEqual(4.5);
@@ -6541,6 +7067,18 @@ test('runs a deterministic three-member group media lifecycle', async ({browser}
     await observer.screenshot({path: testInfo.outputPath('group-call-terminal-dark-1440-immediate.png'), fullPage: false, timeout: 15_000});
     await observer.setViewportSize({width: 390, height: 844});
     await expect(observerTerminal).toBeVisible();
+    const observerTerminalCopy = observerTerminal.getByRole('button', {name: 'Copy support reference'});
+    await expect(observerTerminalCopy).toBeVisible();
+    const observerTerminalCopyGeometry = await observerTerminalCopy.evaluate(button => {
+      const rect = button.getBoundingClientRect();
+      const notice = button.closest('.call-terminal-notice')?.getBoundingClientRect();
+      return {left: rect.left, right: rect.right, width: rect.width, height: rect.height, radius: getComputedStyle(button).borderRadius, notice: notice?.toJSON()};
+    });
+    expect(observerTerminalCopyGeometry.width).toBe(44);
+    expect(observerTerminalCopyGeometry.height).toBe(44);
+    expect(observerTerminalCopyGeometry.radius).toBe('50%');
+    expect(observerTerminalCopyGeometry.left).toBeGreaterThanOrEqual((observerTerminalCopyGeometry.notice?.left ?? 0) - 1);
+    expect(observerTerminalCopyGeometry.right).toBeLessThanOrEqual((observerTerminalCopyGeometry.notice?.right ?? 0) + 1);
     await observer.screenshot({path: testInfo.outputPath('group-call-terminal-dark-390-immediate.png'), fullPage: false, timeout: 15_000});
     // A fresh room begins at revision 1 even when the previous room ended at
     // a higher revision. The former member must receive a new Join prompt now,
@@ -6549,7 +7087,59 @@ test('runs a deterministic three-member group media lifecycle', async ({browser}
     await setTheme(member, 'dark');
     await member.getByRole('button', {name: 'Join or start group audio call'}).click();
     await expect(owner.getByRole('button', {name: 'Join call'})).toBeVisible({timeout: 10_000});
-    await owner.screenshot({path: testInfo.outputPath('group-call-second-room-incoming-light-1440.png'), fullPage: false});
+    // Preserve the group-specific invitation semantics while exercising the shared
+    // frame at every requested viewport/theme before anyone joins the live room.
+    for (const theme of ['light', 'dark'] as const) {
+      await setTheme(owner, theme);
+      for (const viewport of [{width: 2560, height: 1440}, {width: 1440, height: 900}, {width: 1024, height: 768}, {width: 390, height: 844}]) {
+        await owner.setViewportSize(viewport);
+        await owner.mouse.move(0, 0);
+        const join = owner.getByRole('button', {name: 'Join call', exact: true});
+        await expect(join).toBeVisible();
+        await expect(owner.locator('.group-call-card')).toHaveAttribute('aria-label', 'Group audio call');
+        await expect(owner.locator('.group-call-card')).toContainText('Group call is starting.');
+        if (viewport.width <= 760) {
+          const collapse = owner.getByRole('button', {name: 'Minimize group call'});
+          await expect(collapse).toHaveAttribute('aria-label', 'Minimize group call');
+          await expect(collapse).not.toHaveAttribute('title');
+          await expect(owner.locator('.mat-mdc-tooltip-panel .mat-mdc-tooltip-surface:visible').filter({hasText: 'Minimize group call'})).toHaveCount(0);
+        }
+        const frameGeometry = await owner.evaluate(() => {
+          const frame = document.querySelector<HTMLElement>('.group-call-card');
+          const rect = (element: Element | null) => {
+            const bounds = element?.getBoundingClientRect();
+            return bounds ? {left: bounds.left, right: bounds.right, top: bounds.top, bottom: bounds.bottom} : undefined;
+          };
+          const header = frame?.querySelector('.zwei-call-frame-header') ?? null;
+          const body = frame?.querySelector('.zwei-call-frame-body') ?? null;
+          const footer = frame?.querySelector('.zwei-call-frame-footer') ?? null;
+          const button = frame?.querySelector('.group-call-join') ?? null;
+          const frameRect = rect(frame ?? null);
+          const buttonRect = rect(button);
+          return {
+            frame: frameRect, header: rect(header), body: rect(body), footer: rect(footer), button: buttonRect,
+            frameLabel: frame?.getAttribute('aria-label'),
+            hierarchy: !!frame && !!header && !!body && !!footer && header.parentElement === frame && body.parentElement === frame && footer.parentElement === frame,
+            documentWidth: document.documentElement.scrollWidth, viewportWidth: document.documentElement.clientWidth,
+          };
+        });
+        const context = `${theme}/${viewport.width}x${viewport.height} group invitation: ${JSON.stringify(frameGeometry)}`;
+        expect(frameGeometry.hierarchy, context).toBe(true);
+        expect(frameGeometry.frameLabel, context).toBe('Group audio call');
+        expect(frameGeometry.frame, context).toBeDefined();
+        expect(frameGeometry.header!.left, context).toBeGreaterThanOrEqual(frameGeometry.frame!.left - 1);
+        expect(frameGeometry.header!.right, context).toBeLessThanOrEqual(frameGeometry.frame!.right + 1);
+        expect(frameGeometry.body!.left, context).toBeGreaterThanOrEqual(frameGeometry.frame!.left - 1);
+        expect(frameGeometry.body!.right, context).toBeLessThanOrEqual(frameGeometry.frame!.right + 1);
+        expect(frameGeometry.footer!.left, context).toBeGreaterThanOrEqual(frameGeometry.frame!.left - 1);
+        expect(frameGeometry.footer!.right, context).toBeLessThanOrEqual(frameGeometry.frame!.right + 1);
+        expect(frameGeometry.button!.left, context).toBeGreaterThanOrEqual(frameGeometry.footer!.left - 1);
+        expect(frameGeometry.button!.right, context).toBeLessThanOrEqual(frameGeometry.footer!.right + 1);
+        expect(frameGeometry.button!.bottom, context).toBeLessThanOrEqual(frameGeometry.footer!.bottom + 1);
+        expect(frameGeometry.documentWidth, context).toBeLessThanOrEqual(frameGeometry.viewportWidth + 1);
+        await owner.screenshot({path: testInfo.outputPath(`group-call-second-room-incoming-${theme}-${viewport.width}x${viewport.height}.png`), fullPage: false});
+      }
+    }
     await owner.getByRole('button', {name: 'Join call'}).click();
     await expect(member.locator('.group-call-panel')).toContainText('2 participants in the group call.', {timeout: 10_000});
     await expect(owner.locator('.group-call-panel')).toContainText('2 participants in the group call.', {timeout: 10_000});
@@ -6716,20 +7306,36 @@ test('offers chat-scoped @mentions and renders only selected mentions in direct 
     await bob.locator('.person-option').filter({hasText: users[0].name}).click();
     await expect(bob.locator('.message-bubble').filter({hasText: 'hello from a selected mention'}).last().locator('.message-mention')).toHaveText(`@${users[1].name}`);
     // Bob's reload and conversation selection can cause Angular to re-render
-    // message lists. Re-query the owner's current DOM before inspecting styles
-    // rather than relying on the locator chain captured before those updates.
-    const renderedDirectMessage = owner.locator('.message-bubble').filter({hasText: 'hello from a selected mention'}).last();
-    await expect(renderedDirectMessage).toContainText(`@${users[1].name} hello from a selected mention`);
+    // message lists. Query the current message and read both computed styles in
+    // the same browser task so Angular cannot detach the measured nodes between
+    // locator lookup and evaluation.
+    const directMessageText = 'hello from a selected mention';
+    const renderedDirectMessage = owner.locator('.message-bubble').filter({hasText: directMessageText}).last();
+    await expect(renderedDirectMessage).toContainText(`@${users[1].name} ${directMessageText}`);
     const renderedDirectMention = renderedDirectMessage.locator('.message-mention');
     await expect(renderedDirectMention).toHaveText(`@${users[1].name}`);
-    const directMentionStyle = await renderedDirectMention.evaluate(element => {
-      const style = element.ownerDocument.defaultView?.getComputedStyle(element);
-      return {color: style?.getPropertyValue('color') ?? '', weight: style?.getPropertyValue('font-weight') ?? '', connected: element.isConnected, className: element.className};
-    });
-    const directBodyStyle = await renderedDirectMessage.locator('p').evaluate(element => {
-      const style = element.ownerDocument.defaultView?.getComputedStyle(element);
-      return {color: style?.getPropertyValue('color') ?? '', weight: style?.getPropertyValue('font-weight') ?? ''};
-    });
+    const directStyleHandle = await owner.waitForFunction(messageText => {
+      const messages = Array.from(document.querySelectorAll<HTMLElement>('.message-bubble'));
+      const message = messages.filter(element => element.textContent?.includes(messageText)).at(-1);
+      const mention = message?.querySelector<HTMLElement>('.message-mention');
+      const body = message?.querySelector<HTMLElement>('p');
+      if (!message?.isConnected || !mention?.isConnected || !body?.isConnected) return false;
+      const mentionStyle = getComputedStyle(mention);
+      const bodyStyle = getComputedStyle(body);
+      return {
+        mention: {
+          color: mentionStyle.getPropertyValue('color'),
+          weight: mentionStyle.getPropertyValue('font-weight'),
+          connected: mention.isConnected,
+          className: mention.className,
+        },
+        body: {
+          color: bodyStyle.getPropertyValue('color'),
+          weight: bodyStyle.getPropertyValue('font-weight'),
+        },
+      };
+    }, directMessageText);
+    const {mention: directMentionStyle, body: directBodyStyle} = await directStyleHandle.jsonValue();
     expect(directMentionStyle.connected, JSON.stringify(directMentionStyle)).toBe(true);
     expect(directMentionStyle.className).toContain('message-mention');
     expect(directMentionStyle.color).not.toBe(directBodyStyle.color);

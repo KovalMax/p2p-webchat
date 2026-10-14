@@ -67,6 +67,14 @@ describe('CopySupportReferenceComponent', () => {
         expect(details?.children[1]).toBe(fixture.nativeElement.querySelector('.support-reference-manual'));
     });
 
+    it('uses the same compact presentation for copy references in each call surface', () => {
+        fixture.componentRef.setInput('compact', true);
+        fixture.detectChanges();
+        const button = fixture.nativeElement.querySelector('button') as HTMLButtonElement;
+        expect(button.classList.contains('support-reference-compact-button')).toBe(true);
+        expect(button.getAttribute('aria-label')).toBe('Copy support reference');
+    });
+
     it('clears old feedback when its reference changes', async () => {
         copy.mockRejectedValue(new Error('denied'));
         (fixture.nativeElement.querySelector('button') as HTMLButtonElement).click();

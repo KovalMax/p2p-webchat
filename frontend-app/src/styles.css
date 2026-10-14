@@ -103,6 +103,7 @@ html, body {
     --chat-call-control-text: #f1f5f9;
     --chat-call-icon: #74b7f3;
     --chat-call-icon-disabled: #91abc5;
+    --chat-call-sharing-text: #246443;
     --chat-call-screen-surface: #111923;
     --chat-call-screen-text: #d8e6f5;
     --chat-scroll-track: #202e3d;
@@ -147,6 +148,7 @@ html.dark-theme, body.dark-theme {
     --zwei-surface: #202c3b;
     --zwei-line: #2a394a;
     --zwei-muted: #aebdd0;
+    --chat-call-sharing-text: #9bdcaf;
     --zwei-card-border: #30465e;
     --zwei-shadow-card: 0 20px 60px rgba(0, 0, 0, .24);
     --auth-card-surface: #202c3b;
@@ -188,6 +190,8 @@ html.dark-theme, body.dark-theme {
     --chat-call-screen-text: #4c6077;
     --chat-warning-surface: #fff5df;
     --chat-warning-text: #5f3b00;
+    --chat-danger-surface: #fae9e7;
+    --chat-danger-text: #8f2d25;
     --chat-system-surface: #e8f1fb;
     --chat-system-text: #4c6077;
     --chat-system-border: #cfd9e8;

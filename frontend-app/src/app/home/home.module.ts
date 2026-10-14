@@ -10,6 +10,8 @@ import {CallIconActionsComponent} from './call-presentation/call-icon-actions.co
 import {CallParticipantsComponent} from './call-presentation/call-participants.component';
 import {CallProfileComponent} from './call-presentation/call-profile.component';
 import {CallTerminalNoticeComponent} from './call-presentation/call-terminal-notice.component';
+import {CallSurfaceFrameComponent} from './call-presentation/call-surface-frame.component';
+import {MinimizedCallBannerComponent} from './call-presentation/minimized-call-banner.component';
 import {CopySupportReferenceComponent} from './call-presentation/copy-support-reference.component';
 import {DirectCallSurfaceComponent} from './call-presentation/direct-call-surface.component';
 import {GroupCallSurfaceComponent} from './call-presentation/group-call-surface.component';
@@ -25,6 +27,8 @@ const routes: Routes = [{path: '', component: HomeComponent}];
         CallProfileComponent,
         CallParticipantsComponent,
         CallTerminalNoticeComponent,
+        CallSurfaceFrameComponent,
+        MinimizedCallBannerComponent,
         CopySupportReferenceComponent,
         CallDeviceControlsComponent,
         CallIconActionsComponent,
@@ -33,6 +37,7 @@ const routes: Routes = [{path: '', component: HomeComponent}];
         GroupRemoteAudioDirective,
         GroupMemberListComponent,
     ],
+    exports: [CallSurfaceFrameComponent],
     imports: [
         CommonModule,
         FormsModule,

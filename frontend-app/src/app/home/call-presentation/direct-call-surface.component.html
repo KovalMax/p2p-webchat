@@ -1,8 +1,8 @@
 <ng-container *ngIf="state as callState">
     <audio autoplay playsinline [srcObject]="callState.remoteStream" (loadedmetadata)="emit({type: 'remote-audio-ready', event: $event})" (canplay)="emit({type: 'remote-audio-ready', event: $event})"></audio>
-    <div class="call-card" [class.call-card-incoming]="callState.phase === 'incoming'">
-        <app-call-profile *ngIf="profile as directProfile" [profile]="directProfile" [collapsible]="isOngoing(callState)" (collapse)="emit({type: 'collapse'})"></app-call-profile>
-        <div class="call-card-content">
+    <app-call-surface-frame [collapsible]="isOngoing(callState)" [compact]="!full" [screenSharing]="!!(callState.screenShareStream || callState.remoteScreenStream)" [collapseLabel]="'Minimize call'" [incoming]="callState.phase === 'incoming'" frameClass="call-card" label="Direct audio call" (collapse)="emit({type: 'collapse'})">
+        <app-call-profile call-profile *ngIf="profile as directProfile" [profile]="directProfile"></app-call-profile>
+        <div call-body class="call-card-content">
             <div class="call-sharing-indicator" *ngIf="callState.screenShareStream || callState.remoteScreenStream" role="status" aria-live="polite">
                 <span class="call-sharing-dot" aria-hidden="true"></span>
                 <span class="call-sharing-copy">
@@ -29,8 +29,10 @@
             <app-call-device-controls class="call-devices" *ngIf="isOngoing(callState)" [controls]="controls" [panelClass]="panelClass" [qualityPickerEnabled]="true" [showShareAudioOption]="callState.phase === 'active'" [shareAudioChecked]="callState.screenShareAudioEnabled" [shareAudioDisabled]="!screenShareSupported || callState.screenShareTransition || !!callState.screenShareStream" [shareAudioTooltip]="shareAudioTooltip(callState)" (controlChange)="emit({type: 'control-change', change: $event})" (shareAudioChange)="emit({type: 'screen-share-audio-change', enabled: $event})"></app-call-device-controls>
             <p class="call-device-note" *ngIf="isOngoing(callState) && !outputSelectionSupported">Speaker selection is unavailable in this browser; use the system audio output.</p>
         </div>
-        <div class="call-actions">
-            <app-copy-support-reference *ngIf="callState.supportRef && isOngoing(callState)" [reference]="callState.supportRef"></app-copy-support-reference>
+        <div call-support *ngIf="callState.supportRef && isOngoing(callState)">
+            <app-copy-support-reference [reference]="callState.supportRef" [compact]="true"></app-copy-support-reference>
+        </div>
+        <div call-actions class="call-actions">
             <button mat-flat-button color="primary" type="button" *ngIf="callState.phase === 'incoming'" (click)="emit({type: 'accept'})">Accept</button>
             <button mat-stroked-button type="button" *ngIf="callState.phase === 'incoming'" (click)="emit({type: 'decline'})">Decline</button>
             <button mat-stroked-button type="button" *ngIf="callState.phase === 'outgoing' || callState.phase === 'requesting'" (click)="emit({type: 'cancel'})">Cancel</button>
@@ -41,5 +43,5 @@
                 <app-call-icon-actions [appearance]="'round'" [actions]="actions | slice:1" (action)="emit({type: 'action', actionID: $event})"></app-call-icon-actions>
             </div>
         </div>
-    </div>
+    </app-call-surface-frame>
 </ng-container>

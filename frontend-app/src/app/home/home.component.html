@@ -5,12 +5,7 @@
             <button type="button" class="new-group-button" (click)="openGroupCreation()" aria-label="Create group">New group</button>
         </div>
         <p class="group-settings-error" *ngIf="departedGroupRefreshFailed && !showDepartedGroupStatus" role="alert">{{ groupMembershipRefreshError || 'Could not refresh group membership.' }} The group is hidden until access is verified. <button mat-button type="button" (click)="refreshChats()">Refresh chats</button></p>
-        <div class="call-minimized-banner call-minimized-banner-rail" [class.call-minimized-sharing-active]="call.state.screenShareStream || call.state.remoteScreenStream" *ngIf="isCallMinimized()" role="status">
-            <button type="button" class="call-minimized-summary" [attr.aria-label]="'Return to call with ' + callDisplayName()" (click)="restoreCall()">
-                <span><strong>Call with {{ callDisplayName() }}</strong><small><span class="call-minimized-sharing-label" *ngIf="call.state.screenShareStream || call.state.remoteScreenStream">Sharing screen · </span>{{ callDurationLabel() }}</small></span>
-            </button>
-            <app-copy-support-reference *ngIf="call.state.supportRef" [reference]="call.state.supportRef"></app-copy-support-reference><button type="button" class="call-minimized-end" aria-label="End ongoing call" (click)="call.end()">End</button>
-        </div>
+        <app-minimized-call-banner *ngIf="isCallMinimized() && !selectedConversation" variant="rail" [title]="'Call with ' + callDisplayName()" [detail]="callDurationLabel()" [restoreLabel]="'Return to call with ' + callDisplayName()" [endLabel]="'End ongoing call'" [supportReference]="call.state.supportRef || ''" [sharing]="!!(call.state.screenShareStream || call.state.remoteScreenStream)" (restore)="restoreCall()" (end)="call.end()"></app-minimized-call-banner>
 
         <mat-form-field class="search-field" appearance="outline">
             <mat-label>Search people</mat-label>
@@ -51,12 +46,6 @@
     </aside>
 
     <main class="chat-panel">
-        <div class="call-minimized-banner call-minimized-banner-chat" [class.call-minimized-sharing-active]="call.state.screenShareStream || call.state.remoteScreenStream" *ngIf="isCallMinimized()" role="status">
-            <button type="button" class="call-minimized-summary" [attr.aria-label]="'Return to call with ' + callDisplayName()" (click)="restoreCall()">
-                <span><strong>Call with {{ callDisplayName() }}</strong><small><span class="call-minimized-sharing-label" *ngIf="call.state.screenShareStream || call.state.remoteScreenStream">Sharing screen · </span>{{ callDurationLabel() }}</small></span>
-            </button>
-            <app-copy-support-reference *ngIf="call.state.supportRef" [reference]="call.state.supportRef"></app-copy-support-reference><button type="button" class="call-minimized-end" aria-label="End ongoing call" (click)="call.end()">End</button>
-        </div>
         <header class="chat-header" *ngIf="!isCreatingGroup">
             <div class="chat-identity">
                 <button class="back-button" mat-icon-button aria-label="Back to chats" (click)="closeConversation()"><zwei-icon name="arrow_back"></zwei-icon></button>
@@ -66,6 +55,7 @@
             <button class="call-button" *ngIf="selectedConversation?.kind === 'direct'" mat-icon-button type="button" aria-label="Start audio call" (click)="startCall()" [disabled]="!selectedConversation || !socketReady || (call.state$ | async)?.phase === 'connecting' || (call.state$ | async)?.phase === 'active'"><zwei-icon name="call"></zwei-icon></button>
             <button class="call-button" *ngIf="selectedConversation?.kind === 'group' && !selectedConversation.accessNeedsVerification" mat-icon-button type="button" aria-label="Join or start group audio call" (click)="startGroupCall()" [disabled]="!socketReady || groupCall?.isOngoing || groupCall?.state.phase === 'requesting' || groupCall?.state.phase === 'joining'"><zwei-icon name="group"></zwei-icon></button>
         </header>
+        <app-minimized-call-banner *ngIf="isCallMinimized() && selectedConversation" variant="chat" [title]="'Call with ' + callDisplayName()" [detail]="callDurationLabel()" [restoreLabel]="'Return to call with ' + callDisplayName()" [endLabel]="'End ongoing call'" [supportReference]="call.state.supportRef || ''" [sharing]="!!(call.state.screenShareStream || call.state.remoteScreenStream)" (restore)="restoreCall()" (end)="call.end()"></app-minimized-call-banner>
         <p class="group-settings-loading group-access-status" *ngIf="departedGroupRefreshPending && showDepartedGroupStatus" role="status">Checking group access… Private content is hidden until access is verified.</p>
         <p class="group-settings-error" *ngIf="departedGroupRefreshFailed && showDepartedGroupStatus" role="alert">{{ groupMembershipRefreshError || 'Could not refresh group membership.' }} The group is hidden until access is verified. <button mat-button type="button" (click)="refreshChats()">Refresh chats</button></p>
         <p class="group-settings-error" *ngIf="groupMembershipRefreshError && groupMembershipRefreshErrorConversationID === selectedConversation?.id && selectedConversation?.kind === 'group'" role="alert">{{ groupMembershipRefreshError }} <button mat-button type="button" (click)="refreshChats()">Refresh chats</button></p>
@@ -78,10 +68,7 @@
                 <p class="group-settings-error" *ngIf="groupError" role="alert">{{ groupError }}</p><span class="group-settings-loading" *ngIf="groupLoading" role="status">Saving group settings…</span><section class="group-settings-section group-danger-zone"><div><h3>Group access</h3><p>Leaving removes this group from your chat list. Deleting removes it for everyone.</p></div><div class="group-danger-actions"><button type="button" (click)="leaveGroup()" [disabled]="groupLoading">Leave group</button><button type="button" *ngIf="canDeleteGroup()" (click)="deleteGroup()" [disabled]="groupLoading">Delete group</button></div></section>
             </div>
         </section>
-        <div class="group-call-minimized call-minimized-banner" *ngIf="groupCall?.isOngoing && groupCallMinimized" role="status">
-            <button type="button" class="call-minimized-summary" aria-label="Return to group call" (click)="restoreGroupCall()"><span><strong>Group call in progress</strong><small><span *ngIf="groupCall.state.sharing" class="call-minimized-sharing-label">Sharing screen ·</span>{{ groupCall.state.statusLabel }}</small></span></button>
-            <app-copy-support-reference *ngIf="groupCall.state.supportRef" [reference]="groupCall.state.supportRef" [compact]="true"></app-copy-support-reference><button type="button" class="call-minimized-end" aria-label="End group call for everyone" title="End group call for everyone" matTooltip="End group call for everyone" matTooltipClass="group-call-end-tooltip" matTooltipPosition="below" (click)="onGroupCallSurfaceIntent({type: 'end'})">End group call</button>
-        </div>
+        <app-minimized-call-banner *ngIf="groupCall?.isOngoing && groupCallMinimized" variant="group" [title]="'Group call in progress'" [detail]="groupCall.state.statusLabel" restoreLabel="Return to group call" endLabel="End group call for everyone" endText="End group call" [supportReference]="groupCall.state.supportRef || ''" [sharing]="groupCall.state.sharing" (restore)="restoreGroupCall()" (end)="onGroupCallSurfaceIntent({type: 'end'})"></app-minimized-call-banner>
         <ng-container *ngIf="groupCall">
         <ng-container *ngIf="groupCall.state$ | async as groupCallState">
         <app-call-terminal-notice *ngIf="showGroupCallTerminalNotice(groupCallState)" [message]="groupCallState.statusLabel" [error]="!!groupCallState.errorLabel" [group]="true" [supportRef]="groupCallState.supportRef"></app-call-terminal-notice>
@@ -89,14 +76,15 @@
         </ng-container>
         </ng-container>
         <ng-container *ngIf="call.state$ | async as directCallState">
-            <app-call-terminal-notice *ngIf="directCallState.phase === 'ended' || directCallState.phase === 'error'" [message]="directCallState.statusLabel" [error]="!!directCallState.errorLabel" [supportRef]="directCallState.supportRef"></app-call-terminal-notice>
+            <app-call-terminal-notice *ngIf="directCallState.phase === 'ended' || directCallState.phase === 'error'" [message]="directCallProfile().status" [error]="!!directCallState.errorLabel" [supportRef]="directCallState.supportRef"></app-call-terminal-notice>
             <app-direct-call-surface
-                *ngIf="directCallState.phase !== 'idle'"
+                *ngIf="shouldRenderDirectCallSurface(directCallState.phase)"
                 class="call-panel"
                 [class.call-panel-full]="isCallSurfaceVisible()"
                 [class.call-panel-minimized]="isCallMinimized()"
                 [class.call-screen-active]="directCallState.screenShareStream || directCallState.remoteScreenStream"
                 [state]="directCallState"
+                [full]="isCallSurfaceVisible()"
                 [profile]="directCallProfile()"
                 [controls]="directCallControls()"
                 [actions]="directCallActions()"

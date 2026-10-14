@@ -457,6 +457,10 @@ export class HomeComponent implements OnInit, OnDestroy {
         return this.isOngoingCall() && !this.callMinimized;
     }
 
+    public shouldRenderDirectCallSurface(phase: CallState['phase']): boolean {
+        return phase !== 'idle' && phase !== 'ended' && phase !== 'error';
+    }
+
     public isCallMinimized(): boolean {
         return this.isOngoingCall() && this.callMinimized;
     }

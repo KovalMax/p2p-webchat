@@ -77,8 +77,10 @@ describe('GroupCallSurfaceComponent', () => {
         expect(activeControls?.querySelectorAll('app-call-icon-actions')).toHaveLength(2);
         expect(surface.querySelector('.group-call-end-button')?.getAttribute('aria-label')).toBe('End group call for everyone');
         expect(surface.querySelector('.group-call-leave')?.textContent.trim()).toBe('Leave call');
+        expect(surface.querySelector('.group-call-supplemental-actions')?.getAttribute('aria-label')).toBe('Additional group call actions');
+        expect(surface.querySelector('.group-call-active-controls')?.contains(surface.querySelector('.group-call-leave'))).toBe(false);
         expect(surface.querySelector('.group-call-enable-sound')?.textContent.trim()).toBe('Enable sound');
-        expect(surface.querySelector('.group-call-collapse-button')?.getAttribute('aria-label')).toBe('Minimize group call');
+        expect(surface.querySelector('.zwei-call-frame-collapse')?.getAttribute('aria-label')).toBe('Minimize group call');
 
         surface.querySelector<HTMLButtonElement>('.group-call-action-mute button')?.click();
         surface.querySelector<HTMLButtonElement>('.group-call-action-share button')?.click();
@@ -90,7 +92,7 @@ describe('GroupCallSurfaceComponent', () => {
         surface.querySelector<HTMLButtonElement>('.group-call-enable-sound')?.click();
         surface.querySelector<HTMLButtonElement>('.group-call-end-button')?.click();
         surface.querySelector<HTMLButtonElement>('.group-call-leave')?.click();
-        surface.querySelector<HTMLButtonElement>('.group-call-collapse-button')?.click();
+        surface.querySelector<HTMLButtonElement>('.zwei-call-frame-collapse')?.click();
         expect(intents).toEqual([
             { type: 'action', actionID: 'mute' },
             { type: 'action', actionID: 'screen-share' },
@@ -106,7 +108,7 @@ describe('GroupCallSurfaceComponent', () => {
         fixture.componentRef.setInput('state', {...activeState(), supportRef: 'group-ref-1'});
         fixture.componentRef.setInput('ongoing', true);
         fixture.detectChanges();
-        const copy = fixture.nativeElement.querySelector('.group-call-header app-copy-support-reference button') as HTMLButtonElement | null;
+        const copy = fixture.nativeElement.querySelector('.group-call-support app-copy-support-reference button') as HTMLButtonElement | null;
         expect(copy?.getAttribute('aria-label')).toBe('Copy support reference');
         expect(copy?.querySelector('zwei-icon svg path')?.getAttribute('d')).toBeTruthy();
         expect(copy?.textContent?.trim()).toBe('');
@@ -114,21 +116,16 @@ describe('GroupCallSurfaceComponent', () => {
 
         fixture.componentRef.setInput('state', activeState());
         fixture.detectChanges();
-        expect(fixture.nativeElement.querySelector('.group-call-header app-copy-support-reference')).toBeNull();
+        expect(fixture.nativeElement.querySelector('.group-call-support app-copy-support-reference')).toBeNull();
     });
 
-    it('clears copy failure layout state when a call ends and a new reference arrives', () => {
+    it('keeps the compact support-reference control in the shared footer', () => {
         fixture.componentRef.setInput('state', {...activeState(), supportRef: 'group-ref-1'});
         fixture.componentRef.setInput('ongoing', true);
         fixture.detectChanges();
-        component.supportReferenceCopyFailed = true;
-
-        fixture.componentRef.setInput('state', {...activeState(), phase: 'ended', supportRef: 'group-ref-1'});
-        fixture.detectChanges();
-        fixture.componentRef.setInput('state', {...activeState(), supportRef: 'group-ref-2'});
-        fixture.detectChanges();
-
-        expect(component.supportReferenceCopyFailed).toBe(false);
+        const footer = fixture.nativeElement.querySelector('.zwei-call-frame-footer') as HTMLElement | null;
+        const support = footer?.querySelector('.group-call-support app-copy-support-reference');
+        expect(support).not.toBeNull();
     });
 
     it('keeps Join and room End separate before a local participant joins', () => {

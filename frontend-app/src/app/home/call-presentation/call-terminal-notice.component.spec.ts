@@ -15,7 +15,9 @@ describe('CallTerminalNoticeComponent', () => {
     it('offers copy for a server reference and gracefully omits it for a legacy notice', () => {
         fixture.componentRef.setInput('supportRef', 'server-ref-1');
         fixture.detectChanges();
-        expect(fixture.nativeElement.querySelector('app-copy-support-reference button')?.textContent).toContain('Copy support reference');
+        const copyButton = fixture.nativeElement.querySelector('app-copy-support-reference button') as HTMLButtonElement;
+        expect(copyButton.getAttribute('aria-label')).toBe('Copy support reference');
+        expect(copyButton.textContent?.trim()).toBe('');
 
         fixture.componentRef.setInput('supportRef', undefined);
         fixture.detectChanges();

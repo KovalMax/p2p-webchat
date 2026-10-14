@@ -1,0 +1,11 @@
+<section class="zwei-call-frame" [class.zwei-call-frame-incoming]="incoming" [class.zwei-call-frame-sharing-active]="screenSharing" [class.call-card-incoming]="incoming" [class.zwei-call-frame-compact]="compact" [ngClass]="frameClass" [attr.aria-label]="label" aria-live="polite">
+    <header class="zwei-call-frame-header">
+        <ng-content select="[call-profile]"></ng-content>
+        <button *ngIf="collapsible" class="zwei-call-frame-collapse call-collapse-button" mat-icon-button type="button" [attr.aria-label]="collapseLabel" [attr.title]="(narrowViewport$ | async) ? null : collapseLabel" [matTooltip]="collapseLabel" [matTooltipDisabled]="narrowViewport$ | async" matTooltipPosition="above" (click)="collapse.emit()"><zwei-icon name="expand_more"></zwei-icon></button>
+    </header>
+    <div class="zwei-call-frame-body"><ng-content select="[call-body]"></ng-content></div>
+    <footer class="zwei-call-frame-footer">
+        <ng-content select="[call-support]"></ng-content>
+        <ng-content select="[call-actions]"></ng-content>
+    </footer>
+</section>

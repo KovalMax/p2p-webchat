@@ -145,6 +145,15 @@ describe('HomeComponent', () => {
         home.ngOnDestroy();
     });
 
+    it('renders the direct-call surface only before terminal phases', () => {
+        expect(component.shouldRenderDirectCallSurface('idle')).toBe(false);
+        expect(component.shouldRenderDirectCallSurface('ended')).toBe(false);
+        expect(component.shouldRenderDirectCallSurface('error')).toBe(false);
+        for (const phase of ['requesting', 'outgoing', 'incoming', 'connecting', 'active'] as const) {
+            expect(component.shouldRenderDirectCallSurface(phase), `${phase} call surface should remain visible`).toBe(true);
+        }
+    });
+
     it('renders the recipient-offline explanation from authoritative absence in presence', () => {
         const call = { state: { phase: 'error', statusLabel: 'Call unavailable.', errorLabel: 'Call unavailable.' }, close: () => undefined } as unknown as CallFacade;
         const home = createHomeComponent({} as ConversationService, {} as AuthService, { markForCheck: vi.fn().mockName('markForCheck') } as unknown as ChangeDetectorRef, { close: () => undefined } as DataProviderService, call);

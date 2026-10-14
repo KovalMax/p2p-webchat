@@ -23,12 +23,12 @@ describe('DirectCallSurfaceComponent', () => {
         fixture.componentRef.setInput('state', incomingState);
         fixture.detectChanges();
 
-        expect(fixture.nativeElement.querySelector('.call-card.call-card-incoming')).not.toBeNull();
+        expect(fixture.nativeElement.querySelector('.zwei-call-frame.zwei-call-frame-incoming')).not.toBeNull();
 
         fixture.componentRef.setInput('state', {...incomingState, phase: 'active'});
         fixture.detectChanges();
 
-        expect(fixture.nativeElement.querySelector('.call-card-incoming')).toBeNull();
+        expect(fixture.nativeElement.querySelector('.zwei-call-frame-incoming')).toBeNull();
     });
 
     it('keeps unsupported screen-share audio visible, disabled, and accessibly explained', () => {
@@ -82,7 +82,9 @@ describe('DirectCallSurfaceComponent', () => {
         };
         fixture.componentRef.setInput('state', state);
         fixture.detectChanges();
-        expect(fixture.nativeElement.querySelector('app-copy-support-reference button')?.textContent).toContain('Copy support reference');
+        const copyButton = fixture.nativeElement.querySelector('app-copy-support-reference button') as HTMLButtonElement;
+        expect(copyButton.getAttribute('aria-label')).toBe('Copy support reference');
+        expect(copyButton.textContent?.trim()).toBe('');
 
         fixture.componentRef.setInput('state', {...state, supportRef: undefined});
         fixture.detectChanges();
@@ -103,7 +105,7 @@ describe('DirectCallSurfaceComponent', () => {
 
         fixture.nativeElement.querySelector('.direct-call-control-row [aria-label="Mute microphone"]').click();
         fixture.nativeElement.querySelector('.direct-call-end-button').click();
-        fixture.nativeElement.querySelector('.call-direct-collapse-button').click();
+        fixture.nativeElement.querySelector('.zwei-call-frame-collapse').click();
 
         expect(intents).toEqual([
             { type: 'action', actionID: 'mute' },
