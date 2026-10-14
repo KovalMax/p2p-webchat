@@ -11,6 +11,11 @@ async function flushTooltipFrame(): Promise<void> {
     await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
 }
 
+async function flushScrollTooltipRecovery(): Promise<void> {
+    await new Promise(resolve => setTimeout(resolve, 275));
+    await flushTooltipFrame();
+}
+
 describe('GroupMemberListComponent', () => {
     const member: GroupMember = { userId: 'member-1', displayName: 'Member', role: 'member', visibleFromSequence: 1, joinedAt: '2026-01-01T00:00:00Z' };
     let component: GroupMemberListComponent;
@@ -81,10 +86,12 @@ describe('GroupMemberListComponent', () => {
         component.hideTooltips();
         expect(tooltip.disabled).toBe(true);
         button?.focus();
+        expect(tooltip.disabled).toBe(true);
+        await flushScrollTooltipRecovery();
         expect(tooltip.disabled).toBe(false);
     });
 
-    it('re-enables a keyboard tooltip when focus follows hideTooltips', async () => {
+    it('does not gate focus after hideTooltips when no tooltip lifecycle needs settling', async () => {
         component.members = [member];
         component.actionsForMember = () => [{ id: 'make-admin', label: 'Make admin', ariaLabel: 'Make Member an admin', icon: 'badge' }];
         fixture.detectChanges();
@@ -98,6 +105,26 @@ describe('GroupMemberListComponent', () => {
 
         expect(tooltip.disabled).toBe(false);
         await flushTooltipFrame();
+        expect(show).toHaveBeenCalledWith(0);
+    });
+
+    it('settles a scroll dismissal that overlaps a blur-owned tooltip hide', async () => {
+        component.members = [member];
+        component.actionsForMember = () => [{ id: 'make-admin', label: 'Make admin', ariaLabel: 'Make Member an admin', icon: 'badge' }];
+        fixture.detectChanges();
+        const button = fixture.nativeElement.querySelector('.member-action-button') as HTMLButtonElement;
+        const tooltip = fixture.debugElement.query(By.directive(MatTooltip)).injector.get(MatTooltip);
+        const show = vi.spyOn(tooltip, 'show').mockReturnValue(undefined);
+
+        component.showTooltipOnFocus(tooltip);
+        await flushTooltipFrame();
+        component.hideTooltipOnBlur(tooltip);
+        component.hideTooltips();
+        button.focus();
+
+        expect(tooltip.disabled).toBe(true);
+        await flushScrollTooltipRecovery();
+        expect(tooltip.disabled).toBe(false);
         expect(show).toHaveBeenCalledWith(0);
     });
 
@@ -141,7 +168,7 @@ describe('GroupMemberListComponent', () => {
         document.body.appendChild(unrelatedScroller);
         unrelatedScroller.dispatchEvent(new Event('scroll'));
         unrelatedScroller.remove();
-        await flushTooltipFrame();
+        await flushScrollTooltipRecovery();
         expect(tooltip.disabled).toBe(false);
         expect(show).toHaveBeenCalledWith(0);
     });
@@ -333,11 +360,122 @@ describe('GroupMemberListComponent', () => {
 
         component.showTooltipOnFocus(tooltips[0]);
 
-        expect(tooltips[0].disabled).toBe(false);
+        expect(tooltips[0].disabled).toBe(true);
         expect(tooltips[1].disabled).toBe(true);
-        await flushTooltipFrame();
+        await flushScrollTooltipRecovery();
+        expect(tooltips[0].disabled).toBe(false);
         expect(show).toHaveBeenCalledTimes(1);
         expect(show).toHaveBeenCalledWith(0);
+    });
+
+    it('keeps tooltip lifecycle ownership through leave, scroll dismissal, and immediate focus recovery', async () => {
+        component.members = [member];
+        component.actionsForMember = () => [{ id: 'remove-member', label: 'Remove', ariaLabel: 'Remove Member', icon: 'badge' }];
+        fixture.detectChanges();
+        const button = fixture.nativeElement.querySelector('.member-action-button') as HTMLButtonElement;
+        const list = fixture.nativeElement.querySelector('.group-members') as HTMLUListElement;
+        const tooltip = fixture.debugElement.query(By.directive(MatTooltip)).injector.get(MatTooltip);
+
+        component.showTooltipOnHover(tooltip);
+        await new Promise(resolve => setTimeout(resolve, 250));
+        expect(document.querySelector('.cdk-overlay-container .mat-mdc-tooltip')?.classList.contains('mat-mdc-tooltip-show')).toBe(true);
+
+        // Leave schedules MatTooltip.hide() for the next frame and clears the
+        // active owner. A scroll in that gap must still own the pending hide.
+        component.hideTooltipOnLeave(tooltip);
+        list.dispatchEvent(new Event('scroll'));
+        fixture.detectChanges();
+        button.focus();
+        expect(tooltip.disabled).toBe(true);
+        // A second captured scroll can arrive before the first hide settles.
+        // It must restart, not strand, the pending lifecycle gate.
+        list.dispatchEvent(new Event('scroll'));
+        button.blur();
+        button.focus();
+        expect(tooltip.disabled).toBe(true);
+        component.showTooltipOnHover(tooltip);
+        expect(tooltip.disabled).toBe(true);
+        fixture.detectChanges();
+
+        await new Promise(resolve => setTimeout(resolve, 25));
+        expect(tooltip.disabled).toBe(true);
+        expect(document.querySelector('.cdk-overlay-container .mat-mdc-tooltip-show')).toBeNull();
+        await new Promise(resolve => setTimeout(resolve, 25));
+        expect(document.querySelector('.cdk-overlay-container .mat-mdc-tooltip-show')).toBeNull();
+
+        await new Promise(resolve => setTimeout(resolve, 250));
+        await new Promise(resolve => setTimeout(resolve, 100));
+        const panel = document.querySelector('.cdk-overlay-container .mat-mdc-tooltip') as HTMLElement | null;
+        expect(panel?.classList.contains('mat-mdc-tooltip-show')).toBe(true);
+        expect(panel ? Number.parseFloat(getComputedStyle(panel).opacity) : 0).toBeGreaterThanOrEqual(.95);
+        expect(document.querySelectorAll('.cdk-overlay-container .mat-mdc-tooltip')).toHaveLength(1);
+    });
+
+    it('holds the native tooltip disabled through the latest scroll settle and shows only the latest intent', async () => {
+        component.members = [member];
+        component.actionsForMember = () => [
+            { id: 'make-admin', label: 'Make admin', ariaLabel: 'Make Member an admin', icon: 'badge' },
+            { id: 'remove-member', label: 'Remove', ariaLabel: 'Remove Member', icon: 'badge' },
+        ];
+        fixture.detectChanges();
+        const tooltips = fixture.debugElement.queryAll(By.directive(MatTooltip)).map(element => element.injector.get(MatTooltip));
+        const [firstTooltip, secondTooltip] = tooltips;
+        if (!firstTooltip || !secondTooltip) throw new Error('Expected two member action tooltips');
+        const firstShow = vi.spyOn(firstTooltip, 'show').mockReturnValue(undefined);
+        const secondShow = vi.spyOn(secondTooltip, 'show').mockReturnValue(undefined);
+
+        component.showTooltipOnFocus(secondTooltip);
+        component.hideTooltips();
+        component.showTooltipOnFocus(secondTooltip);
+        fixture.detectChanges();
+
+        expect(firstTooltip.disabled).toBe(true);
+        expect(secondTooltip.disabled).toBe(true);
+        await new Promise(resolve => setTimeout(resolve, 150));
+        component.hideTooltips();
+        component.showTooltipOnFocus(secondTooltip);
+        expect(secondTooltip.disabled).toBe(true);
+        await new Promise(resolve => setTimeout(resolve, 150));
+        expect(secondTooltip.disabled).toBe(true);
+        expect(firstShow).not.toHaveBeenCalled();
+        expect(secondShow).not.toHaveBeenCalled();
+        await flushScrollTooltipRecovery();
+        expect(secondTooltip.disabled).toBe(false);
+        await flushTooltipFrame();
+        expect(firstShow).not.toHaveBeenCalled();
+        expect(secondShow).toHaveBeenCalledTimes(1);
+        expect(secondShow).toHaveBeenCalledWith(0);
+    });
+
+    it('recovers after scroll dismissal when Material animations are disabled', async () => {
+        component.members = [member];
+        component.actionsForMember = () => [{ id: 'remove-member', label: 'Remove', ariaLabel: 'Remove Member', icon: 'badge' }];
+        fixture.detectChanges();
+        const button = fixture.nativeElement.querySelector('.member-action-button') as HTMLButtonElement;
+        const list = fixture.nativeElement.querySelector('.group-members') as HTMLUListElement;
+        const tooltip = fixture.debugElement.query(By.directive(MatTooltip)).injector.get(MatTooltip);
+
+        component.showTooltipOnHover(tooltip);
+        await new Promise(resolve => setTimeout(resolve, 250));
+        const panel = document.querySelector('.cdk-overlay-container .mat-mdc-tooltip') as HTMLElement | null;
+        expect(panel).not.toBeNull();
+        if (!panel) return;
+        const reducedMotionStyles = document.createElement('style');
+        reducedMotionStyles.textContent = '.mat-mdc-tooltip { animation-duration: 0s !important; }';
+        document.head.appendChild(reducedMotionStyles);
+
+        component.hideTooltipOnLeave(tooltip);
+        list.dispatchEvent(new Event('scroll'));
+        fixture.detectChanges();
+        button.focus();
+        expect(tooltip.disabled).toBe(true);
+
+        await new Promise(resolve => setTimeout(resolve, 300));
+        const recoveredPanel = document.querySelector('.cdk-overlay-container .mat-mdc-tooltip');
+        expect(recoveredPanel?.classList.contains('mat-mdc-tooltip-show')).toBe(true);
+        expect(recoveredPanel ? Number.parseFloat(getComputedStyle(recoveredPanel).opacity) : 0).toBeGreaterThanOrEqual(.95);
+        expect(document.querySelectorAll('.cdk-overlay-container .mat-mdc-tooltip')).toHaveLength(1);
+        reducedMotionStyles.remove();
     });
 
     it('preserves a newer hover when the previous action leaves afterward', async () => {
@@ -361,7 +499,7 @@ describe('GroupMemberListComponent', () => {
         expect(removeShow).toHaveBeenCalledWith(0);
     });
 
-    it('does not show a queued tooltip after its action directive is removed', async () => {
+    it('does not show or retain a pending tooltip after its action directive is removed during scroll settle', async () => {
         component.members = [member];
         component.actionsForMember = () => [
             { id: 'make-admin', label: 'Make admin', ariaLabel: 'Make Member an admin', icon: 'badge' },
@@ -372,10 +510,55 @@ describe('GroupMemberListComponent', () => {
         const show = vi.spyOn(removedTooltip, 'show').mockReturnValue(undefined);
 
         component.showTooltipOnFocus(removedTooltip);
+        component.hideTooltips();
+        component.showTooltipOnFocus(removedTooltip);
         component.actionsForMember = () => [{ id: 'remove-member', label: 'Remove', ariaLabel: 'Remove Member', icon: 'badge' }];
         fixture.detectChanges();
-        await flushTooltipFrame();
+        await flushScrollTooltipRecovery();
 
         expect(show).not.toHaveBeenCalled();
+    });
+
+    it('cancels a queued tooltip hide when the component is destroyed', async () => {
+        component.members = [member];
+        component.actionsForMember = () => [{ id: 'remove-member', label: 'Remove', ariaLabel: 'Remove Member', icon: 'badge' }];
+        fixture.detectChanges();
+        const tooltip = fixture.debugElement.query(By.directive(MatTooltip)).injector.get(MatTooltip);
+        const hide = vi.spyOn(tooltip, 'hide').mockReturnValue(undefined);
+
+        component.showTooltipOnHover(tooltip);
+        component.hideTooltipOnLeave(tooltip);
+        fixture.destroy();
+        await flushTooltipFrame();
+
+        expect(hide).not.toHaveBeenCalled();
+    });
+
+    it('cancels a queued hide frame on scroll so it cannot hide a recovered tooltip later', async () => {
+        component.members = [member];
+        component.actionsForMember = () => [{ id: 'remove-member', label: 'Remove', ariaLabel: 'Remove Member', icon: 'badge' }];
+        fixture.detectChanges();
+        const button = fixture.nativeElement.querySelector('.member-action-button') as HTMLButtonElement;
+        const tooltip = fixture.debugElement.query(By.directive(MatTooltip)).injector.get(MatTooltip);
+        const hide = vi.spyOn(tooltip, 'hide').mockReturnValue(undefined);
+        let delayedHide: FrameRequestCallback | undefined;
+        const requestFrame = vi.spyOn(window, 'requestAnimationFrame').mockImplementation(callback => {
+            delayedHide = callback;
+            return 97;
+        });
+
+        component.showTooltipOnHover(tooltip);
+        component.hideTooltipOnLeave(tooltip);
+        requestFrame.mockRestore();
+        expect(delayedHide).toBeDefined();
+
+        component.hideTooltips();
+        button.focus();
+        await flushScrollTooltipRecovery();
+        expect(tooltip.disabled).toBe(false);
+        const hidesBeforeStaleCallback = hide.mock.calls.length;
+        delayedHide?.(performance.now());
+
+        expect(hide).toHaveBeenCalledTimes(hidesBeforeStaleCallback);
     });
 });
