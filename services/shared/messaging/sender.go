@@ -3,6 +3,7 @@ package messaging
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"strings"
 	"time"
@@ -28,10 +29,18 @@ func NewSender(db *pgxpool.Pool, encryptionSecret string) *Sender {
 
 // Send commits a message before returning it. Duplicate client IDs return the original message only within the same conversation.
 func (s *Sender) Send(ctx context.Context, request SendRequest) (Message, bool, error) {
+	var ok bool
+	request.Mentions, ok = NormalizeMentionOffsets(request.Body, request.Mentions)
+	if !ok {
+		return Message{}, false, ErrInvalidMention
+	}
 	request.ClientMessageID = strings.TrimSpace(request.ClientMessageID)
 	request.Body = strings.TrimSpace(request.Body)
 	if request.SenderID == uuid.Nil || request.ConversationID == uuid.Nil || request.ClientMessageID == "" || len(request.ClientMessageID) > 128 || request.Body == "" || len(request.Body) > 4096 {
 		return Message{}, false, ErrInvalidMessage
+	}
+	if !ValidateMentions(request.Body, request.Mentions) {
+		return Message{}, false, ErrInvalidMention
 	}
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -49,9 +58,9 @@ func (s *Sender) Send(ctx context.Context, request SendRequest) (Message, bool, 
 	}
 
 	var result Message
-	var ciphertext, nonce []byte
+	var ciphertext, nonce, mentionsCiphertext, mentionsNonce []byte
 	var expiresAt *time.Time
-	err = tx.QueryRow(ctx, `SELECT id, conversation_id, sender_id, client_message_id, sequence, ciphertext, nonce, created_at, kind, expires_at FROM messages WHERE sender_id = $1 AND client_message_id = $2`, request.SenderID, request.ClientMessageID).Scan(&result.ID, &result.ConversationID, &result.SenderID, &result.ClientMessageID, &result.Sequence, &ciphertext, &nonce, &result.CreatedAt, &result.Kind, &expiresAt)
+	err = tx.QueryRow(ctx, `SELECT id, conversation_id, sender_id, client_message_id, sequence, ciphertext, nonce, mentions_ciphertext, mentions_nonce, created_at, kind, expires_at FROM messages WHERE sender_id = $1 AND client_message_id = $2`, request.SenderID, request.ClientMessageID).Scan(&result.ID, &result.ConversationID, &result.SenderID, &result.ClientMessageID, &result.Sequence, &ciphertext, &nonce, &mentionsCiphertext, &mentionsNonce, &result.CreatedAt, &result.Kind, &expiresAt)
 	if err == nil {
 		if result.ConversationID != request.ConversationID {
 			return Message{}, false, ErrClientMessageIDConflict
@@ -62,6 +71,16 @@ func (s *Sender) Send(ctx context.Context, request SendRequest) (Message, bool, 
 		result.Body, err = sharedmessage.Decrypt(s.key, ciphertext, nonce)
 		if err != nil {
 			return Message{}, false, ErrPersistence
+		}
+		if len(mentionsCiphertext) > 0 {
+			var mentionJSON string
+			mentionJSON, err = sharedmessage.Decrypt(s.key, mentionsCiphertext, mentionsNonce)
+			if err == nil {
+				err = json.Unmarshal([]byte(mentionJSON), &result.Mentions)
+			}
+			if err != nil {
+				return Message{}, false, ErrPersistence
+			}
 		}
 		result.RecipientIDs, err = s.recipientIDs(ctx, tx, request.SenderID, request.ConversationID)
 		if err != nil {
@@ -96,6 +115,33 @@ func (s *Sender) Send(ctx context.Context, request SendRequest) (Message, bool, 
 	}
 	if err = tx.QueryRow(ctx, `INSERT INTO messages (conversation_id, sender_id, client_message_id, sequence, ciphertext, nonce, encryption_key_version, expires_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id, created_at`, request.ConversationID, request.SenderID, request.ClientMessageID, result.Sequence, ciphertext, nonce, "v1", expires).Scan(&result.ID, &result.CreatedAt); err != nil {
 		return Message{}, false, ErrPersistence
+	}
+	if len(request.Mentions) > 0 {
+		ids := MentionUserIDs(request.Mentions)
+		for _, id := range ids {
+			if id == request.SenderID {
+				return Message{}, false, ErrInvalidMention
+			}
+		}
+		var authorized int
+		if err = tx.QueryRow(ctx, `SELECT count(*) FROM conversation_members WHERE conversation_id = $1 AND active AND user_id = ANY($2)`, request.ConversationID, ids).Scan(&authorized); err != nil {
+			return Message{}, false, ErrPersistence
+		}
+		if authorized != len(ids) {
+			return Message{}, false, ErrInvalidMention
+		}
+		mentionJSON, marshalErr := json.Marshal(request.Mentions)
+		if marshalErr != nil {
+			return Message{}, false, ErrPersistence
+		}
+		mentionsCiphertext, mentionsNonce, err = sharedmessage.Encrypt(s.key, mentionJSON)
+		if err != nil {
+			return Message{}, false, ErrPersistence
+		}
+		if _, err = tx.Exec(ctx, `UPDATE messages SET mentions_ciphertext = $2, mentions_nonce = $3 WHERE id = $1`, result.ID, mentionsCiphertext, mentionsNonce); err != nil {
+			return Message{}, false, ErrPersistence
+		}
+		result.Mentions = append([]Mention(nil), request.Mentions...)
 	}
 	result.RecipientIDs, err = s.recipientIDs(ctx, tx, request.SenderID, request.ConversationID)
 	if err != nil {

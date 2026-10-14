@@ -1,0 +1,7 @@
+<div class="support-reference" [class.support-reference-compact]="compact" *ngIf="reference">
+    <button type="button" [class.support-reference-compact-button]="compact" [attr.aria-label]="compact ? 'Copy support reference' : null" [attr.title]="compact && feedback && !copyFailed ? 'Support reference copied' : compact ? 'Copy support reference' : null" (click)="copy()"><zwei-icon *ngIf="compact" [name]="feedback && !copyFailed ? 'check' : 'content_copy'"></zwei-icon><span *ngIf="!compact">Copy support reference</span></button>
+    <div class="support-reference-details" [class.support-reference-details-success]="compact && !copyFailed" *ngIf="feedback">
+        <span class="support-reference-feedback" role="status" aria-live="polite">{{ feedback }}</span>
+        <code *ngIf="copyFailed" class="support-reference-manual" tabindex="0" aria-label="Support reference, select and copy manually">{{ reference }}</code>
+    </div>
+</div>

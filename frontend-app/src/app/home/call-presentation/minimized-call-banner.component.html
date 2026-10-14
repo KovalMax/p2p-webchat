@@ -1,0 +1,7 @@
+<div class="call-minimized-banner" [class.call-minimized-banner-rail]="variant === 'rail'" [class.call-minimized-banner-chat]="variant === 'chat'" [class.call-minimized-sharing-active]="sharing" role="status">
+    <button type="button" class="call-minimized-summary" [attr.aria-label]="restoreLabel" (click)="restore.emit()">
+        <span><strong>{{ title }}</strong><small><span class="call-minimized-sharing-label" *ngIf="sharing">Sharing screen · </span>{{ detail }}</small></span>
+    </button>
+    <app-copy-support-reference *ngIf="supportReference" [reference]="supportReference" [compact]="true"></app-copy-support-reference>
+    <button type="button" class="call-minimized-end" [attr.aria-label]="endLabel" [attr.title]="variant === 'group' ? endLabel : null" [matTooltip]="endLabel" [matTooltipDisabled]="variant !== 'group'" matTooltipClass="group-call-end-tooltip" matTooltipPosition="below" (click)="end.emit()">{{ endText }}</button>
+</div>

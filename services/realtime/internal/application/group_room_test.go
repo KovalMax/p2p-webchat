@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"sync"
 	"testing"
@@ -294,6 +295,7 @@ func TestGroupCallSyncReturnsOwnedActiveSnapshotOrMinimalTerminalAck(t *testing.
 				RoomID     uuid.UUID `json:"room_id"`
 				Generation int64     `json:"generation"`
 				Status     string    `json:"status"`
+				SupportRef uuid.UUID `json:"support_ref,omitzero"`
 			})
 			if ack.Type != "group.call.synced" || len(client.events) != 1 || payload.RoomID != test.room || payload.Generation != test.generation || payload.Status != GroupRoomEnded {
 				t.Fatalf("terminal event = %#v", ack)
@@ -313,6 +315,7 @@ func TestGroupCallSyncReturnsOwnedActiveSnapshotOrMinimalTerminalAck(t *testing.
 		RoomID     uuid.UUID `json:"room_id"`
 		Generation int64     `json:"generation"`
 		Status     string    `json:"status"`
+		SupportRef uuid.UUID `json:"support_ref,omitzero"`
 	}).Status != GroupRoomEnded {
 		t.Fatalf("removed socket got non-minimal response: %#v", removed.events)
 	}
@@ -339,7 +342,8 @@ func TestGroupCallSignalHoldsMembershipLeaseThroughFanout(t *testing.T) {
 	order := &groupStartOrder{revision: 4, memberIDs: []uuid.UUID{ownerID, memberID}}
 	room := GroupRoom{ID: roomID, ConversationID: conversationID, MembershipRevision: 4, Generation: 1, Status: GroupRoomActive, Participants: []GroupParticipant{{UserID: ownerID, DeviceID: "owner-device", ConnectionID: "owner-socket"}, {UserID: memberID, DeviceID: "member-device", ConnectionID: "member-socket"}}}
 	rooms := &blockingGroupSignalRooms{groupTestRooms: groupTestRooms{room: room}, publishing: make(chan struct{}), continuePublish: make(chan struct{}), order: order}
-	hub := NewHubWithGroupCallAuthorizer(nil, order, order, rooms, nil, nil, nil, nil, nil, nil)
+	var logs bytes.Buffer
+	hub := NewHubWithGroupCallAuthorizer(nil, order, order, rooms, nil, nil, nil, nil, nil, slog.New(slog.NewJSONHandler(&logs, nil)))
 	owner := &recordingClient{identity: sharedauth.Identity{UserID: ownerID, DeviceID: "owner-device"}, connectionID: "owner-socket"}
 	member := &recordingClient{identity: sharedauth.Identity{UserID: memberID, DeviceID: "member-device"}, connectionID: "member-socket"}
 	hub.Add(context.Background(), owner)
@@ -364,6 +368,9 @@ func TestGroupCallSignalHoldsMembershipLeaseThroughFanout(t *testing.T) {
 	close(rooms.continuePublish)
 	if err := <-commandDone; err != nil {
 		t.Fatalf("signal command: %v", err)
+	}
+	if strings.Contains(logs.String(), "group call command accepted") {
+		t.Fatalf("successful group.call.signal emitted lifecycle log: %s", logs.String())
 	}
 	<-revocationCommitted
 	close(allowProjection)
@@ -413,6 +420,26 @@ func TestGroupCallSignalHoldsMembershipLeaseThroughFanout(t *testing.T) {
 	steps := order.snapshot()
 	if !(indexOf(steps, "lease.begin") < indexOf(steps, "signal.publish") && indexOf(steps, "signal.publish") < indexOf(steps, "lease.commit") && indexOf(steps, "lease.commit") < indexOf(steps, "membership.revoke") && indexOf(steps, "membership.revoke") < indexOf(steps, "projection.cleanup")) {
 		t.Fatalf("signal/revocation ordering = %v", steps)
+	}
+}
+
+func TestSuccessfulGroupCallLifecycleCommandRemainsLogged(t *testing.T) {
+	userID, peerID, conversationID, roomID := uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	room := GroupRoom{ID: roomID, ConversationID: conversationID, MembershipRevision: 4, Generation: 1, Status: GroupRoomActive, Participants: []GroupParticipant{
+		{UserID: userID, DeviceID: "owner-device", ConnectionID: "owner-socket"},
+		{UserID: peerID, DeviceID: "peer-device", ConnectionID: "peer-socket"},
+	}}
+	presence := &groupTestPresence{revision: 4, memberIDs: []uuid.UUID{userID, peerID}}
+	rooms := &groupTestRooms{room: room}
+	var logs bytes.Buffer
+	hub := NewHubWithGroupCallAuthorizer(nil, presence, presence, rooms, nil, nil, nil, nil, nil, slog.New(slog.NewJSONHandler(&logs, nil)))
+	owner := &recordingClient{identity: sharedauth.Identity{UserID: userID, DeviceID: "owner-device"}, connectionID: "owner-socket"}
+	request := []byte(`{"version":2,"type":"group.call.join","request_id":"join-lifecycle","payload":{"conversation_id":"` + conversationID.String() + `","room_id":"` + roomID.String() + `","generation":1}}`)
+	if err := hub.HandleVersion(context.Background(), owner, 2, request); err != nil {
+		t.Fatalf("group.call.join: %v", err)
+	}
+	if !strings.Contains(logs.String(), "group call command accepted") || !strings.Contains(logs.String(), "group.call.join") {
+		t.Fatalf("successful group lifecycle command was not logged: %s", logs.String())
 	}
 }
 
@@ -785,7 +812,7 @@ func TestGroupCallEnqueuesLocallyOnlyAfterFanoutAndLeaseRelease(t *testing.T) {
 func TestGroupCommandLocalSignalPrecedesCommittedRevocationProjection(t *testing.T) {
 	ownerID, memberID, conversationID, roomID := uuid.New(), uuid.New(), uuid.New(), uuid.New()
 	lease := &commitNotifyingLease{trackedGroupCallLease: trackedGroupCallLease{revision: 3, members: []uuid.UUID{ownerID, memberID}}, committed: make(chan struct{})}
-	room := GroupRoom{ID: roomID, ConversationID: conversationID, MembershipRevision: 3, Generation: 1, Status: GroupRoomActive, Participants: []GroupParticipant{{UserID: ownerID, DeviceID: "owner-device", ConnectionID: "owner-socket"}, {UserID: memberID, DeviceID: "member-device", ConnectionID: "member-socket"}}}
+	room := GroupRoom{ID: roomID, SupportRef: uuid.New(), ConversationID: conversationID, MembershipRevision: 3, Generation: 1, Status: GroupRoomActive, Participants: []GroupParticipant{{UserID: ownerID, DeviceID: "owner-device", ConnectionID: "owner-socket"}, {UserID: memberID, DeviceID: "member-device", ConnectionID: "member-socket"}}}
 	hub := NewHubWithGroupCallAuthorizer(nil, &groupTestPresence{}, commitNotifyingAuthorizer{lease: lease}, &groupTestRooms{room: room}, nil, nil, nil, nil, nil, nil)
 	owner := &recordingClient{identity: sharedauth.Identity{UserID: ownerID, DeviceID: "owner-device"}, connectionID: "owner-socket"}
 	member := &blockingRecordingClient{recordingClient: recordingClient{identity: sharedauth.Identity{UserID: memberID, DeviceID: "member-device"}, connectionID: "member-socket"}, entered: make(chan struct{}), release: make(chan struct{})}
@@ -815,8 +842,9 @@ func TestGroupCommandLocalSignalPrecedesCommittedRevocationProjection(t *testing
 		t.Fatalf("first event = %#v, want signal", member.events[0])
 	}
 	payload, err := json.Marshal(signal.Payload)
-	if err != nil || !bytes.Contains(payload, []byte(`"sdp":"opaque-test-sdp"`)) {
-		t.Fatalf("signal payload = %s, err=%v", payload, err)
+	wantPayload := `{"room_id":"` + roomID.String() + `","generation":1,"from_user_id":"` + ownerID.String() + `","from_device_id":"owner-device","signal":{"type":"offer","sdp":"opaque-test-sdp"}}`
+	if err != nil || !bytes.Equal(payload, []byte(wantPayload)) {
+		t.Fatalf("signal payload = %s, want %s (err=%v)", payload, wantPayload, err)
 	}
 	projection, ok := member.events[1].(serverEvent)
 	if !ok || projection.Type != "group.membership.changed" {
@@ -1804,7 +1832,8 @@ func (r *cancelingProjectionRooms) GetGroupRoomForConversation(ctx context.Conte
 
 func TestHubNotifiesExpiredGroupRoomParticipants(t *testing.T) {
 	memberID, conversationID, roomID := uuid.New(), uuid.New(), uuid.New()
-	hub := NewHub(nil, &groupTestPresence{}, &groupTestRooms{}, nil, nil, nil, nil)
+	logger := &groupRoomLogCapture{}
+	hub := NewHubWithLogger(nil, &groupTestPresence{}, &groupTestRooms{}, nil, nil, nil, nil, logger)
 	member := &recordingClient{identity: sharedauth.Identity{UserID: memberID, DeviceID: "member"}, connectionID: "member-socket"}
 	hub.Add(context.Background(), member)
 	member.events = nil
@@ -1816,6 +1845,95 @@ func TestHubNotifiesExpiredGroupRoomParticipants(t *testing.T) {
 	event, ok := member.events[0].(serverEvent)
 	if !ok || event.Type != "group.call.ended" {
 		t.Fatalf("expired terminal event = %#v", member.events[0])
+	}
+	if logger.message != "group call expiry terminal event fan-out attempted" || logger.attributes["event"] != "group.call.ended" || logger.attributes["source"] != "expiry_sweep" || logger.attributes["outcome"] != "attempted" || logger.attributes["call_id"] != roomID || logger.attributes["conversation_id"] != conversationID {
+		t.Fatalf("expiry diagnostics = (%q, %#v), want attempted terminal event source and identifiers", logger.message, logger.attributes)
+	}
+}
+
+func TestHubExpiredGroupRoomLockFailureIsObservable(t *testing.T) {
+	conversationID, roomID := uuid.New(), uuid.New()
+	logger := &groupRoomLogCapture{}
+	hub := NewHubWithLogger(nil, &groupTestPresence{}, &groupTestRooms{}, nil, nil, nil, nil, logger)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	hub.NotifyExpiredGroupRooms(ctx, []GroupRoom{{ID: roomID, ConversationID: conversationID, Status: GroupRoomActive}})
+	if logger.warningMessage != "group call event delivery failed" || logger.warningAttributes["stage"] != "lock" || logger.warningAttributes["source"] != "expiry_sweep" || logger.warningAttributes["event"] != "ended" || logger.warningAttributes["room_id"] != roomID || logger.warningAttributes["conversation_id"] != conversationID {
+		t.Fatalf("lock failure diagnostics = (%q, %#v), want bounded room/conversation identifiers and source", logger.warningMessage, logger.warningAttributes)
+	}
+}
+
+func TestHubRemoveLogsGroupRoomDisconnectOutcome(t *testing.T) {
+	for _, test := range []struct {
+		name        string
+		status      string
+		wantOutcome string
+	}{
+		{name: "remaining active room", status: GroupRoomActive, wantOutcome: "participant_removed"},
+		{name: "terminal room", status: GroupRoomEnded, wantOutcome: "room_ended"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			userID, roomID, conversationID, supportRef := uuid.New(), uuid.New(), uuid.New(), uuid.New()
+			client := &recordingClient{identity: sharedauth.Identity{UserID: userID, DeviceID: "device"}, connectionID: "socket"}
+			rooms := &disconnectGroupRooms{groupTestRooms: groupTestRooms{}, changed: []GroupRoom{{
+				ID: roomID, SupportRef: supportRef, ConversationID: conversationID, Status: test.status,
+				Participants: []GroupParticipant{{UserID: userID, DeviceID: "device", ConnectionID: "socket"}},
+			}}}
+			logger := &groupRoomLogCapture{}
+			hub := NewHubWithLogger(nil, nil, rooms, nil, nil, nil, nil, logger)
+			hub.Add(context.Background(), client)
+
+			hub.Remove(context.Background(), client)
+
+			if _, claimsEvent := logger.attributes["event"]; claimsEvent || logger.attributes["outcome"] != test.wantOutcome || logger.message != "group call room cleanup after websocket disconnect" {
+				t.Fatalf("disconnect diagnostics = (%q, %#v), want cleanup outcome=%q without event claim", logger.message, logger.attributes, test.wantOutcome)
+			}
+			if logger.attributes["support_ref"] != supportRef || logger.attributes["room_status"] != test.status {
+				t.Fatalf("disconnect correlation/status = %#v, want support_ref=%s status=%s", logger.attributes, supportRef, test.status)
+			}
+			if logger.attributes["call_id"] != roomID || logger.attributes["conversation_id"] != conversationID {
+				t.Fatalf("disconnect identifiers = %#v", logger.attributes)
+			}
+		})
+	}
+}
+
+type disconnectGroupRooms struct {
+	groupTestRooms
+	changed []GroupRoom
+}
+
+func (r *disconnectGroupRooms) RemoveGroupConnection(context.Context, uuid.UUID, string, string) ([]GroupRoom, error) {
+	return r.changed, nil
+}
+
+type groupRoomLogCapture struct {
+	message           string
+	attributes        map[string]any
+	warningMessage    string
+	warningAttributes map[string]any
+}
+
+func (l *groupRoomLogCapture) InfoContext(_ context.Context, message string, args ...any) {
+	l.message = message
+	l.attributes = make(map[string]any, len(args)/2)
+	for index := 0; index+1 < len(args); index += 2 {
+		key, ok := args[index].(string)
+		if ok {
+			l.attributes[key] = args[index+1]
+		}
+	}
+}
+
+func (l *groupRoomLogCapture) WarnContext(_ context.Context, message string, args ...any) {
+	l.warningMessage = message
+	l.warningAttributes = make(map[string]any, len(args)/2)
+	for index := 0; index+1 < len(args); index += 2 {
+		key, ok := args[index].(string)
+		if ok {
+			l.warningAttributes[key] = args[index+1]
+		}
 	}
 }
 

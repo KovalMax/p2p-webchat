@@ -32,6 +32,10 @@ exec: ## - Exec a service command, for example make exec auth sh
 logs: ## - Follow logs for all services
 	docker compose -p messenger -f infrastructure/docker-compose.yml -f infrastructure/docker-compose.override.yml logs -f
 
+.PHONY: support-export
+support-export: ## - Export bounded realtime logs for one support UUID (SUPPORT_REF=... WINDOW=30m)
+	$(MAKE) -C infrastructure support-export
+
 .PHONY: migrate
 migrate: ## - Run database migrations inside the migration container
 	make -C infrastructure migrate

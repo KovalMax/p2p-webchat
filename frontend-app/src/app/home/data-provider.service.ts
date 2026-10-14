@@ -3,6 +3,7 @@ import {Inject, Injectable, InjectionToken} from '@angular/core';
 import {webSocket, WebSocketSubject, WebSocketSubjectConfig} from 'rxjs/webSocket';
 import {backends} from '../../environments/environment';
 import {BehaviorSubject, Observable, Subject} from 'rxjs';
+import {isValidMessageMentionWire} from './wire.mapper';
 import type {PeerReadCursorWire} from './wire.mapper';
 
 // V2 carries per-account group cursors; the older scalar remains the direct-chat contract.
@@ -22,7 +23,7 @@ export const RECONNECT_RANDOM = new InjectionToken<() => number>('ZWEI_RECONNECT
 export interface MessageSendEvent {
     type: 'message.send';
     request_id: string;
-    payload: { conversation_id: string; client_message_id: string; body: string };
+    payload: { conversation_id: string; client_message_id: string; body: string; mentions?: {user_id: string; start: number; end: number}[] };
 }
 
 export interface TypingClientEvent {
@@ -87,6 +88,7 @@ export interface MessagePayload {
     client_message_id: string;
     sequence: number;
     body: string;
+    mentions?: {user_id: string; start: number; end: number}[];
     created_at: string;
     kind?: 'user' | 'system';
 }
@@ -172,6 +174,7 @@ export interface CallPayload {
     accepted_device_id?: string;
     status: 'ringing' | 'active' | 'ended';
     expires_at: string;
+    support_ref?: string;
 }
 
 export interface ICEServer {
@@ -202,19 +205,19 @@ export interface CallRejectedSocketEvent {
     version: typeof WEBSOCKET_PROTOCOL_VERSION;
     type: 'call.rejected';
     request_id?: string;
-    payload: { error: string };
+    payload: { error: string; support_ref?: string };
 }
 
 export interface GroupCallParticipant { user_id: string; device_id: string; }
-export interface GroupCallRoomPayload { room_id: string; conversation_id: string; membership_revision: number; generation: number; status: 'ringing' | 'active' | 'ended'; expires_at: string; participants: GroupCallParticipant[]; presenter?: GroupCallParticipant; ice_servers?: ICEServer[]; }
+export interface GroupCallRoomPayload { room_id: string; conversation_id: string; membership_revision: number; generation: number; status: 'ringing' | 'active' | 'ended'; expires_at: string; participants: GroupCallParticipant[]; presenter?: GroupCallParticipant; ice_servers?: ICEServer[]; support_ref?: string; }
 export type GroupCallDiscoveredRoomPayload = Omit<GroupCallRoomPayload, 'ice_servers'> & {state_revision: number};
 export type GroupCallRoomEventPayload = GroupCallRoomPayload & {state_revision: number};
-export interface GroupCallMembershipProjectionEndedPayload { room_id: string; generation: number; status: 'ended'; state_revision: number; }
+export interface GroupCallMembershipProjectionEndedPayload { room_id: string; generation: number; status: 'ended'; state_revision: number; support_ref?: string; }
 export type GroupCallRoomSocketEvent =
     | { version: typeof WEBSOCKET_PROTOCOL_VERSION; type: 'group.call.started' | 'group.call.participant.joined' | 'group.call.participant.left' | 'group.call.presenter.start' | 'group.call.presenter.stop'; payload: GroupCallRoomEventPayload }
     | { version: typeof WEBSOCKET_PROTOCOL_VERSION; type: 'group.call.ended'; payload: GroupCallRoomEventPayload | GroupCallMembershipProjectionEndedPayload };
 export interface GroupCallActiveSyncPayload extends Omit<GroupCallRoomPayload, 'status' | 'ice_servers'> { status: 'ringing' | 'active'; state_revision: number; }
-export interface GroupCallEndedSyncPayload { room_id: string; generation: number; status: 'ended'; }
+export interface GroupCallEndedSyncPayload { room_id: string; generation: number; status: 'ended'; support_ref?: string; }
 export type GroupCallSyncedPayload = GroupCallActiveSyncPayload | GroupCallEndedSyncPayload;
 export interface GroupCallSyncedSocketEvent { version: typeof WEBSOCKET_PROTOCOL_VERSION; type: 'group.call.synced'; request_id: string; payload: GroupCallSyncedPayload; }
 export interface GroupCallDiscoveredSocketEvent { version: typeof WEBSOCKET_PROTOCOL_VERSION; type: 'group.call.discovered'; request_id: string; payload: {conversation_id: string; room: GroupCallDiscoveredRoomPayload | null}; }
@@ -232,7 +235,8 @@ function isCallPayload(value: unknown): value is CallPayload {
     const required = ['call_id', 'conversation_id', 'caller_id', 'recipient_id', 'caller_device_id', 'status', 'expires_at'];
     return required.every(key => typeof value[key] === 'string') &&
         (value.status === 'ringing' || value.status === 'active' || value.status === 'ended') &&
-        (value.accepted_device_id === undefined || typeof value.accepted_device_id === 'string');
+        (value.accepted_device_id === undefined || typeof value.accepted_device_id === 'string') &&
+        (value.support_ref === undefined || isIdentifier(value.support_ref));
 }
 
 function isICEServers(value: unknown): value is ICEServer[] {
@@ -260,7 +264,7 @@ function isAcceptedCallPayload(value: unknown): value is CallPayload & {ice_serv
 
 function isGroupRoomPayload(value: unknown): value is GroupCallRoomPayload {
     if (!isRecord(value) || !isIdentifier(value.room_id) || !isIdentifier(value.conversation_id) || !isSequence(value.membership_revision) || !isSequence(value.generation) || !['ringing', 'active', 'ended'].includes(String(value.status)) || typeof value.expires_at !== 'string' || !Array.isArray(value.participants)) return false;
-    return value.participants.every(item => isRecord(item) && isIdentifier(item.user_id) && isIdentifier(item.device_id)) && (value.presenter === undefined || (isRecord(value.presenter) && isIdentifier(value.presenter.user_id) && isIdentifier(value.presenter.device_id))) && (value.ice_servers === undefined || isICEServers(value.ice_servers));
+    return value.participants.every(item => isRecord(item) && isIdentifier(item.user_id) && isIdentifier(item.device_id)) && (value.presenter === undefined || (isRecord(value.presenter) && isIdentifier(value.presenter.user_id) && isIdentifier(value.presenter.device_id))) && (value.ice_servers === undefined || isICEServers(value.ice_servers)) && (value.support_ref === undefined || isIdentifier(value.support_ref));
 }
 
 export function isGroupRoomEventPayload(value: unknown): value is GroupCallRoomEventPayload {
@@ -274,12 +278,13 @@ function isGroupCallActiveSyncPayload(value: unknown): value is GroupCallActiveS
 
 function isGroupCallEndedSyncPayload(value: unknown): value is GroupCallEndedSyncPayload {
     return isRecord(value) && isIdentifier(value.room_id) && isSequence(value.generation) && value.status === 'ended' &&
-        Object.keys(value).every(key => key === 'room_id' || key === 'generation' || key === 'status');
+        (value.support_ref === undefined || isIdentifier(value.support_ref)) &&
+        Object.keys(value).every(key => key === 'room_id' || key === 'generation' || key === 'status' || key === 'support_ref');
 }
 
 function isGroupCallMembershipProjectionEndedPayload(value: unknown): value is GroupCallMembershipProjectionEndedPayload {
     return isRecord(value) && isIdentifier(value.room_id) && isSequence(value.generation) && value.status === 'ended' &&
-        isSequence(value.state_revision) && Object.keys(value).every(key => key === 'room_id' || key === 'generation' || key === 'status' || key === 'state_revision');
+        isSequence(value.state_revision) && (value.support_ref === undefined || isIdentifier(value.support_ref)) && Object.keys(value).every(key => key === 'room_id' || key === 'generation' || key === 'status' || key === 'state_revision' || key === 'support_ref');
 }
 
 function isGroupCallSyncedPayload(value: unknown): value is GroupCallSyncedSocketEvent['payload'] {
@@ -300,8 +305,10 @@ function isMessagePayload(value: unknown): value is MessagePayload {
     if (!isRecord(value)) return false;
     const required = ['id', 'conversation_id', 'sender_id', 'client_message_id', 'body', 'created_at'];
     return required.every(key => typeof value[key] === 'string') &&
+        typeof value.body === 'string' &&
         typeof value.sequence === 'number' && Number.isSafeInteger(value.sequence) && value.sequence > 0 &&
-        (value.kind === undefined || value.kind === 'user' || value.kind === 'system');
+        (value.kind === undefined || value.kind === 'user' || value.kind === 'system') &&
+        (value.mentions === undefined || isValidMessageMentionWire(value.mentions, value.body));
 }
 
 function isStringArray(value: unknown): value is string[] {
@@ -346,7 +353,7 @@ export function isValidConversationReconciledEvent(event: unknown): event is Con
 export function isValidCallSocketEvent(event: unknown): event is CallSocketEvent {
     if (!isRecord(event) || event.version !== WEBSOCKET_PROTOCOL_VERSION || typeof event.type !== 'string' || !('payload' in event)) return false;
     if (event.type === 'call.signal') return isRecord(event.payload) && typeof event.payload.call_id === 'string' && isValidCallSignal(event.payload.signal);
-    if (event.type === 'call.rejected') return isRecord(event.payload) && typeof event.payload.error === 'string';
+    if (event.type === 'call.rejected') return isRecord(event.payload) && typeof event.payload.error === 'string' && (event.payload.support_ref === undefined || isIdentifier(event.payload.support_ref));
     if (event.type === 'call.accepted') return isAcceptedCallPayload(event.payload);
     return ['call.incoming', 'call.ringing', 'call.declined', 'call.ended'].includes(event.type) && isCallPayload(event.payload);
 }
@@ -437,6 +444,8 @@ export class DataProviderService {
     }
 
     public send(event: ClientSocketEvent): boolean {
+        if (event.type === 'message.send' && (!isRecord(event.payload) || typeof event.payload.body !== 'string' ||
+            (event.payload.mentions !== undefined && !isValidMessageMentionWire(event.payload.mentions, event.payload.body)))) return false;
         if (event.type === 'call.signal' && (!isRecord(event.payload) || !isIdentifier(event.payload.call_id) || !isValidCallSignal(event.payload.signal))) return false;
         if (isGroupCallClientType(event.type) && !isValidGroupCallClientEvent(event)) return false;
         const socket = this.socket;

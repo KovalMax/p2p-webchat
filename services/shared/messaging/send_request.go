@@ -8,4 +8,5 @@ type SendRequest struct {
 	ConversationID  uuid.UUID
 	ClientMessageID string
 	Body            string
+	Mentions        []Mention
 }

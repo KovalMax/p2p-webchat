@@ -35,6 +35,11 @@ func TestCallReservationIntegration(t *testing.T) {
 		t.Fatalf("create coordinator: %v", err)
 	}
 	defer coordinator.Close()
+	replica, err := NewPresenceCoordinator(rawURL)
+	if err != nil {
+		t.Fatalf("create second coordinator: %v", err)
+	}
+	defer replica.Close()
 
 	callerID, recipientID := uuid.New(), uuid.New()
 	conversationID := uuid.New()
@@ -60,6 +65,7 @@ func TestCallReservationIntegration(t *testing.T) {
 
 	first, err := startAdmittedCall(ctx, coordinator, application.Call{
 		ID:                 firstCallID,
+		SupportRef:         uuid.New(),
 		ConversationID:     conversationID,
 		CallerID:           callerID,
 		RecipientID:        recipientID,
@@ -68,6 +74,10 @@ func TestCallReservationIntegration(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatalf("start first call: %v", err)
+	}
+	fromRedis, err := replica.Get(ctx, firstCallID)
+	if err != nil || fromRedis.SupportRef != first.SupportRef || fromRedis.SupportRef == uuid.Nil {
+		t.Fatalf("call support_ref from shared state = %s, start=%s, err=%v", fromRedis.SupportRef, first.SupportRef, err)
 	}
 	if _, err := coordinator.Accept(ctx, first.ID, recipientID, recipientDevice, recipientConnection); err != nil {
 		t.Fatalf("accept first call: %v", err)

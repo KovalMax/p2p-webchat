@@ -80,6 +80,23 @@ describe('DataProviderService transport', () => {
         expect(first.socket.sent).toEqual([{ type: 'presence.refresh', version: WEBSOCKET_PROTOCOL_VERSION }]);
     });
 
+    it('keeps optional mention metadata on correlated message sends and filters malformed inbound mentions', () => {
+        const received: MessageSocketEvent[] = [];
+        service.getObservable().subscribe(event => received.push(event));
+        const socket = requestTicket('mentions');
+        open(socket.config);
+        socket.socket.emit({version: WEBSOCKET_PROTOCOL_VERSION, type: 'presence.snapshot', payload: {user_ids: []}});
+        const command = {type: 'message.send' as const, request_id: 'request-1', payload: {conversation_id: 'chat-1', client_message_id: 'client-1', body: '😀 @Alice', mentions: [{user_id: 'alice', start: 3, end: 9}]}};
+        expect(service.send(command)).toBe(true);
+        expect(socket.socket.sent.at(-1)).toEqual({...command, version: WEBSOCKET_PROTOCOL_VERSION});
+        expect(service.send({...command, payload: {...command.payload, mentions: [{user_id: 'alice', start: 1, end: 3}]}})).toBe(false);
+
+        const payload = {id: 'message-1', conversation_id: 'chat-1', sender_id: 'alice', client_message_id: 'client-1', sequence: 1, body: '😀 @Alice', created_at: '2026-01-01T00:00:00Z'};
+        socket.socket.emit({version: WEBSOCKET_PROTOCOL_VERSION, type: 'message.created', payload: {...payload, mentions: [{user_id: 'alice', start: 3, end: 9}]}});
+        socket.socket.emit({version: WEBSOCKET_PROTOCOL_VERSION, type: 'message.created', payload: {...payload, mentions: [{user_id: 'alice', start: 1, end: 3}]}});
+        expect(received.filter(event => event.type === 'message.created')).toHaveLength(1);
+    });
+
     it('sends generation-bearing group commands and blocks malformed generations before transport', () => {
         service.getObservable().subscribe();
         const socket = requestTicket('ticket-group-generation');
@@ -175,7 +192,7 @@ describe('DataProviderService transport', () => {
         socket.socket.emit({ version: WEBSOCKET_PROTOCOL_VERSION, type: 'group.call.synced', request_id: 'sync-1', payload });
         socket.socket.emit({ version: WEBSOCKET_PROTOCOL_VERSION, type: 'group.call.synced', request_id: 'sync-2', payload: { ...payload, state_revision: -1 } });
         socket.socket.emit({ version: WEBSOCKET_PROTOCOL_VERSION, type: 'group.call.synced', payload });
-        const ended = { room_id: 'room-1', generation: 7, status: 'ended' as const };
+        const ended = { room_id: 'room-1', generation: 7, status: 'ended' as const, support_ref: 'group-ref-1' };
         socket.socket.emit({ version: WEBSOCKET_PROTOCOL_VERSION, type: 'group.call.synced', request_id: 'sync-ended', payload: ended });
         socket.socket.emit({ version: WEBSOCKET_PROTOCOL_VERSION, type: 'group.call.synced', request_id: 'sync-ended-with-roster', payload: { ...ended, participants: [] } });
         expect(received).toEqual([
@@ -189,11 +206,11 @@ describe('DataProviderService transport', () => {
         service.getObservable().subscribe(event => received.push(event));
         const socket = requestTicket('ticket-group-room-revision');
         open(socket.config);
-        const payload = { room_id: 'room-1', conversation_id: 'group-1', membership_revision: 3, generation: 7, state_revision: 2, status: 'active' as const, expires_at: '2026-01-01T00:00:00Z', participants: [] };
+        const payload = { room_id: 'room-1', conversation_id: 'group-1', membership_revision: 3, generation: 7, state_revision: 2, status: 'active' as const, expires_at: '2026-01-01T00:00:00Z', participants: [], support_ref: 'group-ref-1' };
 
         socket.socket.emit({ version: WEBSOCKET_PROTOCOL_VERSION, type: 'group.call.started', payload });
         socket.socket.emit({ version: WEBSOCKET_PROTOCOL_VERSION, type: 'group.call.participant.joined', payload: { ...payload, state_revision: 0 } });
-        const ended = { room_id: 'room-1', generation: 7, state_revision: 3, status: 'ended' as const };
+        const ended = { room_id: 'room-1', generation: 7, state_revision: 3, status: 'ended' as const, support_ref: 'group-ref-1' };
         socket.socket.emit({ version: WEBSOCKET_PROTOCOL_VERSION, type: 'group.call.ended', payload: ended });
         socket.socket.emit({ version: WEBSOCKET_PROTOCOL_VERSION, type: 'group.call.ended', payload: { ...ended, participants: [] } });
         socket.socket.emit({ version: WEBSOCKET_PROTOCOL_VERSION, type: 'group.call.ended', payload: { ...ended, state_revision: 0 } });
@@ -202,6 +219,24 @@ describe('DataProviderService transport', () => {
             { version: WEBSOCKET_PROTOCOL_VERSION, type: 'group.call.started', payload },
             { version: WEBSOCKET_PROTOCOL_VERSION, type: 'group.call.ended', payload: ended },
         ]);
+    });
+
+    it('accepts optional direct-call and rejection support references while preserving legacy payloads', () => {
+        const received: MessageSocketEvent[] = [];
+        service.getObservable().subscribe(event => received.push(event));
+        const socket = requestTicket('ticket-call-support-reference');
+        open(socket.config);
+        const callPayload = {call_id: 'call-1', conversation_id: 'conversation-1', caller_id: 'caller-1', recipient_id: 'recipient-1', caller_device_id: 'device-1', status: 'ringing' as const, expires_at: '2026-01-01T00:00:00Z'};
+
+        socket.socket.emit({version: WEBSOCKET_PROTOCOL_VERSION, type: 'call.incoming', payload: {...callPayload, support_ref: 'direct-ref-1'}});
+        socket.socket.emit({version: WEBSOCKET_PROTOCOL_VERSION, type: 'call.ringing', payload: callPayload});
+        socket.socket.emit({version: WEBSOCKET_PROTOCOL_VERSION, type: 'call.rejected', payload: {error: 'unavailable', support_ref: 'rejected-ref-1'}});
+        socket.socket.emit({version: WEBSOCKET_PROTOCOL_VERSION, type: 'call.incoming', payload: {...callPayload, support_ref: ''}});
+
+        expect(received).toHaveLength(3);
+        expect(received[0].payload).toEqual({...callPayload, support_ref: 'direct-ref-1'});
+        expect(received[1].payload).toEqual(callPayload);
+        expect(received[2].payload).toEqual({error: 'unavailable', support_ref: 'rejected-ref-1'});
     });
 
     it('stays recovering until the active reconciliation and presence snapshot complete', () => {

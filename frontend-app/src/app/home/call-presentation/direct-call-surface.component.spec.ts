@@ -23,12 +23,12 @@ describe('DirectCallSurfaceComponent', () => {
         fixture.componentRef.setInput('state', incomingState);
         fixture.detectChanges();
 
-        expect(fixture.nativeElement.querySelector('.call-card.call-card-incoming')).not.toBeNull();
+        expect(fixture.nativeElement.querySelector('.zwei-call-frame.zwei-call-frame-incoming')).not.toBeNull();
 
         fixture.componentRef.setInput('state', {...incomingState, phase: 'active'});
         fixture.detectChanges();
 
-        expect(fixture.nativeElement.querySelector('.call-card-incoming')).toBeNull();
+        expect(fixture.nativeElement.querySelector('.zwei-call-frame-incoming')).toBeNull();
     });
 
     it('keeps unsupported screen-share audio visible, disabled, and accessibly explained', () => {
@@ -74,6 +74,23 @@ describe('DirectCallSurfaceComponent', () => {
         expect(fixture.nativeElement.querySelector('.call-quality-audio-row-feature .call-quality-trigger')).not.toBeNull();
     });
 
+    it('shows copy support reference only when the server supplied one on an ongoing call', () => {
+        const state: CallState = {
+            phase: 'active', callID: 'call-1', conversationID: 'conversation-1', peerID: 'peer-1', role: 'caller',
+            supportRef: 'server-ref-1', muted: false, screenShareQuality: '720p', screenShareAudioEnabled: false,
+            screenShareAudioActive: false, screenShareTransition: false, statusLabel: 'Audio call connected.',
+        };
+        fixture.componentRef.setInput('state', state);
+        fixture.detectChanges();
+        const copyButton = fixture.nativeElement.querySelector('app-copy-support-reference button') as HTMLButtonElement;
+        expect(copyButton.getAttribute('aria-label')).toBe('Copy support reference');
+        expect(copyButton.textContent?.trim()).toBe('');
+
+        fixture.componentRef.setInput('state', {...state, supportRef: undefined});
+        fixture.detectChanges();
+        expect(fixture.nativeElement.querySelector('app-copy-support-reference button')).toBeNull();
+    });
+
     it('emits existing typed action/end/collapse intents from the direct call controls', () => {
         component.state = {
             phase: 'active', role: 'caller', callID: 'call-1', conversationID: 'conversation-1', peerID: 'peer-1',
@@ -88,7 +105,7 @@ describe('DirectCallSurfaceComponent', () => {
 
         fixture.nativeElement.querySelector('.direct-call-control-row [aria-label="Mute microphone"]').click();
         fixture.nativeElement.querySelector('.direct-call-end-button').click();
-        fixture.nativeElement.querySelector('.call-direct-collapse-button').click();
+        fixture.nativeElement.querySelector('.zwei-call-frame-collapse').click();
 
         expect(intents).toEqual([
             { type: 'action', actionID: 'mute' },

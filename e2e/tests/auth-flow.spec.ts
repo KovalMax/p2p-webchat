@@ -57,8 +57,17 @@ async function login(page: Page, email: string, value = password): Promise<void>
 async function assertAccountMenuContrast(page: Page, theme: 'dark' | 'light'): Promise<void> {
   const metrics = await page.getByRole('menu').evaluate(async menu => {
     const panel = menu.closest<HTMLElement>('.mat-mdc-menu-panel') ?? menu;
-    await Promise.all(panel.getAnimations({subtree: true}).map(animation => animation.finished.catch(() => undefined)));
+    const overlay = panel.closest<HTMLElement>('.cdk-overlay-pane') ?? panel;
+    await Promise.all(overlay.getAnimations({subtree: true}).map(animation => animation.finished.catch(() => undefined)));
     const frame = () => new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+    const renderedOpacity = (): number => {
+      let opacity = 1;
+      for (let ancestor: HTMLElement | null = panel; ancestor; ancestor = ancestor.parentElement) opacity *= Number(getComputedStyle(ancestor).opacity);
+      return opacity;
+    };
+    const deadline = performance.now() + 2_000;
+    while (renderedOpacity() < .999 && performance.now() < deadline) await frame();
+    if (renderedOpacity() < .999) throw new Error(`Account menu did not settle at full opacity: ${renderedOpacity()}`);
     await frame();
     await frame();
     const surface = panel;
@@ -87,6 +96,8 @@ async function assertAccountMenuContrast(page: Page, theme: 'dark' | 'light'): P
     };
     return {
       surface: getComputedStyle(surface).backgroundColor,
+      surfaceAlpha: background[3],
+      renderedOpacity: renderedOpacity(),
       panelClasses: Array.from(surface.classList),
       items: items.map(item => {
         const text = item.querySelector<HTMLElement>('.mat-mdc-menu-item-text') ?? item;
@@ -118,6 +129,8 @@ async function assertAccountMenuContrast(page: Page, theme: 'dark' | 'light'): P
   expect(metrics.panelClasses).toContain(theme === 'dark' ? 'account-menu-panel-dark' : 'account-menu-panel-light');
   expect(metrics.surface, `${theme} account-menu surface ${JSON.stringify(metrics.panelClasses)}`).toBe(theme === 'dark' ? 'rgb(38, 53, 70)' : 'rgb(255, 255, 255)');
   expect(metrics.surface).not.toBe('rgba(0, 0, 0, 0)');
+  expect(metrics.surfaceAlpha, `${theme} account menu surface alpha`).toBe(1);
+  expect(metrics.renderedOpacity, `${theme} account menu opacity after settling`).toBe(1);
   expect(metrics.items.length).toBeGreaterThan(0);
   expect(metrics.identities).toHaveLength(2);
   for (const identity of metrics.identities) {
@@ -741,45 +754,30 @@ test('registers, rejects duplicate and invalid login, then exposes profile and s
       await assertAccountMenuContrast(page, theme);
       const geometry = await page.evaluate(() => {
         const menu = document.querySelector<HTMLElement>('.cdk-overlay-container .mat-mdc-menu-panel');
-        if (!menu) throw new Error('Open account menu panel is missing');
+        const trigger = document.querySelector<HTMLElement>('.account-button');
+        if (!menu || !trigger) throw new Error('Open account menu panel or trigger is missing');
         const rect = menu.getBoundingClientRect();
-        const box = (selector: string) => {
-          const element = document.querySelector<HTMLElement>(selector);
-          if (!element) throw new Error(`Expected chat control ${selector} is missing`);
-          const bounds = element.getBoundingClientRect();
-          return {left: bounds.left, right: bounds.right, top: bounds.top, bottom: bounds.bottom};
-        };
+        const triggerRect = trigger.getBoundingClientRect();
         const menuBox = {left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom};
-        const overlaps = (other: typeof menuBox) => menuBox.left < other.right && menuBox.right > other.left && menuBox.top < other.bottom && menuBox.bottom > other.top;
-        return {
-          menu: menuBox,
-          viewport: {width: document.documentElement.clientWidth, height: document.documentElement.clientHeight},
-          controls: {
-            peopleSearch: box('.search-field'),
-            newGroup: box('.new-group-button'),
-            countArea: box('.rail-label'),
-          },
-          overlap: {
-            peopleSearch: overlaps(box('.search-field')),
-            newGroup: overlaps(box('.new-group-button')),
-            countArea: overlaps(box('.rail-label')),
-          },
-        };
+        return {menu: menuBox, trigger: {left: triggerRect.left, right: triggerRect.right, top: triggerRect.top, bottom: triggerRect.bottom}, viewport: {width: document.documentElement.clientWidth, height: document.documentElement.clientHeight}, positioning: getComputedStyle(menu).position};
       });
       expect(geometry.menu.left, `${theme} ${viewport.width} account menu left containment`).toBeGreaterThanOrEqual(0);
       expect(geometry.menu.top, `${theme} ${viewport.width} account menu top containment`).toBeGreaterThanOrEqual(0);
       expect(geometry.menu.right, `${theme} ${viewport.width} account menu right containment`).toBeLessThanOrEqual(geometry.viewport.width + 1);
       expect(geometry.menu.bottom, `${theme} ${viewport.width} account menu bottom containment`).toBeLessThanOrEqual(geometry.viewport.height + 1);
-      expect(geometry.overlap, `${theme} ${viewport.width} account-menu/control overlap: ${JSON.stringify(geometry)}`).toEqual({peopleSearch: false, newGroup: false, countArea: false});
+      expect(geometry.positioning, `${theme} ${viewport.width} Material account menu positioning`).not.toBe('fixed');
+      expect(geometry.menu.left).toBeLessThan(geometry.trigger.right);
+      expect(geometry.menu.right).toBeGreaterThan(geometry.trigger.left);
+      const triggerGap = Math.min(Math.abs(geometry.menu.bottom - geometry.trigger.top), Math.abs(geometry.menu.top - geometry.trigger.bottom));
+      expect(triggerGap, `${theme} ${viewport.width} account menu should remain trigger-anchored: ${JSON.stringify(geometry)}`).toBeLessThanOrEqual(24);
       await page.screenshot({path: testInfo.outputPath(`account-menu-${theme}-${viewport.width}x${viewport.height}.png`), fullPage: false});
     }
   }
   await page.keyboard.press('Escape');
   await expect(page.getByRole('button', {name: 'Account menu'})).toBeFocused();
 
-  // Keep the same menu open as the viewport crosses the custom mobile breakpoint.
-  // It must switch back to Material's trigger anchoring on desktop and regain the
-  // mobile bottom/right inset when resized back, without covering rail controls.
+  // Keep the same menu open while resizing: Material remains responsible for
+  // positioning it relative to its trigger and keeping it within the viewport.
   await page.setViewportSize({width: 390, height: 844});
   for (const theme of ['dark', 'light'] as const) {
     const isLight = await page.locator('html').evaluate(element => element.classList.contains('light-theme'));
@@ -791,13 +789,19 @@ test('registers, rejects duplicate and invalid login, then exposes profile and s
     await expect(page.getByRole('menuitem', {name: 'Profile'})).toBeVisible();
     const mobileMenu = page.locator('.cdk-overlay-container .mat-mdc-menu-panel');
     const mobileAnchoring = await mobileMenu.evaluate(panel => {
-      const style = getComputedStyle(panel);
+      const trigger = document.querySelector<HTMLElement>('.account-button');
+      if (!trigger) throw new Error('Account trigger is missing');
       const rect = panel.getBoundingClientRect();
-      return {position: style.position, right: innerWidth - rect.right, bottom: innerHeight - rect.bottom};
+      const triggerRect = trigger.getBoundingClientRect();
+      return {position: getComputedStyle(panel).position, menu: {left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom}, trigger: {left: triggerRect.left, right: triggerRect.right, top: triggerRect.top, bottom: triggerRect.bottom}, viewport: {width: innerWidth, height: innerHeight}};
     });
-    expect(mobileAnchoring.position, `${theme} mobile menu position`).toBe('fixed');
-    expect(mobileAnchoring.right, `${theme} mobile right inset`).toBeCloseTo(16, 0);
-    expect(mobileAnchoring.bottom, `${theme} mobile bottom inset`).toBeCloseTo(16, 0);
+    expect(mobileAnchoring.position, `${theme} mobile menu must use Material positioning`).not.toBe('fixed');
+    expect(mobileAnchoring.menu.left).toBeGreaterThanOrEqual(0);
+    expect(mobileAnchoring.menu.right).toBeLessThanOrEqual(mobileAnchoring.viewport.width + 1);
+    expect(mobileAnchoring.menu.top).toBeGreaterThanOrEqual(0);
+    expect(mobileAnchoring.menu.bottom).toBeLessThanOrEqual(mobileAnchoring.viewport.height + 1);
+    const mobileTriggerGap = Math.min(Math.abs(mobileAnchoring.menu.bottom - mobileAnchoring.trigger.top), Math.abs(mobileAnchoring.menu.top - mobileAnchoring.trigger.bottom));
+    expect(mobileTriggerGap, `${theme} mobile menu trigger geometry: ${JSON.stringify(mobileAnchoring)}`).toBeLessThanOrEqual(24);
 
     await page.setViewportSize({width: 1440, height: 900});
     await expect.poll(() => mobileMenu.evaluate(panel => getComputedStyle(panel).position)).not.toBe('fixed');
@@ -813,22 +817,22 @@ test('registers, rejects duplicate and invalid login, then exposes profile and s
     expect(desktopAnchoring.menu.top, `${theme} desktop menu should open below its trigger: ${JSON.stringify(desktopAnchoring)}`).toBeGreaterThanOrEqual(desktopAnchoring.trigger.bottom - 4);
 
     await page.setViewportSize({width: 390, height: 844});
-    await expect.poll(() => mobileMenu.evaluate(panel => getComputedStyle(panel).position)).toBe('fixed');
+    await expect.poll(() => mobileMenu.evaluate(panel => getComputedStyle(panel).position)).not.toBe('fixed');
     const resizedMobile = await page.evaluate(() => {
       const panel = document.querySelector<HTMLElement>('.cdk-overlay-container .mat-mdc-menu-panel');
-      if (!panel) throw new Error('Open menu disappeared while resizing back to mobile');
+      const trigger = document.querySelector<HTMLElement>('.account-button');
+      if (!panel || !trigger) throw new Error('Open menu or trigger disappeared while resizing back to mobile');
       const rect = panel.getBoundingClientRect();
-      const box = (selector: string) => {
-        const element = document.querySelector<HTMLElement>(selector);
-        if (!element) throw new Error(`Expected chat control ${selector} is missing`);
-        return element.getBoundingClientRect();
-      };
-      const overlap = (bounds: DOMRect) => rect.left < bounds.right && rect.right > bounds.left && rect.top < bounds.bottom && rect.bottom > bounds.top;
-      return {right: innerWidth - rect.right, bottom: innerHeight - rect.bottom, peopleSearch: overlap(box('.search-field')), newGroup: overlap(box('.new-group-button')), countArea: overlap(box('.rail-label'))};
+      const triggerRect = trigger.getBoundingClientRect();
+      return {menu: {left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom}, trigger: {left: triggerRect.left, right: triggerRect.right, top: triggerRect.top, bottom: triggerRect.bottom}, viewport: {width: innerWidth, height: innerHeight}};
     });
-    expect(resizedMobile.right, `${theme} resized mobile right inset`).toBeCloseTo(16, 0);
-    expect(resizedMobile.bottom, `${theme} resized mobile bottom inset`).toBeCloseTo(16, 0);
-    expect({peopleSearch: resizedMobile.peopleSearch, newGroup: resizedMobile.newGroup, countArea: resizedMobile.countArea}, `${theme} resized mobile menu overlaps rail controls`).toEqual({peopleSearch: false, newGroup: false, countArea: false});
+    expect(resizedMobile.menu.left).toBeGreaterThanOrEqual(0);
+    expect(resizedMobile.menu.right).toBeLessThanOrEqual(resizedMobile.viewport.width + 1);
+    expect(resizedMobile.menu.top).toBeGreaterThanOrEqual(0);
+    expect(resizedMobile.menu.bottom).toBeLessThanOrEqual(resizedMobile.viewport.height + 1);
+    const resizedTriggerGap = Math.min(Math.abs(resizedMobile.menu.bottom - resizedMobile.trigger.top), Math.abs(resizedMobile.menu.top - resizedMobile.trigger.bottom));
+    expect(resizedTriggerGap, `${theme} resized mobile menu trigger geometry: ${JSON.stringify(resizedMobile)}`).toBeLessThanOrEqual(24);
+    await assertAccountMenuContrast(page, theme);
     await page.screenshot({path: testInfo.outputPath(`account-menu-resized-mobile-${theme}-390x844.png`), fullPage: false});
     await page.keyboard.press('Escape');
   }

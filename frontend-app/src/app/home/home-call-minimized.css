@@ -2,28 +2,37 @@
 app-home { --chat-header-row-min-height: 72px; --chat-header-gutter-x: 26px; }
 app-home .call-panel-full { overflow: hidden; }
 app-home .call-panel-minimized { display: none !important; }
-app-home .call-minimized-banner { display: flex; align-items: stretch; gap: 8px; margin: 0 0 12px; padding: 8px; border: 1px solid var(--chat-line-strong); border-radius: 14px; background: var(--chat-surface-control); color: var(--chat-text); }
+app-home .call-minimized-banner { position: relative; display: grid; min-height: 66px; box-sizing: border-box; grid-template-columns: minmax(0, 1fr) 44px auto; grid-template-rows: minmax(44px, auto); align-items: center; gap: 4px 6px; margin: 0 0 12px; padding: 4px 6px; border: 1px solid var(--chat-line-strong); border-radius: 14px; background: var(--chat-surface-control); color: var(--chat-text); }
 app-home .call-minimized-sharing-active { border-color: var(--zwei-success); box-shadow: inset 3px 0 0 var(--zwei-success); }
-app-home .call-minimized-sharing-label { color: var(--zwei-success); font-weight: 700; }
-app-home .call-minimized-banner-chat { display: none; }
+app-home .call-minimized-sharing-label { color: var(--chat-call-sharing-text); font-weight: 700; }
 app-home .call-minimized-summary, app-home .call-minimized-end { border: 0; border-radius: 9px; background: transparent; color: inherit; cursor: pointer; }
-app-home .call-minimized-summary { display: flex; flex: 1; min-width: 0; padding: 8px 10px; text-align: left; }
-app-home .call-minimized-summary span { display: flex; min-width: 0; flex: 1; align-items: center; justify-content: space-between; gap: 12px; }
-app-home .call-minimized-summary strong, app-home .call-minimized-summary small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+app-home .call-minimized-summary { display: flex; grid-column: 1; grid-row: 1; min-width: 0; min-height: 44px; padding: 2px 6px; text-align: left; }
+app-home .call-minimized-summary > span { display: grid; min-width: 0; flex: 1; gap: 3px; }
+app-home .call-minimized-summary strong, app-home .call-minimized-summary small { min-width: 0; white-space: normal; overflow-wrap: anywhere; }
 app-home .call-minimized-summary strong { font-size: 12px; }
-app-home .call-minimized-summary small { color: var(--chat-muted); font-variant-numeric: tabular-nums; }
+app-home .call-minimized-summary small { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 6px; color: var(--chat-muted); font-variant-numeric: tabular-nums; line-height: 1.35; }
 app-home .call-minimized-summary:hover { background: color-mix(in srgb, var(--chat-accent) 12%, transparent); }
-app-home .call-minimized-end { padding: 8px 12px; color: var(--chat-danger-text); font-size: 12px; font-weight: 700; }
+app-home .call-minimized-end { grid-column: 3; grid-row: 1; min-width: 44px; min-height: 44px; box-sizing: border-box; padding: 0 10px; color: var(--chat-danger-text); font-size: 12px; font-weight: 700; white-space: nowrap; }
+app-home .call-minimized-banner > app-copy-support-reference { grid-column: 2; grid-row: 1; justify-self: center; min-width: 44px; }
+app-home .call-minimized-banner .support-reference-compact { position: static; display: block; width: 44px; }
+app-home .call-minimized-banner .support-reference-compact .support-reference-compact-button { width: 44px; min-width: 44px; height: 44px; }
+app-home .call-minimized-banner .support-reference-compact .support-reference-details { position: absolute !important; z-index: 10; top: calc(100% + 28px) !important; right: 0; left: auto; width: min(320px, calc(100vw - 48px)); max-width: min(320px, calc(100vw - 48px)); }
 app-home .call-minimized-end:hover { background: var(--chat-danger-surface); }
+app-home .call-minimized-end:focus-visible, app-home .call-minimized-summary:focus-visible { outline: 3px solid var(--zwei-focus); outline-offset: 2px; }
+app-home .call-panel:not(.call-panel-full) app-call-profile .call-presentation-avatar { width: 42px; height: 42px; flex-basis: 42px; font-size: 15px; }
+app-home .call-panel-full app-call-profile .call-presentation-avatar, app-home .group-call-card app-call-profile .call-presentation-avatar { width: 64px; height: 64px; flex-basis: 64px; font-size: 18px; }
 
 @media (max-width: 760px) {
     app-home { --chat-header-row-min-height: 64px; --chat-header-gutter-x: 12px; }
     app-home .call-panel-full { box-sizing: border-box; align-items: stretch; justify-content: flex-start; overflow: hidden; flex-direction: column; }
-    app-home .call-minimized-banner { gap: 4px; padding: 6px; }
-    app-home .call-minimized-banner-chat { display: flex; margin: 10px 12px 8px; }
+    app-home .call-minimized-banner { gap: 4px 4px; padding: 4px; }
     app-home .call-minimized-banner-rail { margin: 0 0 10px; }
-    app-home .call-minimized-summary { padding: 6px 8px; }
-    app-home .call-minimized-summary span { gap: 8px; }
-    app-home .call-minimized-summary strong { font-size: 11px; }
-    app-home .call-minimized-end { padding: 6px 10px; }
+    app-home .call-minimized-summary { padding: 2px 4px; }
+    app-home .call-minimized-summary strong { font-size: 12px; }
+    app-home .call-minimized-end { min-height: 44px; padding: 0 8px; }
 }
+
+app-home .load-older { --mat-button-outlined-label-text-color: var(--chat-text); --mat-button-outlined-outline-color: var(--chat-line-strong); color: var(--chat-text); }
+app-home .load-older:hover:not(:disabled) { border-color: var(--chat-accent); background-color: color-mix(in srgb, var(--chat-accent) 12%, var(--chat-surface)); }
+app-home .load-older:focus-visible { outline: 3px solid var(--zwei-focus); outline-offset: 2px; }
+app-home .load-older:disabled { --mat-button-outlined-disabled-label-text-color: var(--chat-muted); --mat-button-outlined-disabled-outline-color: var(--chat-line-strong); }

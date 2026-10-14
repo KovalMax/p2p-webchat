@@ -238,14 +238,84 @@ func TestServeHTTPReturnsVersionTwoRejectionForRejectedGroupCall(t *testing.T) {
 	}
 }
 
+func TestReadPumpOmitsPerFrameInfoLogsForCallSignals(t *testing.T) {
+	secret := []byte("01234567890123456789012345678901")
+	var logs bytes.Buffer
+	previousLogger := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
+	t.Cleanup(func() { slog.SetDefault(previousLogger) })
+
+	tests := []struct {
+		name    string
+		command string
+		wantLog bool
+	}{
+		{
+			name:    "direct call signal",
+			command: `{"version":1,"type":"call.signal","request_id":"signal-direct","payload":{"signal":"private-signal-marker"}}`,
+		},
+		{
+			name:    "group call signal",
+			command: `{"version":1,"type":"group.call.signal","request_id":"signal-group","payload":{"signal":"private-signal-marker"}}`,
+		},
+		{
+			name:    "call lifecycle command",
+			command: `{"version":1,"type":"call.start","request_id":"call-lifecycle","payload":{"conversation_id":"` + uuid.NewString() + `"}}`,
+			wantLog: true,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			logs.Reset()
+			handler := newNetworkHandler(secret, &networkTicketConsumer{allow: true})
+			server := httptest.NewServer(handler)
+			defer server.Close()
+
+			conn, response, err := (&websocket.Dialer{HandshakeTimeout: time.Second}).Dial(
+				websocketURL(server.URL, signedTicket(t, secret, "websocket", time.Now().Add(time.Minute))),
+				http.Header{"Origin": []string{"https://chat.localhost"}},
+			)
+			if err != nil {
+				if response != nil {
+					response.Body.Close()
+				}
+				t.Fatalf("websocket upgrade: %v", err)
+			}
+			defer conn.Close()
+			if err := conn.SetReadDeadline(time.Now().Add(time.Second)); err != nil {
+				t.Fatal(err)
+			}
+			if _, _, err := conn.ReadMessage(); err != nil { // initial presence snapshot
+				t.Fatalf("read initial event: %v", err)
+			}
+			if err := conn.WriteMessage(websocket.TextMessage, []byte(test.command)); err != nil {
+				t.Fatal(err)
+			}
+			if _, _, err := conn.ReadMessage(); err != nil { // command rejection confirms the frame was handled
+				t.Fatalf("read command response: %v", err)
+			}
+
+			logged := bytes.Contains(logs.Bytes(), []byte("websocket message received"))
+			if logged != test.wantLog {
+				t.Fatalf("per-frame info log = %t, want %t; logs: %s", logged, test.wantLog, logs.String())
+			}
+			if bytes.Contains(logs.Bytes(), []byte("private-signal-marker")) || bytes.Contains(logs.Bytes(), []byte("ticket=")) {
+				t.Fatalf("logs exposed signal data or ticket: %s", logs.String())
+			}
+		})
+	}
+}
+
 func TestServeHTTPRejectsScreenShareSignalsWithExtraWebRTCFields(t *testing.T) {
 	const sdpValue = "must-not-echo-sdp-secret"
 	const candidateValue = "must-not-echo-candidate-secret"
 	tests := []struct {
-		name     string
-		protocol int
-		command  string
-		request  string
+		name             string
+		protocol         int
+		command          string
+		request          string
+		requestIDOmitted bool
+		wantSupportRef   bool
 	}{
 		{
 			name:     "v1 direct call",
@@ -258,6 +328,33 @@ func TestServeHTTPRejectsScreenShareSignalsWithExtraWebRTCFields(t *testing.T) {
 			protocol: 2,
 			request:  "group-screen-share-v2",
 			command:  `{"version":2,"type":"group.call.signal","request_id":"group-screen-share-v2","payload":{"conversation_id":"` + uuid.NewString() + `","room_id":"` + uuid.NewString() + `","generation":1,"target_user_id":"` + uuid.NewString() + `","target_device_id":"peer-device","signal":{"type":"screen-share-stopped","sdp":"` + sdpValue + `","candidate":{"candidate":"` + candidateValue + `"}}}}`,
+		},
+		{
+			name:           "v2 rejected group start includes support reference",
+			protocol:       2,
+			request:        "group-start-support-ref",
+			command:        `{"version":2,"type":"group.call.start","request_id":"group-start-support-ref","payload":{"conversation_id":"` + uuid.NewString() + `"}}`,
+			wantSupportRef: true,
+		},
+		{
+			name:             "invalid direct start UUID omits support reference",
+			protocol:         1,
+			request:          "invalid-direct-start-uuid",
+			requestIDOmitted: true,
+			command:          `{"version":1,"type":"call.start","request_id":"invalid-direct-start-uuid","payload":{"conversation_id":"not-a-uuid"}}`,
+		},
+		{
+			name:     "missing direct start conversation omits support reference",
+			protocol: 1,
+			request:  "missing-direct-start-conversation",
+			command:  `{"version":1,"type":"call.start","request_id":"missing-direct-start-conversation","payload":{}}`,
+		},
+		{
+			name:           "valid direct start rejected by business logic includes support reference",
+			protocol:       1,
+			request:        "valid-direct-start-rejected",
+			command:        `{"version":1,"type":"call.start","request_id":"valid-direct-start-rejected","payload":{"conversation_id":"` + uuid.NewString() + `"}}`,
+			wantSupportRef: true,
 		},
 	}
 
@@ -315,7 +412,11 @@ func TestServeHTTPRejectsScreenShareSignalsWithExtraWebRTCFields(t *testing.T) {
 			if err := json.Unmarshal(event, &rejection); err != nil {
 				t.Fatalf("decode rejection: %v", err)
 			}
-			if rejection.Version != test.protocol || rejection.Type != "call.rejected" || rejection.RequestID != test.request {
+			expectedRequestID := test.request
+			if test.requestIDOmitted {
+				expectedRequestID = ""
+			}
+			if rejection.Version != test.protocol || rejection.Type != "call.rejected" || rejection.RequestID != expectedRequestID {
 				t.Fatalf("rejection = %+v, want correlated call.rejected at protocol %d", rejection, test.protocol)
 			}
 			if bytes.Contains(event, []byte(sdpValue)) || bytes.Contains(event, []byte(candidateValue)) || bytes.Contains(logs.Bytes(), []byte(sdpValue)) || bytes.Contains(logs.Bytes(), []byte(candidateValue)) {
@@ -327,6 +428,15 @@ func TestServeHTTPRejectsScreenShareSignalsWithExtraWebRTCFields(t *testing.T) {
 			}
 			if _, hasSignal := publicPayload["signal"]; hasSignal {
 				t.Fatalf("rejection exposed signal payload: %s", event)
+			}
+			value, hasSupportRef := publicPayload["support_ref"]
+			if test.wantSupportRef {
+				reference, ok := value.(string)
+				if !ok || uuid.Validate(reference) != nil {
+					t.Fatalf("rejected start support_ref = %#v, want UUID", value)
+				}
+			} else if hasSupportRef {
+				t.Fatalf("malformed start exposed support_ref: %#v", value)
 			}
 
 			// The only post-snapshot event is the correlated rejection. Invalid

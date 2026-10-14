@@ -13,6 +13,9 @@
     "group.call.presenter.stop": ["request_id", "payload.conversation_id", "payload.room_id", "payload.generation"],
     "group.call.signal": ["request_id", "payload.conversation_id", "payload.room_id", "payload.generation", "payload.target_user_id", "payload.target_device_id", "payload.signal"]
   },
+  "clientEventAdditiveFields": {
+    "message.send": ["payload.mentions"]
+  },
   "serverEvents": [
     "message.accepted",
     "message.created",
@@ -43,6 +46,13 @@
     "group.call.discovered"
   ],
   "serverEventFields": {
+	"call.rejected.payload.additiveFields": ["support_ref"],
+	"call.start.supportRef": "server-generated UUID; present on direct call state projections and rejected-start payloads when the syntactically valid attempt reaches application handling",
+	"call.lifecycle.support_ref": "additive UUID field retained for the ephemeral direct call state's TTL",
+	"group.call.start.supportRef": "server-generated UUID; present on group room lifecycle projections and rejected-start payloads when the syntactically valid attempt reaches application handling",
+	"group.call.lifecycle.support_ref": "additive UUID field retained for the ephemeral room state's TTL",
+    "message.accepted.additiveFields": ["payload.mentions"],
+    "message.created.additiveFields": ["payload.mentions"],
     "conversation.read": ["payload.conversation_id", "payload.user_id", "payload.sequence", "payload.visible_from_sequence"],
     "conversation.reconciled": ["request_id", "payload.conversation_id", "payload.messages", "payload.next_after_sequence", "payload.high_watermark", "payload.has_more", "payload.own_read_sequence", "payload.peer_read_sequence"],
     "conversation.reconciled.additiveFields": ["payload.peer_read_cursors"],
@@ -50,15 +60,15 @@
     "group.call.started": ["payload.room_id", "payload.conversation_id", "payload.membership_revision", "payload.generation", "payload.state_revision", "payload.status", "payload.expires_at", "payload.participants"],
     "group.call.participant.joined": ["payload.room_id", "payload.conversation_id", "payload.membership_revision", "payload.generation", "payload.state_revision", "payload.status", "payload.expires_at", "payload.participants"],
     "group.call.participant.left": ["payload.room_id", "payload.conversation_id", "payload.membership_revision", "payload.generation", "payload.state_revision", "payload.status", "payload.expires_at", "payload.participants"],
-    "group.call.ended": ["payload.room_id", "payload.generation", "payload.state_revision", "payload.status"],
+    "group.call.ended": ["payload.room_id", "payload.generation", "payload.state_revision", "payload.status", "payload.support_ref"],
     "group.call.ended.fullRoomFields": ["payload.conversation_id", "payload.membership_revision", "payload.expires_at", "payload.participants"],
     "group.call.ended.membershipProjection.omittedFields": ["payload.conversation_id", "payload.membership_revision", "payload.expires_at", "payload.participants", "payload.presenter", "payload.ice_servers"],
     "group.call.presenter.start": ["payload.room_id", "payload.conversation_id", "payload.membership_revision", "payload.generation", "payload.state_revision", "payload.status", "payload.expires_at", "payload.participants"],
     "group.call.presenter.stop": ["payload.room_id", "payload.conversation_id", "payload.membership_revision", "payload.generation", "payload.state_revision", "payload.status", "payload.expires_at", "payload.participants"],
     "group.call.synced": ["request_id", "payload.room_id", "payload.generation", "payload.status"],
-    "group.call.synced.activeFields": ["payload.conversation_id", "payload.membership_revision", "payload.state_revision", "payload.participants", "payload.expires_at", "payload.presenter"],
+    "group.call.synced.activeFields": ["payload.conversation_id", "payload.membership_revision", "payload.state_revision", "payload.participants", "payload.expires_at", "payload.presenter", "payload.support_ref"],
     "group.call.synced.active.omittedFields": ["payload.ice_servers"],
-    "group.call.synced.endedFields": ["payload.room_id", "payload.generation", "payload.status"],
+    "group.call.synced.endedFields": ["payload.room_id", "payload.generation", "payload.status", "payload.support_ref"],
     "group.call.synced.ended.omittedFields": ["payload.conversation_id", "payload.membership_revision", "payload.state_revision", "payload.expires_at", "payload.participants", "payload.presenter", "payload.ice_servers"],
     "group.call.discovered": ["request_id", "payload.conversation_id", "payload.room"],
     "group.call.discovered.room": ["payload.room.room_id", "payload.room.conversation_id", "payload.room.membership_revision", "payload.room.generation", "payload.room.state_revision", "payload.room.status", "payload.room.expires_at", "payload.room.participants"],
@@ -68,6 +78,7 @@
     "group.call.signal.signal": {"$ref": "protocol/websocket/v1.json#/$defs/callSignal"}
   },
   "clientEventFieldSchemas": {
-    "group.call.signal.payload.signal": {"$ref": "protocol/websocket/v1.json#/$defs/callSignal"}
+    "group.call.signal.payload.signal": {"$ref": "protocol/websocket/v1.json#/$defs/callSignal"},
+    "message.send.payload.mentions": {"$ref": "protocol/websocket/v1.json#/$defs/mentions"}
   }
 }

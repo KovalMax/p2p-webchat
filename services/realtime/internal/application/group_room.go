@@ -22,6 +22,7 @@ var ErrGroupRoomFull = errors.New("group call is full (maximum 4 participants)")
 // remains authoritative and is checked by the transport before each command.
 type GroupRoom struct {
 	ID                 uuid.UUID          `json:"room_id"`
+	SupportRef         uuid.UUID          `json:"support_ref,omitzero"`
 	ConversationID     uuid.UUID          `json:"conversation_id"`
 	MembershipRevision int64              `json:"membership_revision"`
 	Generation         int64              `json:"generation"`

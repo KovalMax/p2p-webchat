@@ -1,6 +1,10 @@
 package messaging
 
 import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"io"
 	"time"
 
 	"github.com/google/uuid"
@@ -16,6 +20,30 @@ type Message struct {
 	Body            string      `json:"body"`
 	CreatedAt       time.Time   `json:"created_at"`
 	Kind            string      `json:"kind"`
+	Mentions        []Mention   `json:"mentions,omitempty"`
 	RecipientID     uuid.UUID   `json:"-"`
 	RecipientIDs    []uuid.UUID `json:"-"`
+}
+
+// Mention binds a UTF-16 body range to a stable conversation-member identity.
+type Mention struct {
+	UserID uuid.UUID `json:"user_id"`
+	Start  int       `json:"start"`
+	End    int       `json:"end"`
+}
+
+func (m *Mention) UnmarshalJSON(data []byte) error {
+	type mentionJSON Mention
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	var value mentionJSON
+	if err := decoder.Decode(&value); err != nil {
+		return err
+	}
+	var trailing any
+	if err := decoder.Decode(&trailing); err != io.EOF {
+		return fmt.Errorf("invalid mention value")
+	}
+	*m = Mention(value)
+	return nil
 }

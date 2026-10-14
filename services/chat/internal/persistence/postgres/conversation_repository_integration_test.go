@@ -610,7 +610,12 @@ func TestRepositoryGroupMembershipWritesConciseEncryptedSystemEntries(t *testing
 	}
 	assertSystemEntry(t, ctx, db, secret, group.ID, "Owner made Added member an admin.")
 	for index, body := range []string{"History page one", "History page two", "History page three"} {
-		if _, _, err := messaging.NewSender(db, secret).Send(ctx, messaging.SendRequest{SenderID: ownerID, ConversationID: group.ID, ClientMessageID: fmt.Sprintf("history-page-%d", index), Body: body}); err != nil {
+		request := messaging.SendRequest{SenderID: ownerID, ConversationID: group.ID, ClientMessageID: fmt.Sprintf("history-page-%d", index), Body: body}
+		if index == 0 {
+			request.Body = "@History page one"
+			request.Mentions = []messaging.Mention{{UserID: addedMemberID, Start: 0, End: 8}}
+		}
+		if _, _, err := messaging.NewSender(db, secret).Send(ctx, request); err != nil {
 			t.Fatalf("send history message %q: %v", body, err)
 		}
 	}
@@ -632,6 +637,9 @@ func TestRepositoryGroupMembershipWritesConciseEncryptedSystemEntries(t *testing
 	}
 	if len(secondPage) != 2 || secondPage[0].Sequence <= secondPage[1].Sequence || secondPage[0].Sequence >= firstPage[1].Sequence {
 		t.Fatalf("second history page = %+v, want the next older messages in descending order without overlap", secondPage)
+	}
+	if len(secondPage[0].Mentions) != 1 || secondPage[0].Mentions[0].UserID != addedMemberID || secondPage[0].Mentions[0].Start != 0 || secondPage[0].Mentions[0].End != 8 {
+		t.Fatalf("history mention metadata = %+v, want the persisted target and body range", secondPage[0].Mentions)
 	}
 	if _, err := repository.TransferOwnership(ctx, ownerID, group.ID, addedMemberID); err != nil {
 		t.Fatalf("transfer ownership: %v", err)

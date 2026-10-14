@@ -12,5 +12,6 @@ export class CallTerminalNoticeComponent {
     @Input() public error = false;
     @Input() public group = false;
     @Input() public rejoinable = false;
+    @Input() public supportRef?: string;
     @Output() public readonly rejoin = new EventEmitter<void>();
 }

@@ -21,7 +21,12 @@ export type GroupCallSurfaceIntent =
     changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class GroupCallSurfaceComponent implements OnDestroy {
-    @Input({required: true}) public state?: GroupCallState;
+    private currentState?: GroupCallState;
+    @Input({required: true})
+    public set state(value: GroupCallState | undefined) {
+        this.currentState = value;
+    }
+    public get state(): GroupCallState | undefined { return this.currentState; }
     @Input() public minimized = false;
     @Input() public ongoing = false;
     @Input() public profile?: CallPresentationProfile;

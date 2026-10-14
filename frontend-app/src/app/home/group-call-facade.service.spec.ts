@@ -63,6 +63,17 @@ describe('GroupCallFacade', () => {
         Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: { getUserMedia: vi.fn().mockName('getUserMedia').mockResolvedValue({ getTracks: () => [track], getAudioTracks: () => [track] }) } });
         facade = new GroupCallFacade({ getObservable: () => events.asObservable(), readyChanges: ready.asObservable(), get ready() { return ready.value; }, send } as unknown as DataProviderService);
     });
+
+    it('retains the server support reference from room events through the terminal notice', async () => {
+        await facade.start('group-1', 'self-1');
+        const started = room('group.call.started', 'active');
+        events.next({...started, payload: {...started.payload, support_ref: 'group-ref-1'}});
+        expect(facade.state.supportRef).toBe('group-ref-1');
+        const ended = room('group.call.ended', 'ended');
+        events.next({...ended, payload: {...ended.payload, support_ref: 'group-ref-1'}});
+        expect(facade.state.phase).toBe('ended');
+        expect(facade.state.supportRef).toBe('group-ref-1');
+    });
     afterEach(() => { facade.close(); if (mediaDevices)
         Object.defineProperty(navigator, 'mediaDevices', mediaDevices); if (peerConnectionDescriptor)
         Object.defineProperty(window, 'RTCPeerConnection', peerConnectionDescriptor); });

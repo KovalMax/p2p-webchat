@@ -4,13 +4,13 @@ import {Conversation, GroupConversation, GroupMember, GroupPeerReadCursor, Group
 import {compareConversationActivityDescending} from './conversation-activity';
 import {ConversationService} from './conversation.service';
 import {HomeGroupAccessContext, HomeGroupAccessFacade, HomeGroupAccessOutcome} from './home-group-access-facade.service';
-import {Message, messageDateLabel, messageDateTimeLabel} from './message.model';
+import {Message, messageDateLabel, messageDateTimeLabel, messageTextSegments, MessageMention, updateMentionRanges} from './message.model';
 import {UserSearchResult} from './user.model';
 import {ConnectionState, DataProviderService, MessageSocketEvent} from './data-provider.service';
 import {createRandomID} from '../login/login';
 import {AuthService} from '../auth/auth.service';
 import {Profile} from '../auth/profile.model';
-import {messageSenderDisplayName, toGroupPeerReadCursor, toMessage} from './wire.mapper';
+import {messageSenderDisplayName, toGroupPeerReadCursor, toMessage, toMessageMentionWires} from './wire.mapper';
 import {CallFacade, CallState} from './call-facade.service';
 import {GroupCallFacade, GroupCallPeer, GroupCallState} from './group-call-facade.service';
 import {HomeNotificationService} from './home-notification.service';
@@ -47,6 +47,12 @@ export class HomeComponent implements OnInit, OnDestroy {
     public historyCursor?: string;
     public isHistoryLoading = false;
     public draft = '';
+    public mentionSuggestions: {userId: string; displayName: string}[] = [];
+    public activeMentionIndex = 0;
+    private draftSnapshot = '';
+    private mentionQueryStart = -1;
+    private mentionQueryEnd = -1;
+    private readonly draftMentions: MessageMention[] = [];
     public searchQuery = '';
     public searchResults: UserSearchResult[] = [];
     public searchState: 'idle' | 'loading' | 'results' | 'empty' | 'error' = 'idle';
@@ -113,6 +119,7 @@ export class HomeComponent implements OnInit, OnDestroy {
     private recoveryGeneration = 0;
     private navigationIntentVersion = 0;
     @ViewChild('messageHistory') private messageHistory?: ElementRef<HTMLElement>;
+    @ViewChild('messageDraft') private messageDraft?: ElementRef<HTMLTextAreaElement>;
     @ViewChild('archiveModeControl') private archiveModeControl?: ElementRef<HTMLButtonElement>;
     @ViewChild(GroupMemberListComponent) private groupMemberList?: GroupMemberListComponent;
 
@@ -321,7 +328,7 @@ export class HomeComponent implements OnInit, OnDestroy {
 
     public directCallProfile(): CallPresentationProfile {
         const state = this.call.state;
-        const status = state.phase === 'error' && state.statusLabel === 'Call unavailable: call unavailable' && this.isSelectedUserOffline()
+        const status = state.phase === 'error' && state.statusLabel === 'Call unavailable.' && this.isSelectedUserOffline()
             ? 'Call unavailable: recipient is offline'
             : state.statusLabel;
         return {
@@ -448,6 +455,10 @@ export class HomeComponent implements OnInit, OnDestroy {
 
     public isCallSurfaceVisible(): boolean {
         return this.isOngoingCall() && !this.callMinimized;
+    }
+
+    public shouldRenderDirectCallSurface(phase: CallState['phase']): boolean {
+        return phase !== 'idle' && phase !== 'ended' && phase !== 'error';
     }
 
     public isCallMinimized(): boolean {
@@ -618,6 +629,92 @@ export class HomeComponent implements OnInit, OnDestroy {
 
     public messageDateLabel(message: Message): string { return messageDateLabel(message.createdAt); }
     public messageDateTimeLabel(message: Message): string { return messageDateTimeLabel(message.createdAt); }
+    public messageSegments(message: Message) { return messageTextSegments(message.body, message.mentions); }
+    public draftMentionNames(): string[] {
+        const members = this.selectedConversation?.kind === 'group' ? this.selectedConversation.members : this.selectedConversation?.kind === 'direct' ? [{userId: this.selectedConversation.otherUserId, displayName: this.selectedConversation.otherDisplayName}] : [];
+        return this.draftMentions.map(mention => members.find(member => member.userId === mention.userId)?.displayName).filter((name): name is string => Boolean(name));
+    }
+
+    public onDraftChange(): void {
+        const previous = this.draftSnapshot;
+        const next = this.draft;
+        if (previous !== next) {
+            const preserved = updateMentionRanges(previous, next, this.draftMentions);
+            this.draftMentions.splice(0, this.draftMentions.length, ...preserved);
+            this.draftSnapshot = next;
+        }
+        this.updateMentionSuggestions();
+        if (!this.selectedConversation || !this.socketReady) return;
+        if (!this.draft.trim()) { this.stopTyping(); return; }
+        if (!this.isTyping || Date.now() - this.lastTypingStartAt >= 1_200) {
+            this.isTyping = this.dataProvider.send({type: 'typing.start', payload: {conversation_id: this.selectedConversation.id}});
+            if (this.isTyping) { this.typingTargetConversationID = this.selectedConversation.id; this.lastTypingStartAt = Date.now(); }
+        }
+        window.clearTimeout(this.typingTimeout);
+        this.typingTimeout = window.setTimeout(() => this.stopTyping(), 2_000);
+    }
+
+    public handleMentionKeydown(event: KeyboardEvent): void {
+        if (!this.mentionSuggestions.length) return;
+        if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+            event.preventDefault();
+            const delta = event.key === 'ArrowDown' ? 1 : -1;
+            this.activeMentionIndex = (this.activeMentionIndex + delta + this.mentionSuggestions.length) % this.mentionSuggestions.length;
+        } else if (event.key === 'Escape') {
+            event.preventDefault();
+            this.mentionSuggestions = [];
+        }
+    }
+
+    public onComposerEnter(event: Event): void {
+        if (!(event instanceof KeyboardEvent)) return;
+        if (this.mentionSuggestions.length && !event.shiftKey) {
+            event.preventDefault();
+            this.selectMention(this.mentionSuggestions[this.activeMentionIndex]);
+        }
+        else this.sendMessage(event);
+    }
+
+    public selectMention(candidate = this.mentionSuggestions[this.activeMentionIndex]): void {
+        if (!candidate || this.mentionQueryStart < 0 || this.draftMentions.length >= 16) return;
+        const start = this.mentionQueryStart;
+        const replacement = `@${candidate.displayName}`;
+        const oldDraft = this.draft;
+        this.draft = `${oldDraft.slice(0, start)}${replacement} ${oldDraft.slice(this.mentionQueryEnd)}`;
+        const range = {userId: candidate.userId, start, end: start + replacement.length};
+        this.draftMentions.push(...updateMentionRanges(oldDraft, this.draft, this.draftMentions), range);
+        this.draftMentions.sort((first, second) => first.start - second.start);
+        this.draftSnapshot = this.draft;
+        this.mentionSuggestions = [];
+        this.mentionQueryStart = -1;
+        this.changeDetector.markForCheck();
+        queueMicrotask(() => {
+            const textarea = this.messageDraft?.nativeElement;
+            const cursor = start + replacement.length + 1;
+            textarea?.focus();
+            textarea?.setSelectionRange(cursor, cursor);
+        });
+    }
+
+    public mentionOptionID(index: number): string { return `mention-option-${index}`; }
+
+    private updateMentionSuggestions(): void {
+        const textarea = this.messageDraft?.nativeElement;
+        const cursor = textarea?.selectionStart ?? this.draft.length;
+        const before = this.draft.slice(0, cursor);
+        const match = /(?:^|\s)@([\p{L}\p{N}_-]{0,32})$/u.exec(before);
+        if (!match || !this.selectedConversation || !this.profile?.id || this.draftMentions.length >= 16) {
+            this.mentionSuggestions = []; this.mentionQueryStart = -1; return;
+        }
+        const query = match[1].toLocaleLowerCase();
+        this.mentionQueryStart = cursor - query.length - 1;
+        this.mentionQueryEnd = cursor;
+        const members = this.selectedConversation.kind === 'group'
+            ? this.selectedConversation.members.filter(member => member.userId !== this.profile?.id).map(member => ({userId: member.userId, displayName: member.displayName}))
+            : [{userId: this.selectedConversation.otherUserId, displayName: this.selectedConversation.otherDisplayName}].filter(member => member.userId !== this.profile?.id);
+        this.mentionSuggestions = members.filter(member => member.displayName.toLocaleLowerCase().includes(query));
+        this.activeMentionIndex = Math.min(this.activeMentionIndex, Math.max(0, this.mentionSuggestions.length - 1));
+    }
 
     public peerPresenceLabel(): string {
         if (!this.selectedConversation) return this.socketReady ? 'Live connection' : 'Connecting…';
@@ -659,23 +756,6 @@ export class HomeComponent implements OnInit, OnDestroy {
         if (names.length === 2) return `${names[0]} and ${names[1]} are typing…`;
         if (names.length > 2) return `${names.slice(0, -1).join(', ')}, and ${names[names.length - 1]} are typing…`;
         return undefined;
-    }
-
-    public onDraftChange(): void {
-        if (!this.selectedConversation || !this.socketReady) return;
-        if (!this.draft.trim()) {
-            this.stopTyping();
-            return;
-        }
-        if (!this.isTyping || Date.now() - this.lastTypingStartAt >= 1_200) {
-            this.isTyping = this.dataProvider.send({type: 'typing.start', payload: {conversation_id: this.selectedConversation.id}});
-            if (this.isTyping) {
-                this.typingTargetConversationID = this.selectedConversation.id;
-                this.lastTypingStartAt = Date.now();
-            }
-        }
-        window.clearTimeout(this.typingTimeout);
-        this.typingTimeout = window.setTimeout(() => this.stopTyping(), 2_000);
     }
 
     public searchUsers(): void {
@@ -845,9 +925,15 @@ export class HomeComponent implements OnInit, OnDestroy {
         this.clearRemoteTypingState();
         if (!preserveCallSurface && this.isOngoingCall()) this.minimizeCall();
         const selectedConversation = {...conversation};
+        if (this.selectedConversation?.id !== selectedConversation.id) this.draftMentions.splice(0);
+        this.mentionSuggestions = [];
         this.isCreatingGroup = false;
         if (selectedConversation.kind === 'group') this.groupName = selectedConversation.name;
         this.selectedConversation = selectedConversation;
+        const eligibleMentionIDs = new Set(selectedConversation.kind === 'group'
+            ? selectedConversation.members.filter(member => member.userId !== this.profile?.id).map(member => member.userId)
+            : [selectedConversation.otherUserId].filter(userID => userID !== this.profile?.id));
+        this.draftMentions.splice(0, this.draftMentions.length, ...this.draftMentions.filter(mention => eligibleMentionIDs.has(mention.userId)));
         this.showDepartedGroupStatus = false;
         if (selectedConversation.kind === 'group' && selectedConversation.accessNeedsVerification) {
             this.messages = [];
@@ -885,7 +971,8 @@ export class HomeComponent implements OnInit, OnDestroy {
 
     public sendMessage(event?: Event): void {
         event?.preventDefault();
-        const body = this.draft.trim();
+        const originalDraft = this.draft;
+        const body = originalDraft.trim();
         if (!this.selectedConversation) {
             this.sendStatus = 'Select a conversation before sending.';
             return;
@@ -901,10 +988,12 @@ export class HomeComponent implements OnInit, OnDestroy {
         const clientMessageId = createRandomID();
         const requestID = createRandomID();
         this.stopTyping();
+        const trimOffset = /^\s*/u.exec(originalDraft)?.[0].length || 0;
+        const mentions = toMessageMentionWires(this.draftMentions.filter(mention => mention.start >= trimOffset && mention.end <= trimOffset + body.length).map(mention => ({...mention, start: mention.start - trimOffset, end: mention.end - trimOffset})));
         const sent = this.dataProvider.send({
             type: 'message.send',
             request_id: requestID,
-            payload: {conversation_id: this.selectedConversation.id, client_message_id: clientMessageId, body},
+            payload: {conversation_id: this.selectedConversation.id, client_message_id: clientMessageId, body, ...(mentions.length ? {mentions} : {})},
         });
         if (!sent) {
             this.socketReady = false;
@@ -912,9 +1001,13 @@ export class HomeComponent implements OnInit, OnDestroy {
             this.changeDetector.markForCheck();
             return;
         }
-        this.messages = [...this.messages, {id: `pending:${clientMessageId}`, conversationId: this.selectedConversation.id, senderId: this.profile?.id || '', clientMessageId, sequence: 0, body, createdAt: new Date().toISOString(), pending: true}];
+        const optimisticMentions = mentions.map(mention => ({userId: mention.user_id, start: mention.start, end: mention.end}));
+        this.messages = [...this.messages, {id: `pending:${clientMessageId}`, conversationId: this.selectedConversation.id, senderId: this.profile?.id || '', clientMessageId, sequence: 0, body, ...(optimisticMentions.length ? {mentions: optimisticMentions} : {}), createdAt: new Date().toISOString(), pending: true}];
         this.sendStatus = '';
         this.draft = '';
+        this.draftSnapshot = '';
+        this.draftMentions.splice(0);
+        this.mentionSuggestions = [];
         const timeout = window.setTimeout(() => this.markMessageUncertain(requestID), 10_000);
         this.pendingRequests.set(requestID, {clientMessageID: clientMessageId, timeout});
         this.changeDetector.markForCheck();
@@ -1878,10 +1971,11 @@ export class HomeComponent implements OnInit, OnDestroy {
     private replayUncertainMessages(): void {
         for (const message of this.messages.filter(item => item.uncertain && !item.pending && item.senderId === this.profile?.id)) {
             const requestID = createRandomID();
+            const mentions = toMessageMentionWires(message.mentions || []);
             if (!this.dataProvider.send({
                 type: 'message.send',
                 request_id: requestID,
-                payload: {conversation_id: message.conversationId, client_message_id: message.clientMessageId, body: message.body},
+                payload: {conversation_id: message.conversationId, client_message_id: message.clientMessageId, body: message.body, ...(mentions.length ? {mentions} : {})},
             })) continue;
             const timeout = window.setTimeout(() => this.markMessageUncertain(requestID), 10_000);
             this.pendingRequests.set(requestID, {clientMessageID: message.clientMessageId, timeout});
