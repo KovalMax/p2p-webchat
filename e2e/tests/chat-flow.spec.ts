@@ -7515,6 +7515,32 @@ test('offers chat-scoped @mentions and renders only selected mentions in direct 
     await expect(owner.locator('.chat-presence')).toContainText(/members online/);
     await expect(owner.locator('.send-status')).toHaveCount(0);
 
+    await groupComposer.fill('@Bo');
+    await groupComposer.press('Enter');
+    await expect(groupComposer).toHaveValue(`@${users[1].name} `);
+    await groupComposer.fill(`${await groupComposer.inputValue()}@Bo`);
+    await expect(groupPicker.getByRole('option')).toHaveText([users[1].name]);
+    await groupComposer.press('Enter');
+    await expect(groupComposer).toHaveValue(`@${users[1].name} @${users[1].name} `);
+    await expect(selectedMentionChips).toHaveText([users[1].name, users[1].name]);
+    await groupComposer.fill(`${await groupComposer.inputValue()}repeated group mention`);
+    await owner.getByRole('button', {name: 'Send message'}).click();
+    const repeatedMentionMessage = owner.locator('.message-bubble').filter({hasText: 'repeated group mention'}).last();
+    const expectedRepeatedMentions = [`@${users[1].name}`, `@${users[1].name}`];
+    await expect(repeatedMentionMessage.locator('.message-mention')).toHaveText(expectedRepeatedMentions);
+    await expect(bob.locator('.message-bubble').filter({hasText: 'repeated group mention'}).last().locator('.message-mention')).toHaveText(expectedRepeatedMentions);
+    await expect(charlie.locator('.message-bubble').filter({hasText: 'repeated group mention'}).last().locator('.message-mention')).toHaveText(expectedRepeatedMentions);
+    await expect(owner.locator('.send-status')).toHaveCount(0);
+    await owner.screenshot({path: testInfo.outputPath('mention-same-member-twice.png'), fullPage: false});
+    await owner.setViewportSize({width: 390, height: 844});
+    await setTheme(owner, 'light');
+    await expect(repeatedMentionMessage.locator('.message-mention')).toHaveText(expectedRepeatedMentions);
+    const repeatedMentionLayout = await owner.evaluate(() => ({scrollWidth: document.documentElement.scrollWidth, clientWidth: document.documentElement.clientWidth}));
+    expect(repeatedMentionLayout.scrollWidth, 'repeated mentions fit the mobile viewport').toBeLessThanOrEqual(repeatedMentionLayout.clientWidth + 1);
+    await owner.screenshot({path: testInfo.outputPath('mention-same-member-twice-light-390.png'), fullPage: false});
+    await owner.setViewportSize({width: 1440, height: 900});
+    await setTheme(owner, 'dark');
+
     await groupComposer.fill('@');
     await expect(groupPicker.getByRole('option')).toHaveCount(2);
     await expect(groupPicker.getByRole('option').filter({hasText: users[1].name})).toBeVisible();
