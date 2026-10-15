@@ -3,5 +3,5 @@
         <span><strong>{{ title }}</strong><small><span class="call-minimized-sharing-label" *ngIf="sharing">Sharing screen · </span>{{ detail }}</small></span>
     </button>
     <app-copy-support-reference *ngIf="supportReference" [reference]="supportReference" [compact]="true"></app-copy-support-reference>
-    <button type="button" class="call-minimized-end" [attr.aria-label]="endLabel" [attr.title]="variant === 'group' ? endLabel : null" [matTooltip]="endLabel" [matTooltipDisabled]="variant !== 'group'" matTooltipClass="group-call-end-tooltip" matTooltipPosition="below" (click)="end.emit()">{{ endText }}</button>
+    <button type="button" class="call-minimized-end" [attr.aria-label]="endLabel" [attr.title]="variant === 'group' ? endLabel : null" [matTooltip]="endLabel" [matTooltipDisabled]="variant !== 'group'" matTooltipClass="group-call-end-tooltip group-call-minimized-end-tooltip" matTooltipPosition="below" (click)="end.emit()">{{ endText }}</button>
 </div>

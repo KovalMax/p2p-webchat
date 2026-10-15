@@ -283,6 +283,10 @@ body :is(a, button, select, [tabindex]):focus-visible {
     color: #172033 !important;
 }
 
+.mat-mdc-tooltip-panel .mat-mdc-tooltip.group-call-minimized-end-tooltip .mat-mdc-tooltip-surface {
+    transform: translateY(4px);
+}
+
 @media (prefers-reduced-motion: reduce) {
     :root { --zwei-motion-duration: 0ms; }
 
