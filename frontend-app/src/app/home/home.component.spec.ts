@@ -83,6 +83,42 @@ describe('HomeComponent', () => {
         historyComponent.ngOnDestroy();
     });
 
+    it('replaces preserved mention ranges when selecting a second member', () => {
+        const send = vi.fn().mockName('send').mockReturnValue(true);
+        const mentionComponent = createHomeComponent({} as ConversationService, {} as AuthService, {markForCheck: vi.fn().mockName('markForCheck')} as unknown as ChangeDetectorRef, {send, close: () => undefined} as unknown as DataProviderService, {close: () => undefined} as CallFacade);
+        mentionComponent.selectedConversation = {...groupConversation('multi-mention-group'), members: [
+            {...groupMember('user-1', 1), displayName: 'Sender'},
+            {...groupMember('alice-id', 1), displayName: 'Alice'},
+            {...groupMember('bob-id', 1), displayName: 'Bob'},
+        ]};
+        mentionComponent.profile = {id: 'user-1'} as Profile;
+        mentionComponent.socketReady = true;
+
+        mentionComponent.draft = '@Ali';
+        mentionComponent.onDraftChange();
+        mentionComponent.selectMention();
+        mentionComponent.draft = `${mentionComponent.draft}@Bo`;
+        mentionComponent.onDraftChange();
+        mentionComponent.selectMention();
+
+        expect(mentionComponent.draft).toBe('@Alice @Bob ');
+        expect(mentionComponent.draftMentionNames()).toEqual(['Alice', 'Bob']);
+        mentionComponent.sendMessage();
+
+        const request = vi.mocked(send).mock.calls.map(([event]) => event).find(event => event.type === 'message.send');
+        expect(request?.type).toBe('message.send');
+        if (request?.type !== 'message.send') throw new Error('Expected a message send command');
+        expect(request.payload.mentions).toEqual([
+            {user_id: 'alice-id', start: 0, end: 6},
+            {user_id: 'bob-id', start: 7, end: 11},
+        ]);
+        expect(mentionComponent.messages[0].mentions).toEqual([
+            {userId: 'alice-id', start: 0, end: 6},
+            {userId: 'bob-id', start: 7, end: 11},
+        ]);
+        mentionComponent.ngOnDestroy();
+    });
+
     it('renders singular result wording in the Home people-search template', () => {
         component.searchState = 'results';
         component.searchResults = [{ id: 'one', display_name: 'One Person', email: 'one@example.test' }];
