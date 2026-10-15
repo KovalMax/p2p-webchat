@@ -7463,8 +7463,53 @@ test('offers chat-scoped @mentions and renders only selected mentions in direct 
       await group.click();
     }
     const groupComposer = owner.getByLabel('Message composer').getByRole('textbox', {name: 'Message'});
-    await groupComposer.fill('@');
     const groupPicker = owner.getByRole('listbox', {name: 'Mention a chat member'});
+    const selectedMentionChips = owner.locator('.composer-mentions span');
+    await groupComposer.fill('@Bo');
+    await expect(groupPicker.getByRole('option')).toHaveText([users[1].name]);
+    await groupComposer.press('Enter');
+    await expect(selectedMentionChips).toHaveText([users[1].name]);
+    await groupComposer.fill(`${await groupComposer.inputValue()}@Ch`);
+    await expect(groupPicker.getByRole('option')).toHaveText([users[2].name]);
+    await groupComposer.press('Enter');
+    await expect(groupComposer).toHaveValue(`@${users[1].name} @${users[2].name} `);
+    for (const theme of ['light', 'dark'] as const) {
+      await setTheme(owner, theme);
+      for (const viewport of [{width: 2560, height: 1440}, {width: 1440, height: 900}, {width: 1024, height: 900}, {width: 390, height: 844}]) {
+        await owner.setViewportSize(viewport);
+        await expect(selectedMentionChips, `${theme}/${viewport.width}px selected mention chips`).toHaveText([users[1].name, users[2].name]);
+        const chipGeometry = await owner.evaluate(() => {
+          const form = document.querySelector<HTMLElement>('.composer');
+          const chips = form?.querySelector<HTMLElement>('.composer-mentions');
+          const formBox = form?.getBoundingClientRect();
+          const chipBox = chips?.getBoundingClientRect();
+          return {
+            form: formBox && {left: formBox.left, right: formBox.right, top: formBox.top, bottom: formBox.bottom},
+            chips: chipBox && {left: chipBox.left, right: chipBox.right, top: chipBox.top, bottom: chipBox.bottom},
+            documentWidth: document.documentElement.scrollWidth,
+            viewportWidth: document.documentElement.clientWidth,
+          };
+        });
+        expect(chipGeometry.chips?.left, `${theme}/${viewport.width}px mention chips stay inside the composer`).toBeGreaterThanOrEqual((chipGeometry.form?.left ?? 0) - 1);
+        expect(chipGeometry.chips?.right, `${theme}/${viewport.width}px mention chips stay inside the composer`).toBeLessThanOrEqual((chipGeometry.form?.right ?? 0) + 1);
+        expect(chipGeometry.documentWidth, `${theme}/${viewport.width}px multiple mentions cause no horizontal overflow`).toBeLessThanOrEqual(chipGeometry.viewportWidth + 1);
+        await owner.screenshot({path: testInfo.outputPath(`mention-multiple-selected-${theme}-${viewport.width}.png`), fullPage: false});
+      }
+    }
+
+    await owner.setViewportSize({width: 1440, height: 900});
+    await setTheme(owner, 'dark');
+    await groupComposer.fill(`${await groupComposer.inputValue()}two-selected mentions verified`);
+    await owner.getByRole('button', {name: 'Send message'}).click();
+    const multiMentionMessage = owner.locator('.message-bubble').filter({hasText: 'two-selected mentions verified'}).last();
+    const expectedMentionText = [`@${users[1].name}`, `@${users[2].name}`];
+    await expect(multiMentionMessage.locator('.message-mention')).toHaveText(expectedMentionText);
+    await expect(bob.locator('.message-bubble').filter({hasText: 'two-selected mentions verified'}).last().locator('.message-mention')).toHaveText(expectedMentionText);
+    await expect(charlie.locator('.message-bubble').filter({hasText: 'two-selected mentions verified'}).last().locator('.message-mention')).toHaveText(expectedMentionText);
+    await expect(owner.locator('.chat-presence')).toContainText(/members online/);
+    await expect(owner.locator('.send-status')).toHaveCount(0);
+
+    await groupComposer.fill('@');
     await expect(groupPicker.getByRole('option')).toHaveCount(2);
     await expect(groupPicker.getByRole('option').filter({hasText: users[1].name})).toBeVisible();
     await expect(groupPicker.getByRole('option').filter({hasText: users[2].name})).toBeVisible();

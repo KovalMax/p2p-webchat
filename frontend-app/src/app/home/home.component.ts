@@ -682,7 +682,8 @@ export class HomeComponent implements OnInit, OnDestroy {
         const oldDraft = this.draft;
         this.draft = `${oldDraft.slice(0, start)}${replacement} ${oldDraft.slice(this.mentionQueryEnd)}`;
         const range = {userId: candidate.userId, start, end: start + replacement.length};
-        this.draftMentions.push(...updateMentionRanges(oldDraft, this.draft, this.draftMentions), range);
+        const preserved = updateMentionRanges(oldDraft, this.draft, this.draftMentions);
+        this.draftMentions.splice(0, this.draftMentions.length, ...preserved, range);
         this.draftMentions.sort((first, second) => first.start - second.start);
         this.draftSnapshot = this.draft;
         this.mentionSuggestions = [];
