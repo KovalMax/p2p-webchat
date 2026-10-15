@@ -4586,10 +4586,16 @@ test('keeps load older messages readable in both themes and responsive layouts',
         const geometry = await loadOlder.evaluate(button => {
           const bounds = button.getBoundingClientRect();
           const history = button.closest<HTMLElement>('.message-history');
+          const accentProbe = document.createElement('span');
+          accentProbe.style.borderTopColor = getComputedStyle(button).getPropertyValue('--chat-accent').trim();
+          document.body.append(accentProbe);
+          const accentColor = getComputedStyle(accentProbe).borderTopColor;
+          accentProbe.remove();
           return {
             left: bounds.left, right: bounds.right, top: bounds.top, bottom: bounds.bottom,
             color: getComputedStyle(button.querySelector('.mdc-button__label') || button).color,
             borderColor: getComputedStyle(button).borderTopColor,
+            accentColor,
             history: history?.getBoundingClientRect().toJSON(),
             documentWidth: document.documentElement.scrollWidth, viewportWidth: document.documentElement.clientWidth,
             historyScrollWidth: history?.scrollWidth, historyClientWidth: history?.clientWidth,
@@ -4599,10 +4605,10 @@ test('keeps load older messages readable in both themes and responsive layouts',
         expect(geometry.historyScrollWidth).toBeLessThanOrEqual((geometry.historyClientWidth ?? 0) + 1);
         expect(geometry.left).toBeGreaterThanOrEqual((geometry.history?.left ?? 0) - 1);
         expect(geometry.right).toBeLessThanOrEqual((geometry.history?.right ?? 0) + 1);
-        const restingBorder = geometry.borderColor;
+        await alice.mouse.move(0, 0);
+        await expect(loadOlder).not.toHaveCSS('border-top-color', geometry.accentColor);
         await loadOlder.hover();
-        const hoverBorder = await loadOlder.evaluate(button => getComputedStyle(button).borderTopColor);
-        expect(hoverBorder, `${theme}/${viewport.width}px load-older hover border`).not.toBe(restingBorder);
+        await expect(loadOlder, `${theme}/${viewport.width}px load-older hover border`).toHaveCSS('border-top-color', geometry.accentColor);
         await loadOlder.focus();
         await alice.keyboard.press('Tab');
         await alice.keyboard.press('Shift+Tab');
