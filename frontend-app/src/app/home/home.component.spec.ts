@@ -119,6 +119,39 @@ describe('HomeComponent', () => {
         mentionComponent.ngOnDestroy();
     });
 
+    it('keeps separate mention ranges when the same member is selected twice', () => {
+        const send = vi.fn().mockName('send').mockReturnValue(true);
+        const mentionComponent = createHomeComponent({} as ConversationService, {} as AuthService, {markForCheck: vi.fn().mockName('markForCheck')} as unknown as ChangeDetectorRef, {send, close: () => undefined} as unknown as DataProviderService, {close: () => undefined} as CallFacade);
+        mentionComponent.selectedConversation = {...groupConversation('repeated-mention-group'), members: [
+            {...groupMember('user-1', 1), displayName: 'Sender'},
+            {...groupMember('alice-id', 1), displayName: 'Alice'},
+        ]};
+        mentionComponent.profile = {id: 'user-1'} as Profile;
+        mentionComponent.socketReady = true;
+
+        mentionComponent.draft = '@Ali';
+        mentionComponent.onDraftChange();
+        mentionComponent.selectMention();
+        mentionComponent.draft = `${mentionComponent.draft}@Ali`;
+        mentionComponent.onDraftChange();
+        mentionComponent.selectMention();
+        mentionComponent.sendMessage();
+
+        const request = vi.mocked(send).mock.calls.map(([event]) => event).find(event => event.type === 'message.send');
+        expect(request?.type).toBe('message.send');
+        if (request?.type !== 'message.send') throw new Error('Expected a message send command');
+        expect(request.payload.body).toBe('@Alice @Alice');
+        expect(request.payload.mentions).toEqual([
+            {user_id: 'alice-id', start: 0, end: 6},
+            {user_id: 'alice-id', start: 7, end: 13},
+        ]);
+        expect(mentionComponent.messages[0].mentions).toEqual([
+            {userId: 'alice-id', start: 0, end: 6},
+            {userId: 'alice-id', start: 7, end: 13},
+        ]);
+        mentionComponent.ngOnDestroy();
+    });
+
     it('renders singular result wording in the Home people-search template', () => {
         component.searchState = 'results';
         component.searchResults = [{ id: 'one', display_name: 'One Person', email: 'one@example.test' }];
